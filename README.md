@@ -12,7 +12,7 @@ lote de pagos de transferencias.
 
 ```
 src/
-  LZFI_PAY_REVTOP.abap         Include TOP del grupo de función (tipos y constantes globales)
+  LZFI_FG_PAY_REVTOP.abap      Include TOP del grupo de función (tipos y constantes globales)
   ZFI_FM_PAYLOT_REVERSE.abap   Código fuente del módulo de función RFC
 docs/
   DF_resumen.md                Resumen del Diseño Funcional (trazabilidad)
@@ -54,10 +54,10 @@ con el que MuleSoft se conecta a SAP (actualmente `COMMUSER`).
 
 ## Instalación en SAP (SE80 / SE37)
 
-1. Crear el grupo de función **`ZFI_PAY_REV`** (SE80 → Grupo de función → Crear),
+1. Crear el grupo de función **`ZFI_FG_PAY_REV`** (SE80 → Grupo de función → Crear),
    descripción p.ej. *"Anulación transferencias SAP (IA)"*.
-2. Sustituir el contenido del include TOP del grupo (`LZFI_PAY_REVTOP`) por
-   `src/LZFI_PAY_REVTOP.abap`.
+2. Sustituir el contenido del include TOP del grupo (`LZFI_FG_PAY_REVTOP`) por
+   `src/LZFI_FG_PAY_REVTOP.abap`.
 3. Crear el módulo de función **`ZFI_FM_PAYLOT_REVERSE`** dentro del grupo:
    - Atributos: marcar **"Módulo de función remoto"** (RFC).
    - Pestaña *Import*: `I_DOCUMENTID`, `I_CANCELDATE`, `I_CANCELREASON`

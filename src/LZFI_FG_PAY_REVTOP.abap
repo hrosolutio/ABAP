@@ -1,9 +1,9 @@
 *&---------------------------------------------------------------------*
-*& Include LZFI_PAY_REVTOP                                             *
-*& Grupo de función: ZFI_PAY_REV                                       *
+*& Include LZFI_FG_PAY_REVTOP                                          *
+*& Grupo de función: ZFI_FG_PAY_REV                                    *
 *& Datos globales del pool de funciones                                *
 *&---------------------------------------------------------------------*
-FUNCTION-POOL zfi_pay_rev.
+FUNCTION-POOL zfi_fg_pay_rev.
 
 * Estructura de error de salida del servicio (ES_ERROR)
 TYPES: BEGIN OF ty_s_error,
