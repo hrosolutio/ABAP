@@ -8,7 +8,7 @@ FUNCTION zfi_fm_paylot_reverse.
 *"     VALUE(I_PROCESO) TYPE  CHAR20 DEFAULT 'CDI_11_03'
 *"  EXPORTING
 *"     VALUE(E_RESULT) TYPE  CHAR3
-*"     VALUE(ES_ERROR) TYPE  TY_S_ERROR
+*"     VALUE(ES_ERROR) TYPE  ZFI_DE_XX_WS_ERROR
 *"     VALUE(E_CANCELLEDDOCUMENTID) TYPE  OPBEL_KK
 *"----------------------------------------------------------------------
 * Anulación de transferencias contabilizadas en SAP (equivalente a FP08)

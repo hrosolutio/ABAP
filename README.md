@@ -27,7 +27,7 @@ docs/
 | `I_CANCELREASON` | Import | `CHAR40` | Sí | Motivo de anulación (recibido del sistema externo; no se traslada a `CLEARREAS`, ver nota técnica) |
 | `I_PROCESO` | Import | `CHAR20`, default `CDI_11_03` | No | Identificador de proceso/subproceso |
 | `E_RESULT` | Export | `CHAR3` | — | `OK` / `NOK` |
-| `ES_ERROR` | Export | `TY_S_ERROR` (`CODE` char10, `DESCRIPTION` char100) | — | Error de negocio o técnico |
+| `ES_ERROR` | Export | `ZFI_DE_XX_WS_ERROR` (`CODE`, `DESCRIPTION`) | — | Error de negocio o técnico |
 | `E_CANCELLEDDOCUMENTID` | Export | `OPBEL_KK` | — | Documento de anulación generado |
 
 ## Lógica implementada
@@ -63,7 +63,7 @@ con el que MuleSoft se conecta a SAP (actualmente `COMMUSER`).
    - Pestaña *Import*: `I_DOCUMENTID`, `I_CANCELDATE`, `I_CANCELREASON`
      (obligatorios) e `I_PROCESO` (opcional, valor propuesto `CDI_11_03`),
      con los tipos indicados en la tabla de interfaz.
-   - Pestaña *Export*: `E_RESULT`, `ES_ERROR` (tipo `TY_S_ERROR`),
+   - Pestaña *Export*: `E_RESULT`, `ES_ERROR` (tipo DDIC `ZFI_DE_XX_WS_ERROR`),
      `E_CANCELLEDDOCUMENTID`.
    - Pestaña *Código fuente*: pegar `src/ZFI_FM_PAYLOT_REVERSE.abap`.
 4. Verificar en el sistema de destino la firma real de los módulos estándar

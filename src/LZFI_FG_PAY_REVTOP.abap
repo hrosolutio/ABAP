@@ -5,11 +5,7 @@
 *&---------------------------------------------------------------------*
 FUNCTION-POOL zfi_fg_pay_rev.
 
-* Estructura de error de salida del servicio (ES_ERROR)
-TYPES: BEGIN OF ty_s_error,
-         code        TYPE char10,
-         description TYPE char100,
-       END OF ty_s_error.
+* ES_ERROR usa la estructura DDIC estándar ZFI_DE_XX_WS_ERROR (CODE, DESCRIPTION)
 
 * Constantes según nota técnica del DF (FKK_CTRACPAYMINC_REVERSE)
 CONSTANTS:
