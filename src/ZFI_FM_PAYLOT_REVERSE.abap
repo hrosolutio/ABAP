@@ -17,15 +17,15 @@ FUNCTION zfi_fm_paylot_reverse.
 * transferencias y genera el documento de anulación correspondiente,
 * llamando al módulo de función estándar FKK_CTRACPAYMINC_REVERSE.
 *
-* NOTA: los IMPORT de FKK_CTRACPAYMINC_REVERSE (DOCUMENTNUMBER, DOCTYPE,
-* CLEARREAS, FIKEY, REVERSEDATE) están tomados literalmente del DF.
-* La interfaz de FKK_CALL_EVENT_1113 está verificada contra SE37. El
-* parámetro de salida de FKK_CTRACPAYMINC_REVERSE con el documento de
-* anulación generado NO está verificado: revisar en SE37 y completar
-* antes de activar (ver TODO abajo).
+* NOTA: interfaces de FKK_CALL_EVENT_1113 y FKK_CTRACPAYMINC_REVERSE
+* verificadas contra SE37. FKK_CTRACPAYMINC_REVERSE NO devuelve el
+* documento de anulación generado en ningún export (su único export es
+* RETURN, tipo BAPIRET2) por lo que E_CANCELLEDDOCUMENTID queda
+* pendiente de resolver (ver TODO en el paso 4).
 *----------------------------------------------------------------------*
 
-  DATA: lv_fikey TYPE fkkko-fikey.
+  DATA: lv_fikey  TYPE fkkko-fikey,
+        ls_return TYPE bapiret2.
 
   CLEAR: e_result, es_error, e_cancelleddocumentid.
 
@@ -103,34 +103,36 @@ FUNCTION zfi_fm_paylot_reverse.
 * 4. Anulación del documento contra el módulo de función estándar
 *    CLEARREAS se informa siempre a '05' según nota técnica del DF,
 *    con independencia del valor recibido en I_CANCELREASON.
-*    Los nombres DOCUMENTNUMBER/DOCTYPE/CLEARREAS/FIKEY/REVERSEDATE
-*    vienen indicados literalmente en el DF. El parámetro de salida
-*    con el documento de anulación generado (aquí E_DOCUMENTNUMBER)
-*    NO está confirmado por el DF: verificar en SE37 y ajustar.
+*    Firma verificada en SE37: único export es RETURN (BAPIRET2), el
+*    FM no devuelve el documento de anulación generado en ningún
+*    parámetro de salida.
 *----------------------------------------------------------------------*
   CALL FUNCTION 'FKK_CTRACPAYMINC_REVERSE'
     EXPORTING
-      documentnumber   = i_documentid
-      doctype          = gc_doctype_anulacion
-      clearreas        = gc_clearreas_anulacion
-      fikey            = lv_fikey
-      reversedate      = i_canceldate
-*   IMPORTING
-*     <parámetro_documento_anulación> = e_cancelleddocumentid
-    EXCEPTIONS
-      OTHERS           = 1.
+      documentnumber = i_documentid
+      doctype        = gc_doctype_anulacion
+      clearreas      = gc_clearreas_anulacion
+      fikey          = lv_fikey
+      reversedate    = i_canceldate
+    IMPORTING
+      return         = ls_return.
 
-  IF sy-subrc <> 0.
+  IF ls_return-type CA 'EA'.
     e_result             = 'NOK'.
-    es_error-code        = |{ sy-subrc }|.
-    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
-      INTO es_error-description
-      WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    es_error-code        = ls_return-number.
+    es_error-description = ls_return-message.
     RETURN.
   ENDIF.
 
   COMMIT WORK AND WAIT.
 
+* TODO: FKK_CTRACPAYMINC_REVERSE no devuelve el documento de anulación
+* generado. Pendiente de confirmar cómo obtenerlo, por ejemplo:
+*  - si el número de documento viene en RETURN-MESSAGE_V1 (a comprobar
+*    con una prueba real, viendo el mensaje de éxito que se genera), o
+*  - releyendo DFKKZP/DFKKOP tras el COMMIT para el lote/posición de
+*    I_DOCUMENTID y localizando el campo con el documento de anulación
+*    (ver ejemplo del DF: columna "Nº doc.anul." en DFKKZP).
   e_result = 'OK'.
 
 ENDFUNCTION.

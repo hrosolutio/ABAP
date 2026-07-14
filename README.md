@@ -28,7 +28,7 @@ docs/
 | `I_PROCESO` | Import | `CHAR20`, default `CDI_11_03` | No | Identificador de proceso/subproceso |
 | `E_RESULT` | Export | `CHAR3` | — | `OK` / `NOK` |
 | `ES_ERROR` | Export | `ZFI_DE_XX_WS_ERROR` (`CODE`, `DESCRIPTION`) | — | Error de negocio o técnico |
-| `E_CANCELLEDDOCUMENTID` | Export | `OPBEL_KK` | — | Documento de anulación generado |
+| `E_CANCELLEDDOCUMENTID` | Export | `OPBEL_KK` | — | Documento de anulación generado (pendiente de resolver cómo obtenerlo, ver más abajo) |
 
 ## Lógica implementada
 
@@ -43,10 +43,15 @@ docs/
    - `CLEARREAS` = `'05'` (constante `GC_CLEARREAS_ANULACION`, fijo según nota técnica del DF)
    - `FIKEY` = clave determinada en el paso 3
    - `REVERSEDATE` = `I_CANCELDATE`
-5. Si la anulación es correcta, hace `COMMIT WORK AND WAIT` y devuelve
-   `E_RESULT = 'OK'` junto con el documento de anulación generado.
+   - El único export de este FM es `RETURN` (`BAPIRET2`); se usa `RETURN-TYPE`
+     para determinar éxito/error, ya que el FM no expone ningún parámetro con
+     el documento de anulación generado.
+5. Si `RETURN-TYPE` no es error/abort, hace `COMMIT WORK AND WAIT` y devuelve
+   `E_RESULT = 'OK'`. **`E_CANCELLEDDOCUMENTID` queda pendiente de completar**
+   (ver TODO en el código y punto siguiente).
 6. Cualquier error (validación, FIKEY o llamada al FM estándar) se devuelve
-   en `ES_ERROR` (`CODE` / `DESCRIPTION`) con `E_RESULT = 'NOK'`, sin
+   en `ES_ERROR` (`CODE` / `DESCRIPTION`, tomados de `RETURN-NUMBER` /
+   `RETURN-MESSAGE` en el caso del FM estándar) con `E_RESULT = 'NOK'`, sin
    gestión adicional de errores (fuera de alcance según el DF).
 
 El usuario que queda registrado en las anulaciones es el usuario técnico
@@ -66,16 +71,17 @@ con el que MuleSoft se conecta a SAP (actualmente `COMMUSER`).
    - Pestaña *Export*: `E_RESULT`, `ES_ERROR` (tipo DDIC `ZFI_DE_XX_WS_ERROR`),
      `E_CANCELLEDDOCUMENTID`.
    - Pestaña *Código fuente*: pegar `src/ZFI_FM_PAYLOT_REVERSE.abap`.
-4. **Completar la llamada a `FKK_CTRACPAYMINC_REVERSE`** (paso 4 del código,
-   bloque `IMPORTING` comentado): los parámetros de entrada
-   (`DOCUMENTNUMBER`, `DOCTYPE`, `CLEARREAS`, `FIKEY`, `REVERSEDATE`) están
-   tomados literalmente del DF, pero el parámetro de salida con el
-   documento de anulación generado no está confirmado y hay que verificarlo
-   en SE37.
-   La llamada a `FKK_CALL_EVENT_1113` (paso 3) ya usa la firma real
-   verificada en SE37 (`I_UNAME` como único import obligatorio); queda
-   pendiente confirmar con negocio/FI-CA si el escenario de anulación
-   manual requiere informar `I_HERKF`/`I_APPLK` (ver TODO en el código).
+4. Las firmas de `FKK_CALL_EVENT_1113` y `FKK_CTRACPAYMINC_REVERSE` ya están
+   verificadas contra SE37 y reflejadas en el código. Queda pendiente:
+   - Confirmar con negocio/FI-CA si el escenario de anulación manual
+     requiere informar `I_HERKF`/`I_APPLK` en `FKK_CALL_EVENT_1113`
+     (ver TODO en el código, paso 3).
+   - **Resolver cómo obtener `E_CANCELLEDDOCUMENTID`**: `FKK_CTRACPAYMINC_REVERSE`
+     no lo devuelve en ningún parámetro de salida (su único export es
+     `RETURN`, `BAPIRET2`). Hay que comprobar en una prueba real si el
+     número de documento viene en `RETURN-MESSAGE_V1` del mensaje de éxito,
+     o si hay que releerlo de `DFKKZP`/`DFKKOP` tras el `COMMIT` (ver TODO
+     en el código, paso 4).
 5. Activar y probar contra un documento de pago real incluido en un lote
    de transferencias (`DFKKZP`).
 
@@ -84,8 +90,9 @@ con el que MuleSoft se conecta a SAP (actualmente `COMMUSER`).
 - Confirmar si procede informar `I_HERKF`/`I_APPLK` en la llamada a
   `FKK_CALL_EVENT_1113` para este escenario (ver TODO en
   `ZFI_FM_PAYLOT_REVERSE.abap`).
-- Confirmar el parámetro de salida de `FKK_CTRACPAYMINC_REVERSE` que
-  contiene el documento de anulación generado.
+- Determinar cómo obtener el documento de anulación generado
+  (`E_CANCELLEDDOCUMENTID`), ya que `FKK_CTRACPAYMINC_REVERSE` no lo expone
+  como parámetro de salida.
 - Autorización RFC del usuario `COMMUSER` (o el que corresponda) sobre el
   grupo de función.
 - Alta del objeto en el sistema de transporte correspondiente al proyecto.
