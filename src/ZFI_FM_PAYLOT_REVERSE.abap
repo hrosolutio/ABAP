@@ -19,13 +19,13 @@ FUNCTION zfi_fm_paylot_reverse.
 *
 * NOTA: los IMPORT de FKK_CTRACPAYMINC_REVERSE (DOCUMENTNUMBER, DOCTYPE,
 * CLEARREAS, FIKEY, REVERSEDATE) están tomados literalmente del DF.
-* El resto de la interfaz de FKK_CTRACPAYMINC_REVERSE (parámetro de
-* salida del documento generado) y toda la interfaz de
-* FKK_CALL_EVENT_1113 NO están verificados: revisar en SE37 contra
-* el sistema de destino y completar antes de activar (ver TODO abajo).
+* La interfaz de FKK_CALL_EVENT_1113 está verificada contra SE37. El
+* parámetro de salida de FKK_CTRACPAYMINC_REVERSE con el documento de
+* anulación generado NO está verificado: revisar en SE37 y completar
+* antes de activar (ver TODO abajo).
 *----------------------------------------------------------------------*
 
-  DATA: lv_fikey TYPE fikey.
+  DATA: lv_fikey TYPE fkkko-fikey.
 
   CLEAR: e_result, es_error, e_cancelleddocumentid.
 
@@ -74,18 +74,23 @@ FUNCTION zfi_fm_paylot_reverse.
 *    Se propone la clave y, si no existe, se crea mediante el módulo
 *    de función estándar FKK_CALL_EVENT_1113 (según nota técnica del DF)
 *
-*    TODO: pendiente de completar. Los nombres de parámetros de
-*    FKK_CALL_EVENT_1113 no están verificados contra este sistema:
-*    revisar su firma real en SE37 (Import/Export/Tables/Exceptions)
-*    y sustituir la llamada de abajo antes de activar.
+*    Firma verificada en SE37. I_UNAME es el único IMPORT obligatorio;
+*    el resto (I_HERKF, I_APPLK, I_RESOB, I_RESKY, I_FIKEY, I_LAUFI,
+*    I_LAUFD, I_PARALLEL_PROCESSING) es opcional.
+*
+*    TODO: confirmar con negocio/FI-CA si procede informar HERKF/APPLK
+*    (origen del documento / área de aplicación) para este escenario de
+*    anulación manual, según la configuración de eventos del cliente.
 *----------------------------------------------------------------------*
   CALL FUNCTION 'FKK_CALL_EVENT_1113'
-*   EXPORTING
-*     <parámetro_fecha> = i_canceldate
-*   IMPORTING
-*     <parámetro_fikey> = lv_fikey
+    EXPORTING
+      i_uname = sy-uname
+*     i_herkf = ''      " TODO: confirmar valor de configuración FI-CA
+*     i_applk = ''      " TODO: confirmar valor de configuración FI-CA
+    IMPORTING
+      e_fikey = lv_fikey
     EXCEPTIONS
-      OTHERS = 1.
+      OTHERS  = 1.
 
   IF sy-subrc <> 0 OR lv_fikey IS INITIAL.
     e_result             = 'NOK'.

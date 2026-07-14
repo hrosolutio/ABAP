@@ -66,21 +66,24 @@ con el que MuleSoft se conecta a SAP (actualmente `COMMUSER`).
    - Pestaña *Export*: `E_RESULT`, `ES_ERROR` (tipo DDIC `ZFI_DE_XX_WS_ERROR`),
      `E_CANCELLEDDOCUMENTID`.
    - Pestaña *Código fuente*: pegar `src/ZFI_FM_PAYLOT_REVERSE.abap`.
-4. **Completar la llamada a `FKK_CALL_EVENT_1113`** (paso 3 del código, bloque
-   marcado con `TODO`): su interfaz real (parámetros de fecha y de FIKEY) no
-   está verificada y debe consultarse en SE37 del sistema de destino antes
-   de activar. Los parámetros de `FKK_CTRACPAYMINC_REVERSE` usados en el
-   paso 4 (`DOCUMENTNUMBER`, `DOCTYPE`, `CLEARREAS`, `FIKEY`, `REVERSEDATE`)
-   sí están tomados literalmente del DF; el parámetro de salida con el
-   documento de anulación generado no lo está y también hay que confirmarlo
-   y completar el bloque `IMPORTING` comentado.
+4. **Completar la llamada a `FKK_CTRACPAYMINC_REVERSE`** (paso 4 del código,
+   bloque `IMPORTING` comentado): los parámetros de entrada
+   (`DOCUMENTNUMBER`, `DOCTYPE`, `CLEARREAS`, `FIKEY`, `REVERSEDATE`) están
+   tomados literalmente del DF, pero el parámetro de salida con el
+   documento de anulación generado no está confirmado y hay que verificarlo
+   en SE37.
+   La llamada a `FKK_CALL_EVENT_1113` (paso 3) ya usa la firma real
+   verificada en SE37 (`I_UNAME` como único import obligatorio); queda
+   pendiente confirmar con negocio/FI-CA si el escenario de anulación
+   manual requiere informar `I_HERKF`/`I_APPLK` (ver TODO en el código).
 5. Activar y probar contra un documento de pago real incluido en un lote
    de transferencias (`DFKKZP`).
 
 ## Pendiente / a definir con el cliente
 
-- Confirmar en SE37 la firma real de `FKK_CALL_EVENT_1113` y completar su
-  llamada en el código (ver TODO en `ZFI_FM_PAYLOT_REVERSE.abap`).
+- Confirmar si procede informar `I_HERKF`/`I_APPLK` en la llamada a
+  `FKK_CALL_EVENT_1113` para este escenario (ver TODO en
+  `ZFI_FM_PAYLOT_REVERSE.abap`).
 - Confirmar el parámetro de salida de `FKK_CTRACPAYMINC_REVERSE` que
   contiene el documento de anulación generado.
 - Autorización RFC del usuario `COMMUSER` (o el que corresponda) sobre el
