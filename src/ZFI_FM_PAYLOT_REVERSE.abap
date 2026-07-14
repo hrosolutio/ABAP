@@ -99,6 +99,11 @@ FUNCTION zfi_fm_paylot_reverse.
     RETURN.
   ENDIF.
 
+* La creación de FIKEY se confirma en tareas de actualización (V1/V2) que
+* solo se vuelcan a BD con COMMIT WORK. Sin este commit, FKK_CTRACPAYMINC_
+* REVERSE falla con "Clave de reconciliación XXX no creada aún".
+  COMMIT WORK AND WAIT.
+
 *----------------------------------------------------------------------*
 * 4. Anulación del documento contra el módulo de función estándar
 *    CLEARREAS se informa siempre a '05' según nota técnica del DF,

@@ -36,7 +36,10 @@ docs/
 2. Verifica que el documento exista en un lote de pago (`DFKKZP`); si no,
    devuelve `E_RESULT = 'NOK'` (no se anulan documentos fuera de un lote).
 3. Determina/crea la clave de reconciliación (`FIKEY`) llamando al FM estándar
-   `FKK_CALL_EVENT_1113`.
+   `FKK_CALL_EVENT_1113`, y hace `COMMIT WORK AND WAIT` para forzar que la
+   clave quede persistida en BD (su creación se confirma en tareas de
+   actualización V1/V2; sin este commit, el paso siguiente falla con
+   *"Clave de reconciliación XXX no creada aún"*).
 4. Llama al FM estándar `FKK_CTRACPAYMINC_REVERSE` con:
    - `DOCUMENTNUMBER` = `I_DOCUMENTID`
    - `DOCTYPE` = `'ST'` (constante `GC_DOCTYPE_ANULACION`)
