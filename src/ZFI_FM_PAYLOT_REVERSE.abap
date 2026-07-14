@@ -112,12 +112,16 @@ FUNCTION zfi_fm_paylot_reverse.
 *    FM no devuelve el documento de anulación generado en ningún
 *    parámetro de salida.
 *----------------------------------------------------------------------*
+* PRUEBA: si FIKEY es opcional en la interfaz de FKK_CTRACPAYMINC_REVERSE,
+* se omite para que el propio FM proponga/cree la clave internamente y
+* evitar así la llamada previa a FKK_CALL_EVENT_1113. Si funciona, se
+* puede eliminar todo el paso 3 (arriba) y la declaración de lv_fikey.
   CALL FUNCTION 'FKK_CTRACPAYMINC_REVERSE'
     EXPORTING
       documentnumber = i_documentid
       doctype        = gc_doctype_anulacion
       clearreas      = gc_clearreas_anulacion
-      fikey          = lv_fikey
+*     fikey          = lv_fikey
       reversedate    = i_canceldate
     IMPORTING
       return         = ls_return.
