@@ -17,9 +17,12 @@ FUNCTION zfi_fm_paylot_reverse.
 * transferencias y genera el documento de anulación correspondiente,
 * llamando al módulo de función estándar FKK_CTRACPAYMINC_REVERSE.
 *
-* NOTA: los nombres de parámetros del FM estándar FKK_CTRACPAYMINC_REVERSE
-* y de FKK_CALL_EVENT_1113 deben verificarse en SE37 contra el release/
-* support package del sistema de destino antes de activar en productivo.
+* NOTA: los IMPORT de FKK_CTRACPAYMINC_REVERSE (DOCUMENTNUMBER, DOCTYPE,
+* CLEARREAS, FIKEY, REVERSEDATE) están tomados literalmente del DF.
+* El resto de la interfaz de FKK_CTRACPAYMINC_REVERSE (parámetro de
+* salida del documento generado) y toda la interfaz de
+* FKK_CALL_EVENT_1113 NO están verificados: revisar en SE37 contra
+* el sistema de destino y completar antes de activar (ver TODO abajo).
 *----------------------------------------------------------------------*
 
   DATA: lv_fikey TYPE fikey.
@@ -70,14 +73,19 @@ FUNCTION zfi_fm_paylot_reverse.
 * 3. Determinar/crear la clave de reconciliación (FIKEY) de la anulación
 *    Se propone la clave y, si no existe, se crea mediante el módulo
 *    de función estándar FKK_CALL_EVENT_1113 (según nota técnica del DF)
+*
+*    TODO: pendiente de completar. Los nombres de parámetros de
+*    FKK_CALL_EVENT_1113 no están verificados contra este sistema:
+*    revisar su firma real en SE37 (Import/Export/Tables/Exceptions)
+*    y sustituir la llamada de abajo antes de activar.
 *----------------------------------------------------------------------*
   CALL FUNCTION 'FKK_CALL_EVENT_1113'
-    EXPORTING
-      i_datum = i_canceldate
-    IMPORTING
-      e_fikey = lv_fikey
+*   EXPORTING
+*     <parámetro_fecha> = i_canceldate
+*   IMPORTING
+*     <parámetro_fikey> = lv_fikey
     EXCEPTIONS
-      OTHERS  = 1.
+      OTHERS = 1.
 
   IF sy-subrc <> 0 OR lv_fikey IS INITIAL.
     e_result             = 'NOK'.
@@ -90,6 +98,10 @@ FUNCTION zfi_fm_paylot_reverse.
 * 4. Anulación del documento contra el módulo de función estándar
 *    CLEARREAS se informa siempre a '05' según nota técnica del DF,
 *    con independencia del valor recibido en I_CANCELREASON.
+*    Los nombres DOCUMENTNUMBER/DOCTYPE/CLEARREAS/FIKEY/REVERSEDATE
+*    vienen indicados literalmente en el DF. El parámetro de salida
+*    con el documento de anulación generado (aquí E_DOCUMENTNUMBER)
+*    NO está confirmado por el DF: verificar en SE37 y ajustar.
 *----------------------------------------------------------------------*
   CALL FUNCTION 'FKK_CTRACPAYMINC_REVERSE'
     EXPORTING
@@ -98,8 +110,8 @@ FUNCTION zfi_fm_paylot_reverse.
       clearreas        = gc_clearreas_anulacion
       fikey            = lv_fikey
       reversedate      = i_canceldate
-    IMPORTING
-      e_documentnumber = e_cancelleddocumentid
+*   IMPORTING
+*     <parámetro_documento_anulación> = e_cancelleddocumentid
     EXCEPTIONS
       OTHERS           = 1.
 

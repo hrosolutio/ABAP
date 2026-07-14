@@ -66,15 +66,23 @@ con el que MuleSoft se conecta a SAP (actualmente `COMMUSER`).
    - Pestaña *Export*: `E_RESULT`, `ES_ERROR` (tipo DDIC `ZFI_DE_XX_WS_ERROR`),
      `E_CANCELLEDDOCUMENTID`.
    - Pestaña *Código fuente*: pegar `src/ZFI_FM_PAYLOT_REVERSE.abap`.
-4. Verificar en el sistema de destino la firma real de los módulos estándar
-   `FKK_CALL_EVENT_1113` y `FKK_CTRACPAYMINC_REVERSE` (pueden variar
-   ligeramente entre releases/support packages) y ajustar los nombres de
-   parámetros si fuera necesario.
+4. **Completar la llamada a `FKK_CALL_EVENT_1113`** (paso 3 del código, bloque
+   marcado con `TODO`): su interfaz real (parámetros de fecha y de FIKEY) no
+   está verificada y debe consultarse en SE37 del sistema de destino antes
+   de activar. Los parámetros de `FKK_CTRACPAYMINC_REVERSE` usados en el
+   paso 4 (`DOCUMENTNUMBER`, `DOCTYPE`, `CLEARREAS`, `FIKEY`, `REVERSEDATE`)
+   sí están tomados literalmente del DF; el parámetro de salida con el
+   documento de anulación generado no lo está y también hay que confirmarlo
+   y completar el bloque `IMPORTING` comentado.
 5. Activar y probar contra un documento de pago real incluido en un lote
    de transferencias (`DFKKZP`).
 
 ## Pendiente / a definir con el cliente
 
+- Confirmar en SE37 la firma real de `FKK_CALL_EVENT_1113` y completar su
+  llamada en el código (ver TODO en `ZFI_FM_PAYLOT_REVERSE.abap`).
+- Confirmar el parámetro de salida de `FKK_CTRACPAYMINC_REVERSE` que
+  contiene el documento de anulación generado.
 - Autorización RFC del usuario `COMMUSER` (o el que corresponda) sobre el
   grupo de función.
 - Alta del objeto en el sistema de transporte correspondiente al proyecto.
