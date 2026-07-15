@@ -14,3 +14,8 @@ CONSTANTS:
 
 * Identificador de proceso/subproceso por defecto (I_PROCESO)
 CONSTANTS gc_proceso_default TYPE char20 VALUE 'CDI_11_03'.
+
+* Identificador de llamador externo para FKK_FIKEY_GET_FOR_EXT_CALL
+* (I_CALLB es CHAR3, sin tabla de valores; no puede reutilizarse
+* GC_PROCESO_DEFAULT porque no cabe)
+CONSTANTS gc_callb_anulacion TYPE char3 VALUE 'CDI'.

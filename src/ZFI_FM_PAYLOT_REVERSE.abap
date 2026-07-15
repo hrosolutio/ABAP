@@ -77,14 +77,13 @@ FUNCTION zfi_fm_paylot_reverse.
 *    propio estándar, pensado explícitamente para llamadores externos).
 *
 *    Firma verificada en SE37. I_CALLB es el único IMPORT obligatorio
-*    (identificador libre del programa llamador, sin tabla de valores);
-*    se reutiliza el identificador de proceso del DF. El resto de
-*    imports (I_RESOB, I_RESKY, I_UPDATE_TASK) son opcionales.
-*    Única excepción: NO_FREE_FIKEY.
+*    (identificador libre del programa llamador, tipo CHAR3, sin tabla
+*    de valores). El resto de imports (I_RESOB, I_RESKY, I_UPDATE_TASK)
+*    son opcionales. Única excepción: NO_FREE_FIKEY.
 *----------------------------------------------------------------------*
   CALL FUNCTION 'FKK_FIKEY_GET_FOR_EXT_CALL'
     EXPORTING
-      i_callb       = gc_proceso_default
+      i_callb       = gc_callb_anulacion
     IMPORTING
       e_fikey       = lv_fikey
     EXCEPTIONS
