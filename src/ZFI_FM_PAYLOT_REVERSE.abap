@@ -17,7 +17,7 @@ FUNCTION zfi_fm_paylot_reverse.
 * transferencias y genera el documento de anulación correspondiente,
 * llamando al módulo de función estándar FKK_CTRACPAYMINC_REVERSE.
 *
-* NOTA: interfaces de FKK_CALL_EVENT_1113 y FKK_CTRACPAYMINC_REVERSE
+* NOTA: interfaces de FKK_FIKEY_GET_FOR_EXT_CALL y FKK_CTRACPAYMINC_REVERSE
 * verificadas contra SE37. FKK_CTRACPAYMINC_REVERSE NO devuelve el
 * documento de anulación generado en ningún export (su único export es
 * RETURN, tipo BAPIRET2) por lo que E_CANCELLEDDOCUMENTID queda
@@ -70,27 +70,26 @@ FUNCTION zfi_fm_paylot_reverse.
   ENDIF.
 
 *----------------------------------------------------------------------*
-* 3. Determinar/crear la clave de reconciliación (FIKEY) de la anulación
-*    Se propone la clave y, si no existe, se crea mediante el módulo
-*    de función estándar FKK_CALL_EVENT_1113 (según nota técnica del DF)
+* 3. Determinar/crear la clave de reconciliación (FIKEY) de la anulación,
+*    llamando al módulo de función estándar FKK_FIKEY_GET_FOR_EXT_CALL
+*    (identificado por depuración en SAPLFKB0/SAPLFKB1: es el wrapper
+*    público de la rutina interna FIKEY_RESERVIEREN_INT que usa el
+*    propio estándar, pensado explícitamente para llamadores externos).
 *
-*    Firma verificada en SE37. I_UNAME es el único IMPORT obligatorio;
-*    el resto (I_HERKF, I_APPLK, I_RESOB, I_RESKY, I_FIKEY, I_LAUFI,
-*    I_LAUFD, I_PARALLEL_PROCESSING) es opcional.
-*
-*    TODO: confirmar con negocio/FI-CA si procede informar HERKF/APPLK
-*    (origen del documento / área de aplicación) para este escenario de
-*    anulación manual, según la configuración de eventos del cliente.
+*    Firma verificada en SE37. I_CALLB es el único IMPORT obligatorio
+*    (identificador libre del programa llamador, sin tabla de valores);
+*    se reutiliza el identificador de proceso del DF. El resto de
+*    imports (I_RESOB, I_RESKY, I_UPDATE_TASK) son opcionales.
+*    Única excepción: NO_FREE_FIKEY.
 *----------------------------------------------------------------------*
-  CALL FUNCTION 'FKK_CALL_EVENT_1113'
+  CALL FUNCTION 'FKK_FIKEY_GET_FOR_EXT_CALL'
     EXPORTING
-      i_uname = sy-uname
-*     i_herkf = ''      " TODO: confirmar valor de configuración FI-CA
-*     i_applk = ''      " TODO: confirmar valor de configuración FI-CA
+      i_callb       = gc_proceso_default
     IMPORTING
-      e_fikey = lv_fikey
+      e_fikey       = lv_fikey
     EXCEPTIONS
-      OTHERS  = 1.
+      no_free_fikey = 1
+      OTHERS        = 2.
 
   IF sy-subrc <> 0 OR lv_fikey IS INITIAL.
     e_result             = 'NOK'.
@@ -99,9 +98,10 @@ FUNCTION zfi_fm_paylot_reverse.
     RETURN.
   ENDIF.
 
-* La creación de FIKEY se confirma en tareas de actualización (V1/V2) que
-* solo se vuelcan a BD con COMMIT WORK. Sin este commit, FKK_CTRACPAYMINC_
-* REVERSE falla con "Clave de reconciliación XXX no creada aún".
+* I_UPDATE_TASK tiene por defecto 'X' (creación vía tarea de actualización
+* V1/V2), que solo se vuelca a BD con COMMIT WORK. Sin este commit,
+* FKK_CTRACPAYMINC_REVERSE falla con "Clave de reconciliación XXX no
+* creada aún".
   COMMIT WORK AND WAIT.
 
 *----------------------------------------------------------------------*

@@ -36,10 +36,14 @@ docs/
 2. Verifica que el documento exista en un lote de pago (`DFKKZP`); si no,
    devuelve `E_RESULT = 'NOK'` (no se anulan documentos fuera de un lote).
 3. Determina/crea la clave de reconciliación (`FIKEY`) llamando al FM estándar
-   `FKK_CALL_EVENT_1113`, y hace `COMMIT WORK AND WAIT` para forzar que la
-   clave quede persistida en BD (su creación se confirma en tareas de
-   actualización V1/V2; sin este commit, el paso siguiente falla con
-   *"Clave de reconciliación XXX no creada aún"*).
+   `FKK_FIKEY_GET_FOR_EXT_CALL` (localizado depurando `FP08`/`FKK_CTRACPAYMINC_REVERSE`
+   hasta encontrar la comprobación real en `FKK_FIKEY_CHECK` contra la tabla
+   `DFKKSUMC`; este FM es el wrapper público, pensado para llamadores
+   externos, de la rutina interna que efectivamente reserva la clave), y
+   hace `COMMIT WORK AND WAIT` para forzar que la clave quede persistida en
+   BD (su creación por defecto ocurre vía tarea de actualización V1/V2;
+   sin este commit, el paso siguiente falla con *"Clave de reconciliación
+   XXX no creada aún"*).
 4. Llama al FM estándar `FKK_CTRACPAYMINC_REVERSE` con:
    - `DOCUMENTNUMBER` = `I_DOCUMENTID`
    - `DOCTYPE` = `'ST'` (constante `GC_DOCTYPE_ANULACION`)
@@ -74,11 +78,8 @@ con el que MuleSoft se conecta a SAP (actualmente `COMMUSER`).
    - Pestaña *Export*: `E_RESULT`, `ES_ERROR` (tipo DDIC `ZFI_DE_XX_WS_ERROR`),
      `E_CANCELLEDDOCUMENTID`.
    - Pestaña *Código fuente*: pegar `src/ZFI_FM_PAYLOT_REVERSE.abap`.
-4. Las firmas de `FKK_CALL_EVENT_1113` y `FKK_CTRACPAYMINC_REVERSE` ya están
-   verificadas contra SE37 y reflejadas en el código. Queda pendiente:
-   - Confirmar con negocio/FI-CA si el escenario de anulación manual
-     requiere informar `I_HERKF`/`I_APPLK` en `FKK_CALL_EVENT_1113`
-     (ver TODO en el código, paso 3).
+4. Las firmas de `FKK_FIKEY_GET_FOR_EXT_CALL` y `FKK_CTRACPAYMINC_REVERSE` ya
+   están verificadas contra SE37 y reflejadas en el código. Queda pendiente:
    - **Resolver cómo obtener `E_CANCELLEDDOCUMENTID`**: `FKK_CTRACPAYMINC_REVERSE`
      no lo devuelve en ningún parámetro de salida (su único export es
      `RETURN`, `BAPIRET2`). Hay que comprobar en una prueba real si el
@@ -90,9 +91,6 @@ con el que MuleSoft se conecta a SAP (actualmente `COMMUSER`).
 
 ## Pendiente / a definir con el cliente
 
-- Confirmar si procede informar `I_HERKF`/`I_APPLK` en la llamada a
-  `FKK_CALL_EVENT_1113` para este escenario (ver TODO en
-  `ZFI_FM_PAYLOT_REVERSE.abap`).
 - Determinar cómo obtener el documento de anulación generado
   (`E_CANCELLEDDOCUMENTID`), ya que `FKK_CTRACPAYMINC_REVERSE` no lo expone
   como parámetro de salida.
