@@ -20,8 +20,8 @@ FUNCTION zfi_fm_paylot_reverse.
 * NOTA: interfaces de FKK_FIKEY_GET_FOR_EXT_CALL y FKK_CTRACPAYMINC_REVERSE
 * verificadas contra SE37. FKK_CTRACPAYMINC_REVERSE NO devuelve el
 * documento de anulación generado en ningún export (su único export es
-* RETURN, tipo BAPIRET2) por lo que E_CANCELLEDDOCUMENTID queda
-* pendiente de resolver (ver TODO en el paso 4).
+* RETURN, tipo BAPIRET2); se obtiene releyendo DFKKZP-RUEBL tras el
+* COMMIT (ver paso final).
 *----------------------------------------------------------------------*
 
   DATA: lv_fikey  TYPE fkkko-fikey,
@@ -130,13 +130,16 @@ FUNCTION zfi_fm_paylot_reverse.
 
   COMMIT WORK AND WAIT.
 
-* TODO: FKK_CTRACPAYMINC_REVERSE no devuelve el documento de anulación
-* generado. Pendiente de confirmar cómo obtenerlo, por ejemplo:
-*  - si el número de documento viene en RETURN-MESSAGE_V1 (a comprobar
-*    con una prueba real, viendo el mensaje de éxito que se genera), o
-*  - releyendo DFKKZP/DFKKOP tras el COMMIT para el lote/posición de
-*    I_DOCUMENTID y localizando el campo con el documento de anulación
-*    (ver ejemplo del DF: columna "Nº doc.anul." en DFKKZP).
+* FKK_CTRACPAYMINC_REVERSE no devuelve el documento de anulación
+* generado en ningún export; se relee de DFKKZP-RUEBL (verificado por
+* depuración: es el campo que se rellena con el documento de anulación
+* tras la contabilización, columna "Nº doc.anul." en la transacción
+* de búsqueda de pagos del lote).
+  SELECT SINGLE ruebl
+    FROM dfkkzp
+    INTO @e_cancelleddocumentid
+    WHERE opbel = @i_documentid.
+
   e_result = 'OK'.
 
 ENDFUNCTION.

@@ -28,7 +28,7 @@ docs/
 | `I_PROCESO` | Import | `CHAR20`, default `CDI_11_03` | No | Identificador de proceso/subproceso |
 | `E_RESULT` | Export | `CHAR3` | — | `OK` / `NOK` |
 | `ES_ERROR` | Export | `ZFI_DE_XX_WS_ERROR` (`CODE`, `DESCRIPTION`) | — | Error de negocio o técnico |
-| `E_CANCELLEDDOCUMENTID` | Export | `OPBEL_KK` | — | Documento de anulación generado (pendiente de resolver cómo obtenerlo, ver más abajo) |
+| `E_CANCELLEDDOCUMENTID` | Export | `OPBEL_KK` | — | Documento de anulación generado (se relee de `DFKKZP-RUEBL`, ver más abajo) |
 
 ## Lógica implementada
 
@@ -53,9 +53,12 @@ docs/
    - El único export de este FM es `RETURN` (`BAPIRET2`); se usa `RETURN-TYPE`
      para determinar éxito/error, ya que el FM no expone ningún parámetro con
      el documento de anulación generado.
-5. Si `RETURN-TYPE` no es error/abort, hace `COMMIT WORK AND WAIT` y devuelve
-   `E_RESULT = 'OK'`. **`E_CANCELLEDDOCUMENTID` queda pendiente de completar**
-   (ver TODO en el código y punto siguiente).
+5. Si `RETURN-TYPE` no es error/abort, hace `COMMIT WORK AND WAIT` y relee
+   `DFKKZP-RUEBL` para el mismo `OPBEL` de entrada (verificado por
+   depuración: es el campo que queda relleno con el documento de anulación
+   tras la contabilización, columna "Nº doc.anul." en la búsqueda de pagos
+   del lote), devolviéndolo en `E_CANCELLEDDOCUMENTID` junto con
+   `E_RESULT = 'OK'`.
 6. Cualquier error (validación, FIKEY o llamada al FM estándar) se devuelve
    en `ES_ERROR` (`CODE` / `DESCRIPTION`, tomados de `RETURN-NUMBER` /
    `RETURN-MESSAGE` en el caso del FM estándar) con `E_RESULT = 'NOK'`, sin
@@ -78,22 +81,18 @@ con el que MuleSoft se conecta a SAP (actualmente `COMMUSER`).
    - Pestaña *Export*: `E_RESULT`, `ES_ERROR` (tipo DDIC `ZFI_DE_XX_WS_ERROR`),
      `E_CANCELLEDDOCUMENTID`.
    - Pestaña *Código fuente*: pegar `src/ZFI_FM_PAYLOT_REVERSE.abap`.
-4. Las firmas de `FKK_FIKEY_GET_FOR_EXT_CALL` y `FKK_CTRACPAYMINC_REVERSE` ya
-   están verificadas contra SE37 y reflejadas en el código. Queda pendiente:
-   - **Resolver cómo obtener `E_CANCELLEDDOCUMENTID`**: `FKK_CTRACPAYMINC_REVERSE`
-     no lo devuelve en ningún parámetro de salida (su único export es
-     `RETURN`, `BAPIRET2`). Hay que comprobar en una prueba real si el
-     número de documento viene en `RETURN-MESSAGE_V1` del mensaje de éxito,
-     o si hay que releerlo de `DFKKZP`/`DFKKOP` tras el `COMMIT` (ver TODO
-     en el código, paso 4).
+4. Las firmas de `FKK_FIKEY_GET_FOR_EXT_CALL` y `FKK_CTRACPAYMINC_REVERSE`
+   están verificadas contra SE37 y reflejadas en el código, incluyendo la
+   relectura de `DFKKZP-RUEBL` para obtener `E_CANCELLEDDOCUMENTID`.
 5. Activar y probar contra un documento de pago real incluido en un lote
    de transferencias (`DFKKZP`).
 
 ## Pendiente / a definir con el cliente
 
-- Determinar cómo obtener el documento de anulación generado
-  (`E_CANCELLEDDOCUMENTID`), ya que `FKK_CTRACPAYMINC_REVERSE` no lo expone
-  como parámetro de salida.
+- Confirmar si la clave de reconciliación generada por
+  `FKK_FIKEY_GET_FOR_EXT_CALL` usa la fecha del sistema o `I_CANCELDATE`
+  (no recibe parámetro de fecha); validar con una anulación de fecha
+  contable distinta a la de hoy.
 - Autorización RFC del usuario `COMMUSER` (o el que corresponda) sobre el
   grupo de función.
 - Alta del objeto en el sistema de transporte correspondiente al proyecto.
