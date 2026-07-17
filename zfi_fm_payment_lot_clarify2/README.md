@@ -7,23 +7,52 @@ Replica el comportamiento de la transacción estándar **FPCPL** para
 clarificar, desde un sistema externo (vía MuleSoft), una posición de lote
 de pago pendiente de clarificar, aplicando la(s) factura(s) recibida(s).
 
-## Estado: EN DESARROLLO — lógica central no implementada
+## Estado: primera versión completa, pendiente de prueba end-to-end real
 
 El propio DF advierte que el módulo de función estándar
-`FKK_PAYMENT_BATCH_CLARIFY_ITEM` **no se puede utilizar directamente** y
-que no existe FM estándar ejecutable por RFC para clarificar posiciones de
-lote. La secuencia real de llamadas todavía no está verificada contra el
-sistema — hay que depurar FPCPL para localizarla, igual que se hizo con
-FP08 para el desarrollo de anulación de transferencias
-(`ZFI_FM_PAYLOT_REVERSE`). El código actual valida la entrada y deja el
-paso de clarificación marcado como `TODO` a propósito.
+`FKK_PAYMENT_BATCH_CLARIFY_ITEM` **no se puede utilizar directamente**.
+Por depuración de la transacción FPCPL se confirmó el motivo: es un
+módulo de diálogo (abre una pantalla interactiva, `CALL SCREEN 500`, y
+espera acción del usuario) — no apto para RFC. Depurando más allá de esa
+pantalla se localizó la cadena real de módulos estándar subyacente:
+
+```
+FKK_OPEN_ITEM_SELECT            → busca la factura (verificado con datos reales)
+ISU_CLEARING_PROPOSAL_GEN_0110  → genera propuesta y contabiliza
+  └ FKK_CLEARING_PROPOSAL_GEN_0110
+      └ FKK_PAYMENT_ALLOC_AND_CLEARING
+          └ PAYMENT_ON_ACCOUNT (FORM)
+              └ FKK_OPEN_PAYMENT_COMPLETE
+```
+
+**Verificado por depuración, con datos reales:**
+- El mapeo tipo de selección `X` → campo `FKKOP-XBLNR`, contra la tabla
+  de customizing `TFK004` (Área `R`).
+- `FKK_OPEN_ITEM_SELECT` con `T_SELTAB` (`SELFN='XBLNR'`) encuentra
+  correctamente las partidas abiertas de una factura real.
+- El patrón de relleno de `I_FKKKO`/`T_FKKOPK` a partir de los datos de
+  la posición del lote, observado en una llamada real a
+  `FKK_OPEN_PAYMENT_COMPLETE`.
+- El documento de clarificación generado queda en `DFKKZP-KLAEB`.
+
+**Composición razonada, NO probada de principio a fin todavía:**
+- Llamar directamente a `ISU_CLEARING_PROPOSAL_GEN_0110` desde este RFC,
+  sin pasar por la capa de pantalla/procesamiento en bloque de
+  `FKK_PAYMENT_BATCH_POST` (que procesa hasta 20-100 posiciones de lote
+  a la vez con bloqueos y reintentos — innecesario para clarificar una
+  única posición). El intento de prueba que se hizo modificó `T_SELTAB`
+  solo en memoria durante la depuración, sin persistir el cambio en
+  `DFKKZP`, así que no se llegó a completar una clarificación real de
+  principio a fin con este camino directo.
+- El valor exacto de `T_FKKOPK-HKONT` (¿siempre `DFKKZP-KLAEH` si ya
+  viene informado, o la cuenta provisional constante?).
 
 ## Contenido del repositorio
 
 ```
 src/
   LZFI_FG_PAY_CLARIFYTOP.abap        Include TOP del grupo de función (tipos y constantes globales)
-  ZFI_FM_PAYMENT_LOT_CLARIFY2.abap   Código fuente del módulo de función RFC (esqueleto)
+  ZFI_FM_PAYMENT_LOT_CLARIFY2.abap   Código fuente del módulo de función RFC
 docs/
   DF_resumen.md                      Resumen del Diseño Funcional (trazabilidad)
 ```
@@ -37,37 +66,69 @@ docs/
 | `I_XBLNR` | Import | `TY_T_XBLNR` (tabla de `XBLNR`) | Sí | Factura(s) a aplicar. Decidido con el cliente: tabla de longitud variable (el DF tenía una indicación de factura única y una nota posterior pidiendo varias, mínimo 5 propuesto) |
 | `E_RESULT` | Export | `CHAR3` | — | `OK` / `NOK` |
 | `ES_ERROR` | Export | `ZFI_DE_XX_WS_ERROR` (`CODE`, `DESCRIPTION`) | — | Error de negocio o técnico |
-| `E_OPBEL` | Export | `OPBEL_KK` | — | Documento contabilizado |
+| `E_OPBEL` | Export | `OPBEL_KK` | — | Documento de clarificación generado (`DFKKZP-KLAEB`) |
 
-## Lógica implementada hasta ahora
+## Lógica implementada
 
 1. Valida que `I_KEYZ1`, `I_POSZA` e `I_XBLNR` estén informados.
 2. Verifica que la posición del lote exista y esté pendiente de clarificar
-   (`DFKKZP-XKLAE = 'X'`); si no, devuelve `E_RESULT = 'NOK'`.
-3. **Pendiente**: aplicar la(s) factura(s) de `I_XBLNR` a la posición como
-   tipo de selección `"X"` (número de documento oficial) y contabilizar,
-   replicando FPCPL. De momento devuelve `E_RESULT = 'NOK'` con
-   `ES_ERROR-CODE = 'NOT_IMPLEMENTED'`.
+   (`DFKKZP-XKLAE = 'X'`).
+3. Para cada factura de `I_XBLNR`, busca las partidas abiertas
+   coincidentes con `FKK_OPEN_ITEM_SELECT` (`SELFN='XBLNR'`) — búsqueda
+   pura, sin contabilizar. Se queda con la **primera factura cuyo importe
+   total de partidas encontradas coincida exactamente** con el importe de
+   la posición (según el requisito explícito del DF de que el importe
+   debe coincidir para garantizar clarificación completa).
+
+   ⚠️ **Sin confirmar con negocio**: que "probar una a una hasta que el
+   importe cuadre" sea el comportamiento esperado para el caso de varias
+   facturas en `I_XBLNR` (ver DF_resumen.md).
+4. Construye `I_FKKKO` (cabecera) y `T_FKKOPK` (partida provisional) a
+   partir de los datos de la posición del lote.
+5. Llama a `ISU_CLEARING_PROPOSAL_GEN_0110` (`I_CLARIFICATION = 'X'`) con
+   la partida encontrada, para generar la propuesta y contabilizar.
+6. Hace `COMMIT WORK AND WAIT` y relee `DFKKZP-KLAEB`/`XKLAE` para
+   confirmar el resultado real y devolver `E_OPBEL`.
 
 El usuario que queda registrado en las clarificaciones es el usuario
 técnico con el que MuleSoft se conecta a SAP, en el campo `DFKKZP-AENAM`
 (actualmente `COMMUSER`).
 
-## Siguiente paso
+## Siguiente paso: prueba end-to-end real
 
-Depurar la transacción **FPCPL** sobre una posición de lote real
-pendiente de clarificar, aplicando manualmente una factura como tipo de
-selección `X`, y localizar con el debugger la llamada/secuencia real que
-efectúa la clarificación — mismo método que se usó para encontrar
-`FKK_FIKEY_GET_FOR_EXT_CALL` en el desarrollo anterior.
+Antes de dar esto por cerrado, hace falta una prueba real y persistida:
+
+1. Activar la función en SE80/SE37 siguiendo la instalación de más abajo.
+2. Ejecutarla (F8 en SE37) contra una posición de lote real pendiente de
+   clarificar, pasando una factura real cuyo importe coincida
+   exactamente con el importe de esa posición.
+3. Comprobar que `E_RESULT = 'OK'` y que `DFKKZP-XKLAE`/`KLAEB` reflejan
+   la clarificación en la tabla real (no solo la variable de salida).
+
+## Instalación en SAP (SE80 / SE37)
+
+1. Crear el grupo de función **`ZFI_FG_PAY_CLARIFY`** (SE80 → Grupo de
+   función → Crear).
+2. Sustituir el contenido del include TOP del grupo
+   (`LZFI_FG_PAY_CLARIFYTOP`) por `src/LZFI_FG_PAY_CLARIFYTOP.abap`.
+3. Crear el módulo de función **`ZFI_FM_PAYMENT_LOT_CLARIFY2`** dentro
+   del grupo:
+   - Atributos: marcar **"Módulo de función remoto"** (RFC).
+   - Pestaña *Import*: `I_KEYZ1`, `I_POSZA`, `I_XBLNR` (obligatorios),
+     con los tipos indicados en la tabla de interfaz.
+   - Pestaña *Export*: `E_RESULT`, `ES_ERROR` (tipo DDIC
+     `ZFI_DE_XX_WS_ERROR`), `E_OPBEL`.
+   - Pestaña *Código fuente*: pegar `src/ZFI_FM_PAYMENT_LOT_CLARIFY2.abap`.
+4. Activar y probar (ver "Siguiente paso" arriba).
 
 ## Pendiente / a definir con el cliente
 
-- Localizar la secuencia real de clarificación (ver "Siguiente paso").
-- Confirmar comportamiento si alguna de las facturas de `I_XBLNR` no
-  encaja o el importe no cuadra exactamente con la posición del lote
-  (el DF solo contempla el caso de coincidencia exacta para clarificación
-  completa).
+- Confirmar con negocio el comportamiento esperado cuando `I_XBLNR` trae
+  varias facturas (ver punto 3 de "Lógica implementada").
+- Verificar de principio a fin, con una prueba real persistida, la
+  llamada directa a `ISU_CLEARING_PROPOSAL_GEN_0110` (ver "Composición
+  razonada, NO probada" más arriba).
+- Confirmar el origen correcto de `T_FKKOPK-HKONT`.
 - Autorización RFC del usuario `COMMUSER` (o el que corresponda) sobre el
   grupo de función.
 - Alta del objeto en el sistema de transporte correspondiente al proyecto.
