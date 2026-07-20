@@ -63,7 +63,7 @@ docs/
 |---|---|---|---|---|
 | `I_KEYZ1` | Import | `KEYZ1_KK` | Sí | Número de lote |
 | `I_POSZA` | Import | `POSZA_KK` | Sí | Posición del lote |
-| `I_XBLNR` | Import | `TY_T_XBLNR` (tabla de `XBLNR`) | Sí | Factura(s) a aplicar. Decidido con el cliente: tabla de longitud variable (el DF tenía una indicación de factura única y una nota posterior pidiendo varias, mínimo 5 propuesto) |
+| `I_XBLNR` | Import | `ZFI_T_XBLNR` (tipo de tabla DDIC, ver instalación) | Sí | Factura(s) a aplicar. Decidido con el cliente: tabla de longitud variable (el DF tenía una indicación de factura única y una nota posterior pidiendo varias, mínimo 5 propuesto) |
 | `E_RESULT` | Export | `CHAR3` | — | `OK` / `NOK` |
 | `ES_ERROR` | Export | `ZFI_DE_XX_WS_ERROR` (`CODE`, `DESCRIPTION`) | — | Error de negocio o técnico |
 | `E_OPBEL` | Export | `OPBEL_KK` | — | Documento de clarificación generado (`DFKKZP-KLAEB`) |
@@ -105,21 +105,29 @@ Antes de dar esto por cerrado, hace falta una prueba real y persistida:
 3. Comprobar que `E_RESULT = 'OK'` y que `DFKKZP-XKLAE`/`KLAEB` reflejan
    la clarificación en la tabla real (no solo la variable de salida).
 
-## Instalación en SAP (SE80 / SE37)
+## Instalación en SAP (SE11 / SE80 / SE37)
 
-1. Crear el grupo de función **`ZFI_FG_PAY_CLARIFY`** (SE80 → Grupo de
+1. **Crear en SE11 el tipo de tabla para `I_XBLNR`** (el Function Builder
+   no admite un `TYPES` de programa como tipo de referencia de un
+   parámetro de import/export, tiene que ser un objeto DDIC real):
+   - Estructura **`ZFI_S_XBLNR`**, con un único campo `XBLNR` tipo
+     `XBLNR`.
+   - Tipo de tabla **`ZFI_T_XBLNR`**, `Category` = tabla estándar,
+     `Line type` = `ZFI_S_XBLNR`.
+2. Crear el grupo de función **`ZFI_FG_PAY_CLARIFY`** (SE80 → Grupo de
    función → Crear).
-2. Sustituir el contenido del include TOP del grupo
+3. Sustituir el contenido del include TOP del grupo
    (`LZFI_FG_PAY_CLARIFYTOP`) por `src/LZFI_FG_PAY_CLARIFYTOP.abap`.
-3. Crear el módulo de función **`ZFI_FM_PAYMENT_LOT_CLARIFY2`** dentro
+4. Crear el módulo de función **`ZFI_FM_PAYMENT_LOT_CLARIFY2`** dentro
    del grupo:
    - Atributos: marcar **"Módulo de función remoto"** (RFC).
    - Pestaña *Import*: `I_KEYZ1`, `I_POSZA`, `I_XBLNR` (obligatorios),
-     con los tipos indicados en la tabla de interfaz.
+     con los tipos indicados en la tabla de interfaz (`I_XBLNR` con tipo
+     de referencia `ZFI_T_XBLNR`).
    - Pestaña *Export*: `E_RESULT`, `ES_ERROR` (tipo DDIC
      `ZFI_DE_XX_WS_ERROR`), `E_OPBEL`.
    - Pestaña *Código fuente*: pegar `src/ZFI_FM_PAYMENT_LOT_CLARIFY2.abap`.
-4. Activar y probar (ver "Siguiente paso" arriba).
+5. Activar y probar (ver "Siguiente paso" arriba).
 
 ## Pendiente / a definir con el cliente
 
