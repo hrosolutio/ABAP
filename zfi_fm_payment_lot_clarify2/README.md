@@ -7,7 +7,7 @@ Replica el comportamiento de la transacción estándar **FPCPL** para
 clarificar, desde un sistema externo (vía MuleSoft), una posición de lote
 de pago pendiente de clarificar, aplicando la(s) factura(s) recibida(s).
 
-## Estado: primera versión completa, pendiente de prueba end-to-end real
+## Estado: mecanismo probado con éxito real; llamada directa desde el RFC aún sin probar
 
 El propio DF advierte que el módulo de función estándar
 `FKK_PAYMENT_BATCH_CLARIFY_ITEM` **no se puede utilizar directamente**.
@@ -34,16 +34,25 @@ ISU_CLEARING_PROPOSAL_GEN_0110  → genera propuesta y contabiliza
   la posición del lote, observado en una llamada real a
   `FKK_OPEN_PAYMENT_COMPLETE`.
 - El documento de clarificación generado queda en `DFKKZP-KLAEB`.
+- **Caso de éxito real completo**: se forzó por depuración (`T_SELTAB`
+  con `SELFN='XBLNR'`) una clarificación a través del propio flujo de
+  FPCPL, con una factura de 6 líneas (50,00 € en total) donde solo una
+  línea era de 0,24 €, igual que la posición de prueba. Pasando **todas**
+  las líneas encontradas (no solo la de 0,24 €) al motor de
+  compensación, este aplicó correctamente solo la parte que
+  correspondía, dejando `DFKKZP-XKLAE` vacío y `DFKKZP-KLAEB` con el
+  documento generado. Por eso el código NO filtra a una única línea:
+  pasa todas las líneas de la factura candidata y deja que el motor
+  estándar decida.
 
 **Composición razonada, NO probada de principio a fin todavía:**
-- Llamar directamente a `ISU_CLEARING_PROPOSAL_GEN_0110` desde este RFC,
+- Llamar directamente a `ISU_CLEARING_PROPOSAL_GEN_0110` desde **este
+  RFC** (con `I_FKKKO`/`T_FKKOPK` construidos por nuestro propio código),
   sin pasar por la capa de pantalla/procesamiento en bloque de
-  `FKK_PAYMENT_BATCH_POST` (que procesa hasta 20-100 posiciones de lote
-  a la vez con bloqueos y reintentos — innecesario para clarificar una
-  única posición). El intento de prueba que se hizo modificó `T_SELTAB`
-  solo en memoria durante la depuración, sin persistir el cambio en
-  `DFKKZP`, así que no se llegó a completar una clarificación real de
-  principio a fin con este camino directo.
+  `FKK_PAYMENT_BATCH_POST`. El caso de éxito de arriba se consiguió a
+  través del flujo propio de FPCPL (que construye `I_FKKKO`/`T_FKKOPK`
+  internamente), no todavía a través de este módulo de función activado
+  en SE37.
 - El valor exacto de `T_FKKOPK-HKONT` (¿siempre `DFKKZP-KLAEH` si ya
   viene informado, o la cuenta provisional constante?).
 
@@ -76,17 +85,18 @@ docs/
 3. Para cada factura de `I_XBLNR`, busca las partidas abiertas
    coincidentes con `FKK_OPEN_ITEM_SELECT` (`SELFN='XBLNR'`) — búsqueda
    pura, sin contabilizar. Una factura puede devolver varias líneas (se
-   comprobó con un caso real de 6 líneas); se queda con la **línea
-   individual cuyo importe coincida exactamente** con el importe de la
-   posición (según el requisito explícito del DF de que el importe debe
-   coincidir para garantizar clarificación completa) y descarta el resto
-   de líneas de esa factura antes de contabilizar. Si hay **más de una
-   línea con el mismo importe**, el caso se trata como ambiguo y no se
-   elige ninguna automáticamente (`ES_ERROR-CODE = 'AMBIGUOUS_MATCH'`).
+   comprobó con un caso real de 6 líneas). Se usa la presencia de **al
+   menos una línea con el importe exacto** de la posición como criterio
+   para elegir qué factura de `I_XBLNR` es la candidata correcta, pero
+   al contabilizar se pasan **todas** las líneas encontradas de esa
+   factura (no solo la que coincide) — probado con datos reales que el
+   motor de compensación estándar aplica correctamente solo la parte
+   que corresponde, sin que haga falta filtrar una única línea a mano
+   (ver "Estado" más arriba).
 
-   ⚠️ **Sin confirmar con negocio**: que "probar una a una hasta que el
-   importe cuadre" sea el comportamiento esperado para el caso de varias
-   facturas en `I_XBLNR` (ver DF_resumen.md).
+   ⚠️ **Sin confirmar con negocio**: que "probar una a una hasta que
+   alguna línea cuadre en importe" sea el comportamiento esperado para
+   el caso de varias facturas en `I_XBLNR` (ver DF_resumen.md).
 4. Construye `I_FKKKO` (cabecera) y `T_FKKOPK` (partida provisional) a
    partir de los datos de la posición del lote.
 5. Llama a `ISU_CLEARING_PROPOSAL_GEN_0110` (`I_CLARIFICATION = 'X'`) con

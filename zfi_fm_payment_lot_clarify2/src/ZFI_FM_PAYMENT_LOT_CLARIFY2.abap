@@ -13,7 +13,10 @@ FUNCTION zfi_fm_payment_lot_clarify2.
 * Clarificación de transferencias pendientes de contabilizar en SAP
 * (equivalente a FPCPL)
 *
-* ESTADO: PRIMERA VERSIÓN, PENDIENTE DE PRUEBA END-TO-END REAL.
+* ESTADO: SEGUNDA VERSIÓN. Mecanismo subyacente probado con éxito real
+* (ver más abajo), pero la llamada directa desde ESTE RFC (bypaseando
+* la orquestación propia de FPCPL) todavía no se ha probado de
+* principio a fin con datos persistidos.
 *
 * El DF advierte que FKK_PAYMENT_BATCH_CLARIFY_ITEM "no se puede
 * utilizar directamente" (es un módulo de diálogo: abre una pantalla
@@ -34,12 +37,21 @@ FUNCTION zfi_fm_payment_lot_clarify2.
 *                                   FKK_PAYMENT_ALLOC_AND_CLEARING ->
 *                                   PAYMENT_ON_ACCOUNT ->
 *                                   FKK_OPEN_PAYMENT_COMPLETE).
-*                                   Firma e interfaz verificadas por
-*                                   depuración; la llamada directa
-*                                   desde este RFC (sin pasar por la
-*                                   capa de pantalla/lote en bloque)
-*                                   es composición razonada, NO
-*                                   probada de principio a fin todavía.
+*
+* PROBADO CON ÉXITO REAL (a través del flujo propio de FPCPL, con
+* T_SELTAB forzado por depuración a SELFN='XBLNR'): una factura de 6
+* líneas (importe total 50,00 €), con solo una línea de 0,24 €, se
+* pasó completa (las 6 líneas) al motor de compensación, y este aplicó
+* correctamente solo la parte que correspondía a la posición (0,24 €),
+* dejando DFKKZP-XKLAE vacío y DFKKZP-KLAEB con el documento generado.
+* Por eso este código pasa TODAS las líneas encontradas de la factura
+* candidata al motor, sin filtrar a una sola línea nosotros mismos.
+*
+* Lo que SIGUE sin probarse de principio a fin es la llamada directa a
+* ISU_CLEARING_PROPOSAL_GEN_0110 desde este RFC con I_FKKKO/T_FKKOPK
+* construidos por nuestro propio código (en vez de los que construye
+* internamente la orquestación real de FPCPL) — composición razonada,
+* pendiente de una prueba real con el módulo activado en SE37.
 *
 * El mapeo de tipo de selección 'X' -> campo FKKOP-XBLNR está
 * verificado contra la tabla de customizing TFK004 (Área R).
@@ -50,12 +62,13 @@ FUNCTION zfi_fm_payment_lot_clarify2.
 * clarificado).
 *
 * TODO pendiente de confirmar con negocio: cuando I_XBLNR trae varias
-* facturas, aquí se prueban una a una y se usa la primera cuyo importe
-* total coincida exactamente con el importe de la posición (según el
-* propio requisito del DF: "El importe de dicha factura debe coincidir
-* con el importe de la posición... para garantizar la clarificación
-* completa"). No hay confirmación de negocio de que este sea el
-* comportamiento esperado para el caso de varias facturas.
+* facturas, aquí se prueban una a una y se usa la primera que tenga
+* alguna línea cuyo importe coincida exactamente con el importe de la
+* posición (según el propio requisito del DF: "El importe de dicha
+* factura debe coincidir con el importe de la posición... para
+* garantizar la clarificación completa"). No hay confirmación de
+* negocio de que este sea el comportamiento esperado para el caso de
+* varias facturas.
 *----------------------------------------------------------------------*
 
   DATA: ls_dfkkzp   TYPE dfkkzp,
@@ -63,7 +76,6 @@ FUNCTION zfi_fm_payment_lot_clarify2.
         lt_seltab    TYPE STANDARD TABLE OF iseltab,
         lt_fkkcl_cand TYPE STANDARD TABLE OF fkkcl,
         lt_fkkcl     TYPE STANDARD TABLE OF fkkcl,
-        ls_fkkcl     TYPE fkkcl,
         lv_found     TYPE abap_bool,
         ls_fkkko     TYPE fkkko,
         ls_fkkopk    TYPE fkkopk,
@@ -128,21 +140,21 @@ FUNCTION zfi_fm_payment_lot_clarify2.
 *----------------------------------------------------------------------*
 * 3. Buscar, para cada factura de I_XBLNR, las partidas abiertas que
 *    coinciden (FKK_OPEN_ITEM_SELECT con SELFN='XBLNR'). Una factura
-*    puede tener varias partidas (líneas); se busca la línea individual
-*    cuyo importe coincida exactamente con el importe de la posición
-*    (verificado con datos reales: una factura de 6 líneas donde solo
-*    una encajaba con el importe buscado). Si hay más de una línea con
-*    el mismo importe, el caso se considera ambiguo y no se elige
-*    ninguna automáticamente (mejor fallar explícito que aplicar la
-*    partida equivocada). Búsqueda pura, sin efectos secundarios de
-*    contabilización.
+*    puede devolver varias líneas (verificado con un caso real de 6
+*    líneas, solo una de importe 0,24). Se usa la presencia de al
+*    menos una línea con el importe exacto de la posición como criterio
+*    para elegir QUÉ factura de I_XBLNR es la candidata correcta
+*    (búsqueda pura, sin contabilizar), pero al contabilizar se pasan
+*    TODAS las líneas encontradas de esa factura, no solo la que
+*    coincide: probado con datos reales que el propio motor de
+*    compensación estándar (FKK_PAYMENT_ALLOC_AND_CLEARING /
+*    FKK_OPEN_PAYMENT_COMPLETE) aplica correctamente solo la parte que
+*    corresponde al importe de la posición, sin que haga falta
+*    filtrar nosotros una única línea a mano.
 *----------------------------------------------------------------------*
-  DATA: lt_fkkcl_match TYPE STANDARD TABLE OF fkkcl,
-        lv_ambiguous   TYPE abap_bool.
-
   LOOP AT i_xblnr INTO DATA(ls_xblnr).
 
-    CLEAR: lt_seltab, ls_seltab, lt_fkkcl_cand, lt_fkkcl_match.
+    CLEAR: lt_seltab, ls_seltab, lt_fkkcl_cand.
     ls_seltab-selnr = 1.
     ls_seltab-selfn = gc_selfn_xblnr.
     ls_seltab-selcu = ls_xblnr-xblnr.
@@ -166,35 +178,20 @@ FUNCTION zfi_fm_payment_lot_clarify2.
     CHECK sy-subrc = 0.
     CHECK lt_fkkcl_cand IS NOT INITIAL.
 
-    LOOP AT lt_fkkcl_cand INTO ls_fkkcl WHERE betrw = ls_dfkkzp-betrz.
-      APPEND ls_fkkcl TO lt_fkkcl_match.
-    ENDLOOP.
-
-    CASE lines( lt_fkkcl_match ).
-      WHEN 1.
-        lt_fkkcl = lt_fkkcl_match.
-        lv_found = abap_true.
-        EXIT.
-      WHEN 0.
-        " esta factura no tiene ninguna línea con el importe exacto; se
-        " prueba con la siguiente factura de I_XBLNR
-      WHEN OTHERS.
-        " más de una línea con el mismo importe: ambiguo, no se elige
-        " ninguna automáticamente
-        lv_ambiguous = abap_true.
-    ENDCASE.
+    READ TABLE lt_fkkcl_cand TRANSPORTING NO FIELDS
+      WITH KEY betrw = ls_dfkkzp-betrz.
+    IF sy-subrc = 0.
+      lt_fkkcl = lt_fkkcl_cand.
+      lv_found = abap_true.
+      EXIT.
+    ENDIF.
 
   ENDLOOP.
 
   IF lv_found = abap_false.
-    e_result = 'NOK'.
-    IF lv_ambiguous = abap_true.
-      es_error-code        = 'AMBIGUOUS_MATCH'.
-      es_error-description = 'Hay varias partidas con el mismo importe que la posición; no se puede determinar cuál aplicar'.
-    ELSE.
-      es_error-code        = 'NO_MATCHING_INVOICE'.
-      es_error-description = 'Ninguna de las facturas indicadas coincide en importe con la posición'.
-    ENDIF.
+    e_result             = 'NOK'.
+    es_error-code        = 'NO_MATCHING_INVOICE'.
+    es_error-description = 'Ninguna de las facturas indicadas coincide en importe con la posición'.
     RETURN.
   ENDIF.
 
