@@ -75,10 +75,12 @@ docs/
    (`DFKKZP-XKLAE = 'X'`).
 3. Para cada factura de `I_XBLNR`, busca las partidas abiertas
    coincidentes con `FKK_OPEN_ITEM_SELECT` (`SELFN='XBLNR'`) — búsqueda
-   pura, sin contabilizar. Se queda con la **primera factura cuyo importe
-   total de partidas encontradas coincida exactamente** con el importe de
-   la posición (según el requisito explícito del DF de que el importe
-   debe coincidir para garantizar clarificación completa).
+   pura, sin contabilizar. Una factura puede devolver varias líneas (se
+   comprobó con un caso real de 6 líneas); se queda con la **primera
+   línea individual cuyo importe coincida exactamente** con el importe
+   de la posición (según el requisito explícito del DF de que el importe
+   debe coincidir para garantizar clarificación completa) y descarta el
+   resto de líneas de esa factura antes de contabilizar.
 
    ⚠️ **Sin confirmar con negocio**: que "probar una a una hasta que el
    importe cuadre" sea el comportamiento esperado para el caso de varias

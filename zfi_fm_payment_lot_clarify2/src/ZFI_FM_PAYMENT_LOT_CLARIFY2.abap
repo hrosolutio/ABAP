@@ -64,7 +64,6 @@ FUNCTION zfi_fm_payment_lot_clarify2.
         lt_fkkcl_cand TYPE STANDARD TABLE OF fkkcl,
         lt_fkkcl     TYPE STANDARD TABLE OF fkkcl,
         ls_fkkcl     TYPE fkkcl,
-        lv_sum       TYPE fkkop-betrw,
         lv_found     TYPE abap_bool,
         ls_fkkko     TYPE fkkko,
         ls_fkkopk    TYPE fkkopk,
@@ -128,10 +127,12 @@ FUNCTION zfi_fm_payment_lot_clarify2.
 
 *----------------------------------------------------------------------*
 * 3. Buscar, para cada factura de I_XBLNR, las partidas abiertas que
-*    coinciden (FKK_OPEN_ITEM_SELECT con SELFN='XBLNR'). Solo se
-*    considera válida la factura cuyo importe total de partidas
-*    encontradas coincida exactamente con el importe de la posición.
-*    Búsqueda pura (sin efectos secundarios de contabilización).
+*    coinciden (FKK_OPEN_ITEM_SELECT con SELFN='XBLNR'). Una factura
+*    puede tener varias partidas (líneas); se busca la línea individual
+*    cuyo importe coincida exactamente con el importe de la posición
+*    (verificado con datos reales: una factura de 6 líneas donde solo
+*    una encajaba con el importe buscado). Búsqueda pura, sin efectos
+*    secundarios de contabilización.
 *----------------------------------------------------------------------*
   LOOP AT i_xblnr INTO DATA(ls_xblnr).
 
@@ -159,13 +160,10 @@ FUNCTION zfi_fm_payment_lot_clarify2.
     CHECK sy-subrc = 0.
     CHECK lt_fkkcl_cand IS NOT INITIAL.
 
-    CLEAR lv_sum.
-    LOOP AT lt_fkkcl_cand INTO ls_fkkcl.
-      lv_sum = lv_sum + ls_fkkcl-betrw.
-    ENDLOOP.
-
-    IF lv_sum = ls_dfkkzp-betrz.
-      lt_fkkcl = lt_fkkcl_cand.
+    READ TABLE lt_fkkcl_cand INTO ls_fkkcl WITH KEY betrw = ls_dfkkzp-betrz.
+    IF sy-subrc = 0.
+      CLEAR lt_fkkcl.
+      APPEND ls_fkkcl TO lt_fkkcl.
       lv_found = abap_true.
       EXIT.
     ENDIF.
