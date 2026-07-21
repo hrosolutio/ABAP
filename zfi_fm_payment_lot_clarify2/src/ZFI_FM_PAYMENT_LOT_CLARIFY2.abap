@@ -131,12 +131,18 @@ FUNCTION zfi_fm_payment_lot_clarify2.
 *    puede tener varias partidas (líneas); se busca la línea individual
 *    cuyo importe coincida exactamente con el importe de la posición
 *    (verificado con datos reales: una factura de 6 líneas donde solo
-*    una encajaba con el importe buscado). Búsqueda pura, sin efectos
-*    secundarios de contabilización.
+*    una encajaba con el importe buscado). Si hay más de una línea con
+*    el mismo importe, el caso se considera ambiguo y no se elige
+*    ninguna automáticamente (mejor fallar explícito que aplicar la
+*    partida equivocada). Búsqueda pura, sin efectos secundarios de
+*    contabilización.
 *----------------------------------------------------------------------*
+  DATA: lt_fkkcl_match TYPE STANDARD TABLE OF fkkcl,
+        lv_ambiguous   TYPE abap_bool.
+
   LOOP AT i_xblnr INTO DATA(ls_xblnr).
 
-    CLEAR: lt_seltab, ls_seltab, lt_fkkcl_cand.
+    CLEAR: lt_seltab, ls_seltab, lt_fkkcl_cand, lt_fkkcl_match.
     ls_seltab-selnr = 1.
     ls_seltab-selfn = gc_selfn_xblnr.
     ls_seltab-selcu = ls_xblnr-xblnr.
@@ -160,20 +166,35 @@ FUNCTION zfi_fm_payment_lot_clarify2.
     CHECK sy-subrc = 0.
     CHECK lt_fkkcl_cand IS NOT INITIAL.
 
-    READ TABLE lt_fkkcl_cand INTO ls_fkkcl WITH KEY betrw = ls_dfkkzp-betrz.
-    IF sy-subrc = 0.
-      CLEAR lt_fkkcl.
-      APPEND ls_fkkcl TO lt_fkkcl.
-      lv_found = abap_true.
-      EXIT.
-    ENDIF.
+    LOOP AT lt_fkkcl_cand INTO ls_fkkcl WHERE betrw = ls_dfkkzp-betrz.
+      APPEND ls_fkkcl TO lt_fkkcl_match.
+    ENDLOOP.
+
+    CASE lines( lt_fkkcl_match ).
+      WHEN 1.
+        lt_fkkcl = lt_fkkcl_match.
+        lv_found = abap_true.
+        EXIT.
+      WHEN 0.
+        " esta factura no tiene ninguna línea con el importe exacto; se
+        " prueba con la siguiente factura de I_XBLNR
+      WHEN OTHERS.
+        " más de una línea con el mismo importe: ambiguo, no se elige
+        " ninguna automáticamente
+        lv_ambiguous = abap_true.
+    ENDCASE.
 
   ENDLOOP.
 
   IF lv_found = abap_false.
-    e_result             = 'NOK'.
-    es_error-code        = 'NO_MATCHING_INVOICE'.
-    es_error-description = 'Ninguna de las facturas indicadas coincide en importe con la posición'.
+    e_result = 'NOK'.
+    IF lv_ambiguous = abap_true.
+      es_error-code        = 'AMBIGUOUS_MATCH'.
+      es_error-description = 'Hay varias partidas con el mismo importe que la posición; no se puede determinar cuál aplicar'.
+    ELSE.
+      es_error-code        = 'NO_MATCHING_INVOICE'.
+      es_error-description = 'Ninguna de las facturas indicadas coincide en importe con la posición'.
+    ENDIF.
     RETURN.
   ENDIF.
 
