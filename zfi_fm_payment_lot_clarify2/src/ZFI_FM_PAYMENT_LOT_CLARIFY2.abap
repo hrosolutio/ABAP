@@ -339,6 +339,14 @@ FUNCTION zfi_fm_payment_lot_clarify2.
 *    BUCHG_ZAHLUNGEN_BEARBEITEN a mano tras contabilizar (el motor
 *    estándar no lo hace por sí solo): marcar como ya no pendiente y
 *    anotar el documento de clarificación generado.
+*
+*    El flujo real no hace un UPDATE directo: acumula cambios en una
+*    tabla de trabajo (BFKKZP) y al final hace
+*    UPDATE V1_DFKKZP FROM TABLE bfkkzp (patrón de tarea de
+*    actualización V1, pensado para bufferizar/bloquear al procesar
+*    muchas posiciones de un lote a la vez). Para una sola posición
+*    por llamada RFC no hace falta esa complejidad; un UPDATE directo
+*    sobre DFKKZP consigue el mismo estado final en la tabla.
 *----------------------------------------------------------------------*
   UPDATE dfkkzp
     SET xklae = space
