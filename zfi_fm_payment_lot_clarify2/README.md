@@ -7,22 +7,23 @@ Replica el comportamiento de la transacción estándar **FPCPL** para
 clarificar, desde un sistema externo (vía MuleSoft), una posición de lote
 de pago pendiente de clarificar, aplicando la(s) factura(s) recibida(s).
 
-## Estado: mecanismo probado con éxito real; llamada directa desde el RFC aún sin probar
+## Estado: cadena completa localizada; llamada directa desde el RFC aún sin probar
 
 El propio DF advierte que el módulo de función estándar
 `FKK_PAYMENT_BATCH_CLARIFY_ITEM` **no se puede utilizar directamente**.
 Por depuración de la transacción FPCPL se confirmó el motivo: es un
 módulo de diálogo (abre una pantalla interactiva, `CALL SCREEN 500`, y
 espera acción del usuario) — no apto para RFC. Depurando más allá de esa
-pantalla se localizó la cadena real de módulos estándar subyacente:
+pantalla, hasta el `FORM BUCHG_ZAHLUNG_BUCHEN` (`SAPLFKZ0`), se localizó
+la cadena real completa:
 
 ```
 FKK_OPEN_ITEM_SELECT            → busca la factura (verificado con datos reales)
-ISU_CLEARING_PROPOSAL_GEN_0110  → genera propuesta y contabiliza
+ISU_CLEARING_PROPOSAL_GEN_0110  → SOLO calcula la propuesta (no contabiliza)
   └ FKK_CLEARING_PROPOSAL_GEN_0110
       └ FKK_PAYMENT_ALLOC_AND_CLEARING
-          └ PAYMENT_ON_ACCOUNT (FORM)
-              └ FKK_OPEN_PAYMENT_COMPLETE
+          └ PAYMENT_ON_ACCOUNT (FORM) → FKK_OPEN_PAYMENT_COMPLETE
+FKK_CREATE_DOC_MASS_AND_CLEAR   → contabiliza de verdad la propuesta ya calculada, devuelve E_OPBEL
 ```
 
 **Verificado por depuración, con datos reales:**
@@ -33,7 +34,19 @@ ISU_CLEARING_PROPOSAL_GEN_0110  → genera propuesta y contabiliza
 - El patrón de relleno de `I_FKKKO`/`T_FKKOPK` a partir de los datos de
   la posición del lote, observado en una llamada real a
   `FKK_OPEN_PAYMENT_COMPLETE`.
-- El documento de clarificación generado queda en `DFKKZP-KLAEB`.
+- **`ISU_CLEARING_PROPOSAL_GEN_0110` no contabiliza**: tras llamarla,
+  `T_FKKOP_NEW` seguía vacía y no se generaba ningún documento, aunque
+  `E_DIFFB` diera 0 y `T_FKKCL` quedara con `AUGBW`/`XAKTP` marcados
+  (la propuesta calculada). Es literalmente lo que dice su nombre:
+  "genera la propuesta", no contabiliza.
+- **La contabilización real la hace `FKK_CREATE_DOC_MASS_AND_CLEAR`**
+  (localizada justo después, en `BUCHG_ZAHLUNG_BUCHEN`), tomando la
+  propuesta ya calculada (`T_FKKCL`, `E_DIFFB`, `E_TOLGR_CLEAR` de la
+  llamada anterior) y devolviendo `E_OPBEL`, el documento real.
+- **El propio `DFKKZP` no se actualiza solo**: ninguna de las funciones
+  del motor toca `DFKKZP-XKLAE`/`KLAEB`. Es el `FORM`
+  `BUCHG_ZAHLUNGEN_BEARBEITEN` quien lo hace explícitamente (a mano)
+  después de contabilizar.
 - **Caso de éxito real completo**: se forzó por depuración (`T_SELTAB`
   con `SELFN='XBLNR'`) una clarificación a través del propio flujo de
   FPCPL, con una factura de 6 líneas (50,00 € en total) donde solo una
@@ -46,15 +59,23 @@ ISU_CLEARING_PROPOSAL_GEN_0110  → genera propuesta y contabiliza
   estándar decida.
 
 **Composición razonada, NO probada de principio a fin todavía:**
-- Llamar directamente a `ISU_CLEARING_PROPOSAL_GEN_0110` desde **este
-  RFC** (con `I_FKKKO`/`T_FKKOPK` construidos por nuestro propio código),
-  sin pasar por la capa de pantalla/procesamiento en bloque de
+- Llamar directamente a esta cadena completa desde **este RFC** (con
+  `I_FKKKO`/`T_FKKOPK` construidos por nuestro propio código), sin
+  pasar por la capa de pantalla/procesamiento en bloque de
   `FKK_PAYMENT_BATCH_POST`. El caso de éxito de arriba se consiguió a
   través del flujo propio de FPCPL (que construye `I_FKKKO`/`T_FKKOPK`
-  internamente), no todavía a través de este módulo de función activado
-  en SE37.
+  internamente y calcula `I_AUGVD` con `PERFORM augvd_determine`), no
+  todavía a través de este módulo de función activado en SE37.
 - El valor exacto de `T_FKKOPK-HKONT` (¿siempre `DFKKZP-KLAEH` si ya
   viene informado, o la cuenta provisional constante?).
+- El valor de `I_AUGVD` para `FKK_CREATE_DOC_MASS_AND_CLEAR` (aquí
+  aproximado con la fecha valor de la posición; en el flujo real se
+  calcula con una rutina que no se ha inspeccionado en detalle).
+- La actualización de `DFKKZP` (paso 7 del código) replica el caso
+  simple de una primera clarificación completa; los casos de
+  clarificaciones parciales/múltiples sobre la misma posición (que en
+  el flujo real llevan lógica adicional con la tabla `DFKKZPT`) no
+  están contemplados.
 
 ## Contenido del repositorio
 
@@ -75,7 +96,7 @@ docs/
 | `I_XBLNR` | Import | `ZFI_T_XBLNR` (tipo de tabla DDIC, ver instalación) | Sí | Factura(s) a aplicar. Decidido con el cliente: tabla de longitud variable (el DF tenía una indicación de factura única y una nota posterior pidiendo varias, mínimo 5 propuesto) |
 | `E_RESULT` | Export | `CHAR3` | — | `OK` / `NOK` |
 | `ES_ERROR` | Export | `ZFI_DE_XX_WS_ERROR` (`CODE`, `DESCRIPTION`) | — | Error de negocio o técnico |
-| `E_OPBEL` | Export | `OPBEL_KK` | — | Documento de clarificación generado (`DFKKZP-KLAEB`) |
+| `E_OPBEL` | Export | `OPBEL_KK` | — | Documento de clarificación generado |
 
 ## Lógica implementada
 
@@ -99,10 +120,14 @@ docs/
    el caso de varias facturas en `I_XBLNR` (ver DF_resumen.md).
 4. Construye `I_FKKKO` (cabecera) y `T_FKKOPK` (partida provisional) a
    partir de los datos de la posición del lote.
-5. Llama a `ISU_CLEARING_PROPOSAL_GEN_0110` (`I_CLARIFICATION = 'X'`) con
-   la partida encontrada, para generar la propuesta y contabilizar.
-6. Hace `COMMIT WORK AND WAIT` y relee `DFKKZP-KLAEB`/`XKLAE` para
-   confirmar el resultado real y devolver `E_OPBEL`.
+5. Llama a `ISU_CLEARING_PROPOSAL_GEN_0110` (`I_CLARIFICATION = 'X'`)
+   para generar la propuesta de compensación (no contabiliza todavía).
+6. Llama a `FKK_CREATE_DOC_MASS_AND_CLEAR` con la propuesta calculada
+   en el paso anterior, para contabilizar de verdad y obtener el
+   documento real (`E_OPBEL`).
+7. Actualiza `DFKKZP` (`XKLAE`/`KLAEB`) a mano, replicando lo que hace
+   `BUCHG_ZAHLUNGEN_BEARBEITEN` en el flujo real (el motor no lo hace
+   por sí solo), y hace `COMMIT WORK AND WAIT`.
 
 El usuario que queda registrado en las clarificaciones es el usuario
 técnico con el que MuleSoft se conecta a SAP, en el campo `DFKKZP-AENAM`
@@ -110,12 +135,14 @@ técnico con el que MuleSoft se conecta a SAP, en el campo `DFKKZP-AENAM`
 
 ## Siguiente paso: prueba end-to-end real
 
-Antes de dar esto por cerrado, hace falta una prueba real y persistida:
+Antes de dar esto por cerrado, hace falta una prueba real y persistida
+**a través de este módulo de función**, no simulada dentro de FPCPL:
 
 1. Activar la función en SE80/SE37 siguiendo la instalación de más abajo.
 2. Ejecutarla (F8 en SE37) contra una posición de lote real pendiente de
    clarificar, pasando una factura real cuyo importe coincida
-   exactamente con el importe de esa posición.
+   exactamente con el importe de esa posición (o de alguna de sus
+   líneas).
 3. Comprobar que `E_RESULT = 'OK'` y que `DFKKZP-XKLAE`/`KLAEB` reflejan
    la clarificación en la tabla real (no solo la variable de salida).
 
@@ -147,10 +174,13 @@ Antes de dar esto por cerrado, hace falta una prueba real y persistida:
 
 - Confirmar con negocio el comportamiento esperado cuando `I_XBLNR` trae
   varias facturas (ver punto 3 de "Lógica implementada").
-- Verificar de principio a fin, con una prueba real persistida, la
-  llamada directa a `ISU_CLEARING_PROPOSAL_GEN_0110` (ver "Composición
-  razonada, NO probada" más arriba).
+- Verificar de principio a fin, con una prueba real persistida y a
+  través de este módulo de función, toda la cadena de llamadas.
 - Confirmar el origen correcto de `T_FKKOPK-HKONT`.
+- Confirmar el valor correcto de `I_AUGVD` para
+  `FKK_CREATE_DOC_MASS_AND_CLEAR`.
+- Contemplar el caso de clarificaciones parciales/múltiples sobre la
+  misma posición (tabla `DFKKZPT`), no cubierto en esta versión.
 - Autorización RFC del usuario `COMMUSER` (o el que corresponda) sobre el
   grupo de función.
 - Alta del objeto en el sistema de transporte correspondiente al proyecto.

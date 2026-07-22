@@ -13,30 +13,42 @@ FUNCTION zfi_fm_payment_lot_clarify2.
 * Clarificación de transferencias pendientes de contabilizar en SAP
 * (equivalente a FPCPL)
 *
-* ESTADO: SEGUNDA VERSIÓN. Mecanismo subyacente probado con éxito real
-* (ver más abajo), pero la llamada directa desde ESTE RFC (bypaseando
-* la orquestación propia de FPCPL) todavía no se ha probado de
-* principio a fin con datos persistidos.
+* ESTADO: TERCERA VERSIÓN. Cadena completa localizada por depuración,
+* incluyendo el paso de contabilización real que faltaba. Pendiente de
+* probar de principio a fin activando este módulo en SE37 (las pruebas
+* hasta ahora se hicieron forzando variables por depuración dentro del
+* flujo real de FPCPL, no todavía a través de este RFC).
 *
 * El DF advierte que FKK_PAYMENT_BATCH_CLARIFY_ITEM "no se puede
 * utilizar directamente" (es un módulo de diálogo: abre una pantalla
 * interactiva y espera acción del usuario, no apto para RFC). Por
-* depuración de FPCPL se ha localizado la cadena real de módulos
-* estándar subyacente, evitando la capa de pantalla:
+* depuración de FPCPL (hasta BUCHG_ZAHLUNG_BUCHEN, SAPLFKZ0) se ha
+* localizado la cadena real completa, evitando la capa de pantalla:
 *
-*   FKK_OPEN_ITEM_SELECT        -> busca la partida abierta (factura)
-*                                   a partir de T_SELTAB. VERIFICADO
-*                                   por depuración con SELFN='XBLNR' y
-*                                   una factura real: encuentra
-*                                   correctamente las líneas de FKKOP.
-*   ISU_CLEARING_PROPOSAL_GEN_0110 -> genera la propuesta de
-*                                   compensación y contabiliza
-*                                   (variante ISU de
-*                                   FKK_CLEARING_PROPOSAL_GEN_0110,
-*                                   que a su vez llama a
-*                                   FKK_PAYMENT_ALLOC_AND_CLEARING ->
-*                                   PAYMENT_ON_ACCOUNT ->
-*                                   FKK_OPEN_PAYMENT_COMPLETE).
+*   FKK_OPEN_ITEM_SELECT             -> busca la partida abierta
+*                                        (factura) a partir de
+*                                        T_SELTAB. VERIFICADO por
+*                                        depuración con SELFN='XBLNR'
+*                                        y una factura real.
+*   ISU_CLEARING_PROPOSAL_GEN_0110   -> SOLO calcula la propuesta de
+*                                        compensación (marca
+*                                        T_FKKCL-AUGBW/XAKTP), NO
+*                                        contabiliza (verificado: tras
+*                                        llamarla, T_FKKOP_NEW seguía
+*                                        vacía y no se generaba
+*                                        documento). Es la variante
+*                                        ISU de
+*                                        FKK_CLEARING_PROPOSAL_GEN_0110
+*                                        -> FKK_PAYMENT_ALLOC_AND_CLEARING
+*                                        -> PAYMENT_ON_ACCOUNT ->
+*                                        FKK_OPEN_PAYMENT_COMPLETE.
+*   FKK_CREATE_DOC_MASS_AND_CLEAR    -> ESTA es quien contabiliza de
+*                                        verdad, usando la propuesta ya
+*                                        calculada. Localizada
+*                                        depurando BUCHG_ZAHLUNG_BUCHEN
+*                                        justo después de la llamada
+*                                        anterior. Devuelve E_OPBEL, el
+*                                        documento real.
 *
 * PROBADO CON ÉXITO REAL (a través del flujo propio de FPCPL, con
 * T_SELTAB forzado por depuración a SELFN='XBLNR'): una factura de 6
@@ -47,19 +59,22 @@ FUNCTION zfi_fm_payment_lot_clarify2.
 * Por eso este código pasa TODAS las líneas encontradas de la factura
 * candidata al motor, sin filtrar a una sola línea nosotros mismos.
 *
-* Lo que SIGUE sin probarse de principio a fin es la llamada directa a
-* ISU_CLEARING_PROPOSAL_GEN_0110 desde este RFC con I_FKKKO/T_FKKOPK
-* construidos por nuestro propio código (en vez de los que construye
-* internamente la orquestación real de FPCPL) — composición razonada,
-* pendiente de una prueba real con el módulo activado en SE37.
+* NO verificado todavía: la llamada directa a esta cadena desde ESTE
+* RFC con I_FKKKO/T_FKKOPK construidos por nuestro propio código (en
+* vez de los que construye BUCHG_ZAHLUNG_BUCHEN internamente), y el
+* valor de I_AUGVD (aproximado aquí con la fecha valor de la posición,
+* sin verificar contra PERFORM augvd_determine del flujo real).
+*
+* También localizado por depuración: el propio FORM
+* BUCHG_ZAHLUNGEN_BEARBEITEN actualiza DFKKZP (XKLAE/KLAEB) a mano
+* tras contabilizar — ninguna función del motor lo hace por sí sola.
+* Este código replica esa actualización (paso 7) para el caso simple
+* de una primera clarificación completa; los casos de clarificaciones
+* parciales/múltiples sobre la misma posición (que en BUCHG_ZAHLUNG_
+* BUCHEN llevan lógica adicional con DFKKZPT) no están contemplados.
 *
 * El mapeo de tipo de selección 'X' -> campo FKKOP-XBLNR está
 * verificado contra la tabla de customizing TFK004 (Área R).
-*
-* El documento de clarificación generado se relee de DFKKZP-KLAEB
-* (verificado por depuración en el desarrollo de anulación con el
-* campo análogo RUEBL, y confirmado aquí contra un caso real ya
-* clarificado).
 *
 * TODO pendiente de confirmar con negocio: cuando I_XBLNR trae varias
 * facturas, aquí se prueban una a una y se usa la primera que tenga
@@ -234,11 +249,25 @@ FUNCTION zfi_fm_payment_lot_clarify2.
   APPEND ls_fkkopk TO lt_fkkopk.
 
 *----------------------------------------------------------------------*
-* 5. Generar la propuesta de compensación y contabilizar, replicando
-*    la cadena real localizada por depuración (variante ISU, ya que el
-*    sistema es SAP ISU). I_CLARIFICATION = 'X' porque este es
-*    precisamente un escenario de clarificación.
+* 5. Generar la propuesta de compensación, replicando la cadena real
+*    localizada por depuración (variante ISU, ya que el sistema es
+*    SAP ISU). I_CLARIFICATION = 'X' porque este es precisamente un
+*    escenario de clarificación.
+*
+*    IMPORTANTE (verificado por depuración de BUCHG_ZAHLUNG_BUCHEN,
+*    SAPLFKZ0): esta función SOLO calcula la propuesta (marca
+*    T_FKKCL-AUGBW/XAKTP), NO contabiliza nada. El propio FORM protege
+*    T_FKKOPK de cambios durante esta llamada (guarda y restaura la
+*    tabla alrededor de la llamada); replicamos esa protección aquí.
 *----------------------------------------------------------------------*
+  DATA: lt_fkkopk_save TYPE STANDARD TABLE OF fkkopk,
+        lv_tolgr_clear TYPE tolgr_clear_gen,
+        lv_comrq       TYPE flag,
+        lv_opbel_new   TYPE opbel_kk,
+        lv_budat_new   LIKE ls_dfkkzp-budat.
+
+  lt_fkkopk_save = lt_fkkopk.
+
   CALL FUNCTION 'ISU_CLEARING_PROPOSAL_GEN_0110'
     EXPORTING
       i_fkkko         = ls_fkkko
@@ -246,6 +275,7 @@ FUNCTION zfi_fm_payment_lot_clarify2.
     IMPORTING
       e_klaeh         = lv_klaeh
       e_diffb         = lv_diffb
+      e_tolgr_clear   = lv_tolgr_clear
     TABLES
       t_fkkop         = lt_fkkop
       t_fkkopk        = lt_fkkopk
@@ -266,26 +296,60 @@ FUNCTION zfi_fm_payment_lot_clarify2.
     RETURN.
   ENDIF.
 
+  lt_fkkopk = lt_fkkopk_save.
+
+*----------------------------------------------------------------------*
+* 6. Contabilizar de verdad la propuesta ya calculada. Localizado por
+*    depuración en BUCHG_ZAHLUNG_BUCHEN (SAPLFKZ0), justo después de la
+*    llamada anterior: FKK_CREATE_DOC_MASS_AND_CLEAR es quien crea el
+*    documento real (FKK_CREATE_DOC_AND_CLEAR en el caso poco frecuente
+*    de contabilización individual, no aplicable aquí). I_AUGVD se
+*    aproxima con la fecha valor de la posición; en el flujo real se
+*    calcula con PERFORM augvd_determine, no verificado en detalle.
+*----------------------------------------------------------------------*
+  CALL FUNCTION 'FKK_CREATE_DOC_MASS_AND_CLEAR'
+    EXPORTING
+      i_fkkko       = ls_fkkko
+      i_diffb       = lv_diffb
+      i_tolgr_clear = lv_tolgr_clear
+      i_augvd       = ls_dfkkzp-valut
+    IMPORTING
+      e_comrq       = lv_comrq
+      e_opbel       = lv_opbel_new
+      e_budat       = lv_budat_new
+    TABLES
+      t_fkkop       = lt_fkkop_new
+      t_fkkop_dp    = lt_fkkop_dp_new
+      t_fkkopk      = lt_fkkopk
+      t_fkkcl       = lt_fkkcl
+    EXCEPTIONS
+      OTHERS        = 1.
+
+  IF sy-subrc <> 0 OR lv_opbel_new IS INITIAL.
+    e_result             = 'NOK'.
+    es_error-code        = |{ sy-subrc }|.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+      INTO es_error-description
+      WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    RETURN.
+  ENDIF.
+
+*----------------------------------------------------------------------*
+* 7. Actualizar la posición del lote (DFKKZP), replicando lo que hace
+*    BUCHG_ZAHLUNGEN_BEARBEITEN a mano tras contabilizar (el motor
+*    estándar no lo hace por sí solo): marcar como ya no pendiente y
+*    anotar el documento de clarificación generado.
+*----------------------------------------------------------------------*
+  UPDATE dfkkzp
+    SET xklae = space
+        klaeb = lv_opbel_new
+        klaed = lv_budat_new
+    WHERE keyz1 = i_keyz1
+      AND posza = i_posza.
+
   COMMIT WORK AND WAIT.
 
-*----------------------------------------------------------------------*
-* 6. Verificar el resultado real releyendo DFKKZP (mismo patrón que en
-*    ZFI_FM_PAYLOT_REVERSE con RUEBL): el documento de clarificación
-*    generado queda en DFKKZP-KLAEB.
-*----------------------------------------------------------------------*
-  SELECT SINGLE xklae klaeb
-    FROM dfkkzp
-    INTO (@DATA(lv_xklae_final), @DATA(lv_klaeb_final))
-    WHERE keyz1 = @i_keyz1
-      AND posza = @i_posza.
-
-  IF lv_klaeb_final IS NOT INITIAL AND lv_xklae_final <> 'X'.
-    e_result = 'OK'.
-    e_opbel  = lv_klaeb_final.
-  ELSE.
-    e_result             = 'NOK'.
-    es_error-code        = 'CLARIFY_NOT_CONFIRMED'.
-    es_error-description = 'La contabilización se ejecutó sin excepción pero la posición sigue sin documento de clarificación'.
-  ENDIF.
+  e_result = 'OK'.
+  e_opbel  = lv_opbel_new.
 
 ENDFUNCTION.
