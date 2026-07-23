@@ -312,7 +312,18 @@ FUNCTION zfi_fm_payment_lot_clarify2.
 *    (verificado: error >0340 al omitirlas). Todos sus parámetros son
 *    opcionales, se llaman sin argumentos. STOP se llama tanto si la
 *    contabilización sale bien como si falla.
+*
+*    Motivo de compensación (AUGRD): localizado también en
+*    BUCHG_ZAHLUNG_BUCHEN, justo antes de contabilizar, se informa en
+*    todas las líneas de T_FKKCL (si no, error >0545 "Falta motivo de
+*    compensación"). El flujo real lo toma de UFKKZP-AUGRD, con
+*    DFKKZK-AUGRD (cabecera de lote) como reserva; aquí solo disponemos
+*    de la posición, así que se usa DFKKZP-AUGRD directamente.
 *----------------------------------------------------------------------*
+  LOOP AT lt_fkkcl ASSIGNING FIELD-SYMBOL(<fs_fkkcl>).
+    <fs_fkkcl>-augrd = ls_dfkkzp-augrd.
+  ENDLOOP.
+
   CALL FUNCTION 'FKK_CREATE_DOC_MASS_START'.
 
   CALL FUNCTION 'FKK_CREATE_DOC_MASS_AND_CLEAR'
