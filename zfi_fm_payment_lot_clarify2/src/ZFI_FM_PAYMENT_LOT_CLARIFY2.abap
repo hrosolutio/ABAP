@@ -306,7 +306,15 @@ FUNCTION zfi_fm_payment_lot_clarify2.
 *    de contabilización individual, no aplicable aquí). I_AUGVD se
 *    aproxima con la fecha valor de la posición; en el flujo real se
 *    calcula con PERFORM augvd_determine, no verificado en detalle.
+*
+*    Las contabilizaciones en masa exigen llamar antes a
+*    FKK_CREATE_DOC_MASS_START y después a FKK_CREATE_DOC_MASS_STOP
+*    (verificado: error >0340 al omitirlas). Todos sus parámetros son
+*    opcionales, se llaman sin argumentos. STOP se llama tanto si la
+*    contabilización sale bien como si falla.
 *----------------------------------------------------------------------*
+  CALL FUNCTION 'FKK_CREATE_DOC_MASS_START'.
+
   CALL FUNCTION 'FKK_CREATE_DOC_MASS_AND_CLEAR'
     EXPORTING
       i_fkkko       = ls_fkkko
@@ -331,8 +339,11 @@ FUNCTION zfi_fm_payment_lot_clarify2.
     MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
       INTO es_error-description
       WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    CALL FUNCTION 'FKK_CREATE_DOC_MASS_STOP'.
     RETURN.
   ENDIF.
+
+  CALL FUNCTION 'FKK_CREATE_DOC_MASS_STOP'.
 
 *----------------------------------------------------------------------*
 * 7. Actualizar la posición del lote (DFKKZP), replicando lo que hace

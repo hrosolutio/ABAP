@@ -122,9 +122,12 @@ docs/
    partir de los datos de la posición del lote.
 5. Llama a `ISU_CLEARING_PROPOSAL_GEN_0110` (`I_CLARIFICATION = 'X'`)
    para generar la propuesta de compensación (no contabiliza todavía).
-6. Llama a `FKK_CREATE_DOC_MASS_AND_CLEAR` con la propuesta calculada
-   en el paso anterior, para contabilizar de verdad y obtener el
-   documento real (`E_OPBEL`).
+6. Llama a `FKK_CREATE_DOC_MASS_START` / `FKK_CREATE_DOC_MASS_AND_CLEAR`
+   / `FKK_CREATE_DOC_MASS_STOP` para contabilizar de verdad la propuesta
+   calculada y obtener el documento real (`E_OPBEL`). `START`/`STOP` son
+   de llamada obligatoria para la familia "MASS" de contabilización
+   (verificado: error `>0340` al omitirlas); `STOP` se llama tanto si
+   la contabilización sale bien como si falla.
 7. Actualiza `DFKKZP` (`XKLAE`/`KLAEB`) a mano, replicando lo que hace
    `BUCHG_ZAHLUNGEN_BEARBEITEN` en el flujo real (el motor no lo hace
    por sí solo), y hace `COMMIT WORK AND WAIT`.
