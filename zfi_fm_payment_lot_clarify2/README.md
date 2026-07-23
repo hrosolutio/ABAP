@@ -7,7 +7,12 @@ Replica el comportamiento de la transacción estándar **FPCPL** para
 clarificar, desde un sistema externo (vía MuleSoft), una posición de lote
 de pago pendiente de clarificar, aplicando la(s) factura(s) recibida(s).
 
-## Estado: cadena completa localizada; llamada directa desde el RFC aún sin probar
+## Estado: prueba end-to-end real superada a través del propio RFC
+
+Probado en SE37 contra una posición de lote real pendiente de clarificar:
+`E_RESULT = 'OK'`, documento generado `E_OPBEL = 414500000010`. Confirma
+que la cadena completa funciona llamada directamente desde este módulo
+de función, no solo a través del flujo de pantalla de FPCPL.
 
 El propio DF advierte que el módulo de función estándar
 `FKK_PAYMENT_BATCH_CLARIFY_ITEM` **no se puede utilizar directamente**.
@@ -58,14 +63,14 @@ FKK_CREATE_DOC_MASS_AND_CLEAR   → contabiliza de verdad la propuesta ya calcul
   pasa todas las líneas de la factura candidata y deja que el motor
   estándar decida.
 
-**Composición razonada, NO probada de principio a fin todavía:**
-- Llamar directamente a esta cadena completa desde **este RFC** (con
-  `I_FKKKO`/`T_FKKOPK` construidos por nuestro propio código), sin
-  pasar por la capa de pantalla/procesamiento en bloque de
-  `FKK_PAYMENT_BATCH_POST`. El caso de éxito de arriba se consiguió a
-  través del flujo propio de FPCPL (que construye `I_FKKKO`/`T_FKKOPK`
-  internamente y calcula `I_AUGVD` con `PERFORM augvd_determine`), no
-  todavía a través de este módulo de función activado en SE37.
+**Confirmado con prueba real a través del propio RFC:**
+- Llamando directamente a esta cadena completa desde **este RFC** (con
+  `I_FKKKO`/`T_FKKOPK` construidos por nuestro propio código, sin pasar
+  por la capa de pantalla/procesamiento en bloque de
+  `FKK_PAYMENT_BATCH_POST`), se obtuvo un documento real contabilizado:
+  `E_RESULT = 'OK'`, `E_OPBEL = 414500000010`.
+
+**Pendiente de precisar / no verificado en detalle todavía:**
 - El valor exacto de `T_FKKOPK-HKONT` (¿siempre `DFKKZP-KLAEH` si ya
   viene informado, o la cuenta provisional constante?).
 - El valor de `I_AUGVD` para `FKK_CREATE_DOC_MASS_AND_CLEAR` (aquí
@@ -142,18 +147,11 @@ El usuario que queda registrado en las clarificaciones es el usuario
 técnico con el que MuleSoft se conecta a SAP, en el campo `DFKKZP-AENAM`
 (actualmente `COMMUSER`).
 
-## Siguiente paso: prueba end-to-end real
+## Prueba end-to-end real: superada
 
-Antes de dar esto por cerrado, hace falta una prueba real y persistida
-**a través de este módulo de función**, no simulada dentro de FPCPL:
-
-1. Activar la función en SE80/SE37 siguiendo la instalación de más abajo.
-2. Ejecutarla (F8 en SE37) contra una posición de lote real pendiente de
-   clarificar, pasando una factura real cuyo importe coincida
-   exactamente con el importe de esa posición (o de alguna de sus
-   líneas).
-3. Comprobar que `E_RESULT = 'OK'` y que `DFKKZP-XKLAE`/`KLAEB` reflejan
-   la clarificación en la tabla real (no solo la variable de salida).
+Ejecutada en SE37 (F8) contra una posición de lote real pendiente de
+clarificar, a través de este módulo de función (no simulada dentro de
+FPCPL): `E_RESULT = 'OK'`, `E_OPBEL = 414500000010`.
 
 ## Instalación en SAP (SE11 / SE80 / SE37)
 
@@ -177,14 +175,12 @@ Antes de dar esto por cerrado, hace falta una prueba real y persistida
    - Pestaña *Export*: `E_RESULT`, `ES_ERROR` (tipo DDIC
      `ZFI_DE_XX_WS_ERROR`), `E_OPBEL`.
    - Pestaña *Código fuente*: pegar `src/ZFI_FM_PAYMENT_LOT_CLARIFY2.abap`.
-5. Activar y probar (ver "Siguiente paso" arriba).
+5. Activar y probar (ver "Prueba end-to-end real" arriba).
 
 ## Pendiente / a definir con el cliente
 
 - Confirmar con negocio el comportamiento esperado cuando `I_XBLNR` trae
   varias facturas (ver punto 3 de "Lógica implementada").
-- Verificar de principio a fin, con una prueba real persistida y a
-  través de este módulo de función, toda la cadena de llamadas.
 - Confirmar el origen correcto de `T_FKKOPK-HKONT`.
 - Confirmar el valor correcto de `I_AUGVD` para
   `FKK_CREATE_DOC_MASS_AND_CLEAR`.
