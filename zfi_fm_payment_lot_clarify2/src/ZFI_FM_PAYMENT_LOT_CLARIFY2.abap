@@ -13,11 +13,22 @@ FUNCTION zfi_fm_payment_lot_clarify2.
 * Clarificación de transferencias pendientes de contabilizar en SAP
 * (equivalente a FPCPL)
 *
-* ESTADO: TERCERA VERSIÓN. Cadena completa localizada por depuración,
+* ESTADO: CUARTA VERSIÓN. Cadena completa localizada por depuración,
 * incluyendo el paso de contabilización real que faltaba. Pendiente de
 * probar de principio a fin activando este módulo en SE37 (las pruebas
 * hasta ahora se hicieron forzando variables por depuración dentro del
 * flujo real de FPCPL, no todavía a través de este RFC).
+*
+* CUARTA VERSIÓN (cambio respecto a la tercera): cuando I_XBLNR trae
+* varias facturas, ya no se usa solo la primera que cuadre en importe
+* y se descarta el resto. Ahora se acumulan las partidas de TODAS las
+* facturas que compartan cliente/cuenta contrato (GPART/VKONT) y se
+* dejan al motor de compensación, con la misma regla de importe exacto
+* del DF comprobada sobre el conjunto combinado. Motivado por evidencia
+* real encontrada en DFKKOP/AUGBL del sistema de integración (ver
+* comentario en el punto 3 de la lógica, más abajo) de que el reparto
+* entre varias facturas del mismo cliente sí ocurre en el negocio.
+* PENDIENTE DE PROBAR end-to-end con un caso real de varias facturas.
 *
 * El DF advierte que FKK_PAYMENT_BATCH_CLARIFY_ITEM "no se puede
 * utilizar directamente" (es un módulo de diálogo: abre una pantalla
@@ -76,14 +87,16 @@ FUNCTION zfi_fm_payment_lot_clarify2.
 * El mapeo de tipo de selección 'X' -> campo FKKOP-XBLNR está
 * verificado contra la tabla de customizing TFK004 (Área R).
 *
-* TODO pendiente de confirmar con negocio: cuando I_XBLNR trae varias
-* facturas, aquí se prueban una a una y se usa la primera que tenga
-* alguna línea cuyo importe coincida exactamente con el importe de la
-* posición (según el propio requisito del DF: "El importe de dicha
-* factura debe coincidir con el importe de la posición... para
-* garantizar la clarificación completa"). No hay confirmación de
-* negocio de que este sea el comportamiento esperado para el caso de
-* varias facturas.
+* ACTUALIZADO EN LA CUARTA VERSIÓN (ver punto 3 más abajo): cuando
+* I_XBLNR trae varias facturas del mismo cliente/cuenta contrato, ya
+* no se descartan todas menos la primera que cuadra — se acumulan las
+* partidas de todas y se dejan al motor de compensación, manteniendo
+* la regla del DF ("el importe debe coincidir con el de la posición")
+* comprobada sobre el conjunto combinado. Si las facturas son de
+* clientes distintos, se rechaza (MULTI_CLIENT_INVOICES). Sigue sin
+* haber confirmación explícita de negocio de que este sea el
+* comportamiento esperado — la base es evidencia real encontrada en
+* DFKKOP (ver punto 3), no una confirmación funcional formal.
 *----------------------------------------------------------------------*
 
   DATA: ls_dfkkzp   TYPE dfkkzp,
@@ -92,6 +105,9 @@ FUNCTION zfi_fm_payment_lot_clarify2.
         lt_fkkcl_cand TYPE STANDARD TABLE OF fkkcl,
         lt_fkkcl     TYPE STANDARD TABLE OF fkkcl,
         lv_found     TYPE abap_bool,
+        lv_gpart     TYPE gpart_kk,
+        lv_vkont     TYPE vkont_kk,
+        lv_multi_gpart TYPE abap_bool,
         ls_fkkko     TYPE fkkko,
         ls_fkkopk    TYPE fkkopk,
         lt_fkkopk    TYPE STANDARD TABLE OF fkkopk,
@@ -156,17 +172,54 @@ FUNCTION zfi_fm_payment_lot_clarify2.
 * 3. Buscar, para cada factura de I_XBLNR, las partidas abiertas que
 *    coinciden (FKK_OPEN_ITEM_SELECT con SELFN='XBLNR'). Una factura
 *    puede devolver varias líneas (verificado con un caso real de 6
-*    líneas, solo una de importe 0,24). Se usa la presencia de al
-*    menos una línea con el importe exacto de la posición como criterio
-*    para elegir QUÉ factura de I_XBLNR es la candidata correcta
-*    (búsqueda pura, sin contabilizar), pero al contabilizar se pasan
-*    TODAS las líneas encontradas de esa factura, no solo la que
-*    coincide: probado con datos reales que el propio motor de
-*    compensación estándar (FKK_PAYMENT_ALLOC_AND_CLEARING /
-*    FKK_OPEN_PAYMENT_COMPLETE) aplica correctamente solo la parte que
-*    corresponde al importe de la posición, sin que haga falta
-*    filtrar nosotros una única línea a mano.
+*    líneas, solo una de importe 0,24).
+*
+*    CUARTA VERSIÓN: a diferencia de las versiones anteriores (que se
+*    quedaban con la PRIMERA factura de I_XBLNR que tuviera una línea
+*    igual al importe de la posición y descartaban el resto), aquí se
+*    recorren TODAS las facturas de I_XBLNR y se acumulan las partidas
+*    de todas las que tengan resultado, para que el motor de
+*    compensación decida cómo repartir el importe entre ellas —mismo
+*    principio ya verificado con varias líneas de una única factura
+*    (ver "Estado" al principio de este include), extendido ahora a
+*    varias facturas.
+*
+*    Motivo del cambio (evidencia real, no supuesto): consultando
+*    DFKKOP filtrado por BLART = gc_blart_clarificacion ('2C', ver
+*    LZFI_FG_PAY_CLARIFYTOP) y cruzando por AUGBL, se han encontrado
+*    casos reales en el sistema de integración donde un mismo
+*    documento de compensación (AUGBL) reúne partidas de varias
+*    facturas (XBLNR) distintas — y en todos los casos encontrados,
+*    GPART/VKONT coincidía entre ellas (mismo cliente/cuenta contrato).
+*    No se ha encontrado ningún caso real de reparto entre GPART/VKONT
+*    distintos.
+*
+*    Por eso, tras recorrer I_XBLNR y acumular partidas en
+*    lt_fkkcl_all, se hacen tres comprobaciones en orden:
+*    a) Que se haya encontrado alguna partida en alguna factura
+*       (si no, NO_MATCHING_INVOICE).
+*    b) Que todas las facturas con partidas encontradas compartan
+*       GPART/VKONT (si no, MULTI_CLIENT_INVOICES: no hay caso real
+*       que respalde repartir entre clientes distintos).
+*    c) Que, dentro del conjunto combinado, exista al menos una línea
+*       cuyo importe coincida exactamente con el de la posición —esta
+*       es la MISMA regla de negocio del DF que ya existía, solo que
+*       comprobada ahora sobre el conjunto de todas las facturas en
+*       vez de sobre una única factura (si no se cumple,
+*       NO_MATCHING_INVOICE). Para el caso de una sola factura en
+*       I_XBLNR el comportamiento resultante es idéntico al ya
+*       probado end-to-end.
+*
+*    NOTA/PENDIENTE DE VERIFICAR: se asume que la estructura FKKCL
+*    expone los campos GPART y VKONT (convención estándar de FI-CA,
+*    mismo patrón que FKKOP), pero no se ha verificado directamente en
+*    SE11 ni probado este camino a través del propio RFC con un caso
+*    real de varias facturas. Probar en SE37 contra una posición real
+*    con I_XBLNR con más de una factura del mismo cliente antes de
+*    dar esto por cerrado.
 *----------------------------------------------------------------------*
+  DATA: lt_fkkcl_all TYPE STANDARD TABLE OF fkkcl.
+
   LOOP AT i_xblnr INTO DATA(ls_xblnr).
 
     CLEAR: lt_seltab, ls_seltab, lt_fkkcl_cand.
@@ -193,22 +246,52 @@ FUNCTION zfi_fm_payment_lot_clarify2.
     CHECK sy-subrc = 0.
     CHECK lt_fkkcl_cand IS NOT INITIAL.
 
-    READ TABLE lt_fkkcl_cand TRANSPORTING NO FIELDS
-      WITH KEY betrw = ls_dfkkzp-betrz.
-    IF sy-subrc = 0.
-      lt_fkkcl = lt_fkkcl_cand.
-      lv_found = abap_true.
-      EXIT.
+    READ TABLE lt_fkkcl_cand INTO DATA(ls_fkkcl_cand) INDEX 1.
+
+    IF lv_found = abap_false.
+      lv_gpart = ls_fkkcl_cand-gpart.
+      lv_vkont = ls_fkkcl_cand-vkont.
+    ELSEIF ls_fkkcl_cand-gpart <> lv_gpart OR ls_fkkcl_cand-vkont <> lv_vkont.
+      lv_multi_gpart = abap_true.
     ENDIF.
+
+    APPEND LINES OF lt_fkkcl_cand TO lt_fkkcl_all.
+    lv_found = abap_true.
 
   ENDLOOP.
 
   IF lv_found = abap_false.
     e_result             = 'NOK'.
     es_error-code        = 'NO_MATCHING_INVOICE'.
+    es_error-description = 'Ninguna de las facturas indicadas tiene partidas abiertas'.
+    RETURN.
+  ENDIF.
+
+  IF lv_multi_gpart = abap_true.
+    e_result             = 'NOK'.
+    es_error-code        = 'MULTI_CLIENT_INVOICES'.
+    es_error-description = 'Las facturas indicadas pertenecen a clientes/cuentas contrato distintos; no se aplica automáticamente'.
+    RETURN.
+  ENDIF.
+
+* Se mantiene la regla de negocio original del DF ("el importe de la
+* factura debe coincidir con el importe de la posición"), pero
+* comprobada ahora sobre el conjunto de TODAS las líneas encontradas
+* (lt_fkkcl_all) en vez de sobre una única factura: para el caso de
+* una sola factura en I_XBLNR el comportamiento es idéntico al ya
+* probado (el conjunto es esa única factura); para varias facturas del
+* mismo cliente, basta con que exista esa línea en algún punto del
+* conjunto combinado.
+  READ TABLE lt_fkkcl_all TRANSPORTING NO FIELDS
+    WITH KEY betrw = ls_dfkkzp-betrz.
+  IF sy-subrc <> 0.
+    e_result             = 'NOK'.
+    es_error-code        = 'NO_MATCHING_INVOICE'.
     es_error-description = 'Ninguna de las facturas indicadas coincide en importe con la posición'.
     RETURN.
   ENDIF.
+
+  lt_fkkcl = lt_fkkcl_all.
 
 *----------------------------------------------------------------------*
 * 4. Construir cabecera de documento (I_FKKKO) y partida provisional

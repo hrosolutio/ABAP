@@ -100,7 +100,7 @@ docs/
 | `I_POSZA` | Import | `POSZA_KK` | Sí | Posición del lote |
 | `I_XBLNR` | Import | `ZFI_T_XBLNR` (tipo de tabla DDIC, ver instalación) | Sí | Factura(s) a aplicar. Decidido con el cliente: tabla de longitud variable (el DF tenía una indicación de factura única y una nota posterior pidiendo varias, mínimo 5 propuesto) |
 | `E_RESULT` | Export | `CHAR3` | — | `OK` / `NOK` |
-| `ES_ERROR` | Export | `ZFI_DE_XX_WS_ERROR` (`CODE`, `DESCRIPTION`) | — | Error de negocio o técnico |
+| `ES_ERROR` | Export | `ZFI_DE_XX_WS_ERROR` (`CODE`, `DESCRIPTION`) | — | Error de negocio o técnico. Códigos propios: `PARAM_MISSING`, `POS_NOT_FOUND`, `POS_NOT_PENDING`, `NO_MATCHING_INVOICE`, `MULTI_CLIENT_INVOICES` (facturas de `I_XBLNR` de clientes/cuentas contrato distintos) |
 | `E_OPBEL` | Export | `OPBEL_KK` | — | Documento de clarificación generado |
 
 ## Lógica implementada
@@ -111,18 +111,35 @@ docs/
 3. Para cada factura de `I_XBLNR`, busca las partidas abiertas
    coincidentes con `FKK_OPEN_ITEM_SELECT` (`SELFN='XBLNR'`) — búsqueda
    pura, sin contabilizar. Una factura puede devolver varias líneas (se
-   comprobó con un caso real de 6 líneas). Se usa la presencia de **al
-   menos una línea con el importe exacto** de la posición como criterio
-   para elegir qué factura de `I_XBLNR` es la candidata correcta, pero
-   al contabilizar se pasan **todas** las líneas encontradas de esa
-   factura (no solo la que coincide) — probado con datos reales que el
-   motor de compensación estándar aplica correctamente solo la parte
-   que corresponde, sin que haga falta filtrar una única línea a mano
-   (ver "Estado" más arriba).
+   comprobó con un caso real de 6 líneas). **Desde la cuarta versión**,
+   ya no se usa solo la primera factura que cuadra en importe: se
+   recorren todas las facturas de `I_XBLNR`, se comprueba que todas las
+   que devuelven partidas comparten cliente/cuenta contrato
+   (`GPART`/`VKONT`) y se acumulan sus partidas; sobre ese conjunto
+   combinado se exige la misma regla del DF (**al menos una línea con
+   el importe exacto** de la posición). Al contabilizar se pasan
+   **todas** las líneas encontradas de todas las facturas válidas (no
+   solo la que coincide) — probado con datos reales, para el caso de
+   una única factura, que el motor de compensación estándar aplica
+   correctamente solo la parte que corresponde, sin que haga falta
+   filtrar una única línea a mano (ver "Estado" más arriba).
 
-   ⚠️ **Sin confirmar con negocio**: que "probar una a una hasta que
-   alguna línea cuadre en importe" sea el comportamiento esperado para
-   el caso de varias facturas en `I_XBLNR` (ver DF_resumen.md).
+   Motivado por evidencia real encontrada en el sistema de integración
+   (tabla `DFKKOP`, documentos `BLART = '2C'` agrupados por `AUGBL`):
+   existen casos reales donde un mismo documento de compensación
+   aplica partidas de varias facturas distintas, siempre dentro del
+   mismo `GPART`/`VKONT`. Si las facturas de `I_XBLNR` resultan ser de
+   clientes distintos, el servicio devuelve `ES_ERROR-CODE =
+   'MULTI_CLIENT_INVOICES'` en vez de decidir cuál aplicar.
+
+   ⚠️ **Sin confirmar formalmente con negocio**: la base de este
+   comportamiento es evidencia real encontrada en datos de producción/
+   integración, no una confirmación funcional explícita (ver
+   DF_resumen.md). Tampoco se ha probado todavía end-to-end a través de
+   este RFC con un caso real de varias facturas — solo el caso de una
+   única factura tiene prueba end-to-end superada (ver más abajo).
+   Campos `GPART`/`VKONT` de la estructura `FKKCL` asumidos por
+   convención estándar de FI-CA, sin verificar en SE11.
 4. Construye `I_FKKKO` (cabecera) y `T_FKKOPK` (partida provisional) a
    partir de los datos de la posición del lote.
 5. Llama a `ISU_CLEARING_PROPOSAL_GEN_0110` (`I_CLARIFICATION = 'X'`)
@@ -179,8 +196,17 @@ FPCPL): `E_RESULT = 'OK'`, `E_OPBEL = 414500000010`.
 
 ## Pendiente / a definir con el cliente
 
-- Confirmar con negocio el comportamiento esperado cuando `I_XBLNR` trae
-  varias facturas (ver punto 3 de "Lógica implementada").
+- Confirmar formalmente con negocio el comportamiento implementado en la
+  cuarta versión para `I_XBLNR` con varias facturas (agrupar por
+  `GPART`/`VKONT`, rechazar si son de clientes distintos) — hoy se basa
+  en evidencia real de datos de integración, no en una confirmación
+  funcional explícita (ver punto 3 de "Lógica implementada").
+- Probar end-to-end a través de este RFC un caso real con varias
+  facturas del mismo cliente en `I_XBLNR` (solo está probado
+  end-to-end el caso de una única factura).
+- Verificar en SE11 que la estructura `FKKCL` expone los campos
+  `GPART`/`VKONT` con esos nombres (asumido por convención estándar de
+  FI-CA, no comprobado directamente).
 - Confirmar el origen correcto de `T_FKKOPK-HKONT`.
 - Confirmar el valor correcto de `I_AUGVD` para
   `FKK_CREATE_DOC_MASS_AND_CLEAR`.
