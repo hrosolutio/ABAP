@@ -90,6 +90,12 @@ de referencia en [`src/`](src/).
 
 ## 5. Tarea 5 — RAP Business Object (`ZZ####TRAVEL`)
 
+> 📖 **Guía ampliada, clic a clic:** [`docs/task5_rap_business_object_detalle.md`](docs/task5_rap_business_object_detalle.md)
+> — cubre dónde encontrar `ZABAPDTRAVEL`, todas las pantallas del wizard de generación, el
+> quick-fix (`Ctrl+1`) para generar el método de la determinación, cómo activar todos los
+> objetos generados en el orden correcto, y cómo probar con `Preview`. Lo que sigue aquí es el
+> resumen rápido.
+
 1. **Copiar la tabla:** en el Project Explorer, localiza `ZABAPDTRAVEL` (`Dictionary Objects >
    Database Tables`, o `Ctrl+Shift+A` para buscarla). Clic derecho → `Copy`, luego clic derecho
    sobre `ZABAP_####` → `Paste`. Nombre destino: `ZZ####TRAVEL` (¡doble Z inicial!). Confirma
