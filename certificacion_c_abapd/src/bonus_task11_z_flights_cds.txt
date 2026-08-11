@@ -1,0 +1,21 @@
+"! Tarea 11 (Unit 2, no puntuable) — CDS View Entity Z_####_FLIGHTS con precio en USD
+
+@AccessControl.authorizationCheck: #NOT_REQUIRED
+@EndUserText.label: 'Flights with price in USD'
+define view entity Z_####_FLIGHTS
+  as select from /dmo/i_flight
+{
+  key AirlineID,
+  key ConnectionID,
+  key FlightDate,
+
+  @Semantics.amount.currencyCode: 'USDCurrencyCode'
+  currency_conversion(
+    amount             => Price,
+    source_currency    => CurrencyCode,
+    target_currency    => 'USD',
+    exchange_rate_date => $session.system_date
+  )                                    as PriceUSD,
+
+  cast( 'USD' as /dmo/currency_code )  as USDCurrencyCode
+}

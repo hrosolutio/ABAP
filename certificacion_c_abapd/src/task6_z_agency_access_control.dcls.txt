@@ -1,0 +1,11 @@
+"! Tarea 6 — CDS Access Control (DCL) sobre Z####_AGENCY
+"! Crear vía: New > Other ABAP Repository Object > Access Control, nombre Z####_AGENCY.
+
+@EndUserText.label: 'Access control for Z####_AGENCY'
+@MappingRole: true
+define role Z####_AGENCY {
+
+  grant select on Z####_AGENCY
+    where ( agency_id ) = aspect pfcg_auth( '/LRN/AGCY', ACTVT, actvt = '03' );
+
+}
