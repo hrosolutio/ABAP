@@ -1,6 +1,7 @@
 *************************************************************************
-* PROGRAM: ZFI_R_EXTORNOS                                               *
-* DESCRIPTION: Gestion de extornos bancarios (CDI_11)                   *
+* PROGRAM: ZFI_R_DEVOLUCIONES2                                          *
+* DESCRIPTION: Cierre y contabilizacion de lotes de devolucion de       *
+*              extornos bancarios (CDI_11)                              *
 * AUTHOR: Copia de partida de ZFI_R_DEVOLUCIONES (Jose Ternero)         *
 * DATE: 06.08.2026                                                      *
 * DEV ID (RICEFW/ENH/INC): CDI_11                                       *
@@ -15,14 +16,14 @@
 *         |            |                  | todavia (ver README) |       *
 *                                                                       *
 *************************************************************************
-REPORT zfi_r_extornos LINE-SIZE 255.
+REPORT zfi_r_devoluciones2 LINE-SIZE 255.
 
-INCLUDE zfi_r_extornos_top.
-INCLUDE zfi_r_extornos_eve.
-INCLUDE zfi_r_extornos_cls.
+INCLUDE zfi_r_devoluciones2_top.
+INCLUDE zfi_r_devoluciones2_eve.
+INCLUDE zfi_r_devoluciones2_cls.
 
 AT SELECTION-SCREEN ON VALUE-REQUEST FOR p_path.
-  p_path = lcl_extornos=>f4_file( ).
+  p_path = lcl_devoluciones2=>f4_file( ).
 
 START-OF-SELECTION.
 
@@ -38,7 +39,7 @@ START-OF-SELECTION.
   ENDIF.
 
   TRY.
-      DATA(go_extornos) = NEW lcl_extornos(
+      DATA(go_extornos) = NEW lcl_devoluciones2(
         iv_upload    = p_upload
         iv_path      = lv_path
         ir_file_id   = s_fileid[] ).

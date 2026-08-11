@@ -1,7 +1,7 @@
 *&---------------------------------------------------------------------*
-*& Include          ZFI_R_EXTORNOS_CLS
+*& Include          ZFI_R_DEVOLUCIONES2_CLS
 *&---------------------------------------------------------------------*
-CLASS lcl_extornos DEFINITION.
+CLASS lcl_devoluciones2 DEFINITION.
   PUBLIC SECTION.
 
     CONSTANTS: co_logical_path   TYPE pathintern          VALUE 'ZFICA_COBROS_DEVOLUCIONES',
@@ -86,7 +86,7 @@ CLASS lcl_extornos DEFINITION.
 
 ENDCLASS.
 
-CLASS lcl_extornos IMPLEMENTATION.
+CLASS lcl_devoluciones2 IMPLEMENTATION.
 
   METHOD constructor.
 

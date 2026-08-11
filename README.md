@@ -10,4 +10,5 @@ con su propio código fuente, documentación y README de instalación.
 |---|---|
 | [`zfi_fm_paylot_reverse/`](zfi_fm_paylot_reverse/README.md) | RFC `ZFI_FM_PAYLOT_REVERSE`: anulación de transferencias contabilizadas en SAP (FI-CA), proceso `CDI_11_03` |
 | [`zfi_fm_payment_lot_clarify2/`](zfi_fm_payment_lot_clarify2/README.md) | RFC `ZFI_FM_PAYMENT_LOT_CLARIFY2`: clarificación de transferencias pendientes en SAP (FI-CA) — **prueba end-to-end real superada** |
-| [`zfi_r_extornos/`](zfi_r_extornos/README.md) | Report `ZFI_R_EXTORNOS`: gestión de extornos bancarios, proceso `CDI_11` — **copia base de `ZFI_R_DEVOLUCIONES` sin adaptar todavía** |
+| [`zfi_r_ecofi_split/`](zfi_r_ecofi_split/README.md) | Report `ZFI_R_ECOFI_SPLIT`: división del fichero bancario ECOFI en transferencias/extornos, proceso `CDI_11` (1/3) — lógica de división probada contra ficheros reales |
+| [`zfi_r_devoluciones2/`](zfi_r_devoluciones2/README.md) | Report `ZFI_R_DEVOLUCIONES2`: cierre y contabilización del lote de devolución de extornos, proceso `CDI_11` (3/3) — **copia base de `ZFI_R_DEVOLUCIONES` sin adaptar todavía** |
