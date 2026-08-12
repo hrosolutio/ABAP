@@ -220,10 +220,12 @@ CLASS lcl_ecofi_split IMPLEMENTATION.
     DATA(lv_target) = gv_path.
     REPLACE REGEX '[^\\/]+$' IN lv_target WITH iv_filename.
 
+    DATA(lt_lines) = it_lines.
+
     cl_gui_frontend_services=>gui_download(
       EXPORTING filename                = lv_target
                 filetype                = 'ASC'
-      CHANGING  data_tab                = it_lines
+      CHANGING  data_tab                = lt_lines
       EXCEPTIONS file_write_error        = 1
                  no_batch                = 2
                  gui_refuse_filetransfer = 3
