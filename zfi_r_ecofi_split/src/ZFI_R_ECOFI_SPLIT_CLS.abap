@@ -28,7 +28,8 @@ CLASS lcl_ecofi_split DEFINITION.
                co_eur_tag    TYPE string VALUE 'EUR'.
 
     METHODS:
-      constructor IMPORTING iv_path TYPE string,
+      constructor IMPORTING iv_path   TYPE string
+                            iv_upload TYPE c,
 
       execute.
 
@@ -46,27 +47,39 @@ CLASS lcl_ecofi_split DEFINITION.
 
   PRIVATE SECTION.
 
-    DATA: gv_path TYPE string.
+    DATA: gv_path   TYPE string,
+          gv_upload TYPE c.
 
     METHODS:
       get_filename RETURNING VALUE(rv_filename) TYPE string,
 
+      read_lines RETURNING VALUE(rt_lines) TYPE string_table,
+
+      write_lines IMPORTING iv_filename TYPE string
+                             it_lines    TYPE string_table,
+
       upload_lines RETURNING VALUE(rt_lines) TYPE string_table,
 
       download_lines IMPORTING iv_filename TYPE string
-                                it_lines    TYPE string_table.
+                                it_lines    TYPE string_table,
+
+      read_lines_server RETURNING VALUE(rt_lines) TYPE string_table,
+
+      write_lines_server IMPORTING iv_filename TYPE string
+                                    it_lines    TYPE string_table.
 
 ENDCLASS.
 
 CLASS lcl_ecofi_split IMPLEMENTATION.
 
   METHOD constructor.
-    gv_path = iv_path.
+    gv_path   = iv_path.
+    gv_upload = iv_upload.
   ENDMETHOD.
 
   METHOD execute.
 
-    DATA(lt_lines) = upload_lines( ).
+    DATA(lt_lines) = read_lines( ).
 
     IF lt_lines IS INITIAL.
       MESSAGE 'No se ha podido leer el fichero indicado.' TYPE 'E'.
@@ -79,13 +92,13 @@ CLASS lcl_ecofi_split IMPLEMENTATION.
 
     DATA(lv_filename) = get_filename( ).
 
-    download_lines( iv_filename = build_output_filename( iv_filename = lv_filename
-                                                           iv_suffix  = co_suffix_trf )
-                     it_lines    = lt_trf ).
+    write_lines( iv_filename = build_output_filename( iv_filename = lv_filename
+                                                        iv_suffix  = co_suffix_trf )
+                 it_lines    = lt_trf ).
 
-    download_lines( iv_filename = build_output_filename( iv_filename = lv_filename
-                                                           iv_suffix  = co_suffix_dev )
-                     it_lines    = lt_dev ).
+    write_lines( iv_filename = build_output_filename( iv_filename = lv_filename
+                                                        iv_suffix  = co_suffix_dev )
+                 it_lines    = lt_dev ).
 
     " -1 por la linea de cabecera, que se cuenta en ambos ficheros
     DATA(lv_total) = lines( lt_lines ) - 1.
@@ -180,6 +193,65 @@ CLASS lcl_ecofi_split IMPLEMENTATION.
 
     SPLIT gv_path AT '/' INTO TABLE DATA(lt_unix).
     rv_filename = lt_unix[ lines( lt_unix ) ].
+
+  ENDMETHOD.
+
+  METHOD read_lines.
+
+    rt_lines = COND #( WHEN gv_upload = abap_true THEN upload_lines( )
+                        ELSE read_lines_server( ) ).
+
+  ENDMETHOD.
+
+  METHOD write_lines.
+
+    IF gv_upload = abap_true.
+      download_lines( iv_filename = iv_filename
+                       it_lines    = it_lines ).
+    ELSE.
+      write_lines_server( iv_filename = iv_filename
+                           it_lines    = it_lines ).
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD read_lines_server.
+
+    OPEN DATASET gv_path FOR INPUT IN TEXT MODE ENCODING DEFAULT.
+    IF sy-subrc <> 0.
+      MESSAGE |No se ha podido abrir { gv_path } en el servidor.| TYPE 'I'.
+      RETURN.
+    ENDIF.
+
+    DO.
+      DATA(lv_line) = ``.
+      READ DATASET gv_path INTO lv_line.
+      IF sy-subrc <> 0.
+        EXIT.
+      ENDIF.
+      APPEND lv_line TO rt_lines.
+    ENDDO.
+
+    CLOSE DATASET gv_path.
+
+  ENDMETHOD.
+
+  METHOD write_lines_server.
+
+    DATA(lv_dir_len) = strlen( gv_path ) - strlen( get_filename( ) ).
+    DATA(lv_target)  = substring( val = gv_path len = lv_dir_len ) && iv_filename.
+
+    OPEN DATASET lv_target FOR OUTPUT IN TEXT MODE ENCODING DEFAULT.
+    IF sy-subrc <> 0.
+      MESSAGE |No se ha podido escribir { lv_target } en el servidor.| TYPE 'I'.
+      RETURN.
+    ENDIF.
+
+    LOOP AT it_lines INTO DATA(lv_line).
+      TRANSFER lv_line TO lv_target.
+    ENDLOOP.
+
+    CLOSE DATASET lv_target.
 
   ENDMETHOD.
 

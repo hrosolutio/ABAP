@@ -79,13 +79,14 @@ Analizados `YFRECAU_1239_260402.140017.txt` (378 líneas) y
   relleno de espacios + sufijo `0020` original). El ejemplo del DF muestra una
   línea más corta (sin relleno) — confirmar si el ancho fijo importa para el
   desarrollo 2 (creación del lote) o si es indiferente.
-- **Modo de ejecución en producción**: este programa solo tiene, de momento,
-  modo local (`GUI_UPLOAD`/`GUI_DOWNLOAD`) para poder probarlo directamente en
-  SE38 contra un fichero real. Falta diseñar el modo servidor: lectura
-  automática de la ruta AL11 (`/interfaces/cobros/transf_N43/in`, según el
-  comentario de EVA) y escritura de `_TRF`/`_DEV`, así como cuándo/cómo se
-  dispara (job propio, o parte del job que hoy crea el lote de
-  transferencias).
+- **Modo de ejecución en producción**: el programa ya tiene modo servidor
+  (`OPEN DATASET`/`TRANSFER`, radio button `p_server`, mismo patrón que
+  `ZFI_R_DEVOLUCIONES`), pero **sin probar aún dentro de SAP** y sin disparo
+  automático: hoy hay que indicar la ruta del servidor a mano y ejecutar en
+  SE38. Falta decidir cómo se dispara en producción contra la ruta AL11
+  (`/interfaces/cobros/transf_N43/in`, según el comentario de EVA): job
+  propio con esa ruta fija, o integrado en el job que hoy crea el lote de
+  transferencias.
 - Si la moneda puede ser distinta de `EUR` en algún caso (el programa localiza
   el concepto buscando la primera ocurrencia de `EUR` en la línea).
 - Alta del objeto en el sistema de transporte correspondiente al proyecto.

@@ -15,6 +15,9 @@
 *         |            |                  | download) para prueba |       *
 *         |            |                  | con ficheros reales    |       *
 *         |            |                  | (ver README)           |       *
+* 002     | 11.08.2026 |                  | Anade modo servidor   |CDI_11 *
+*         |            |                  | (OPEN DATASET), igual  |       *
+*         |            |                  | que ZFI_R_DEVOLUCIONES |       *
 *                                                                       *
 *************************************************************************
 REPORT zfi_r_ecofi_split LINE-SIZE 255.
@@ -25,5 +28,6 @@ INCLUDE zfi_r_ecofi_split_cls.
 
 START-OF-SELECTION.
 
-  DATA(go_split) = NEW lcl_ecofi_split( iv_path = p_path ).
+  DATA(go_split) = NEW lcl_ecofi_split( iv_path   = p_path
+                                         iv_upload = p_upload ).
   go_split->execute( ).
