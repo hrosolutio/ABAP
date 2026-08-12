@@ -217,8 +217,10 @@ CLASS lcl_ecofi_split IMPLEMENTATION.
 
   METHOD download_lines.
 
-    DATA(lv_target) = gv_path.
-    REPLACE REGEX '[^\\/]+$' IN lv_target WITH iv_filename.
+    " Sustituye el nombre de fichero de gv_path por iv_filename, manteniendo
+    " la misma carpeta (sin usar REGEX, ver get_filename para la misma logica)
+    DATA(lv_dir_len) = strlen( gv_path ) - strlen( get_filename( ) ).
+    DATA(lv_target)  = substring( val = gv_path len = lv_dir_len ) && iv_filename.
 
     DATA(lt_lines) = it_lines.
 
