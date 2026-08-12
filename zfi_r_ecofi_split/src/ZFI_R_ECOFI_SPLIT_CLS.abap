@@ -88,9 +88,13 @@ CLASS lcl_ecofi_split IMPLEMENTATION.
                      it_lines    = lt_dev ).
 
     " -1 por la linea de cabecera, que se cuenta en ambos ficheros
-    WRITE: / 'Lineas totales:', lines( lt_lines ) - 1.
-    WRITE: / 'Transferencias (_TRF):', lines( lt_trf ) - 1.
-    WRITE: / 'Extornos (_DEV):', lines( lt_dev ) - 1.
+    DATA(lv_total) = lines( lt_lines ) - 1.
+    DATA(lv_trf)   = lines( lt_trf ) - 1.
+    DATA(lv_dev)   = lines( lt_dev ) - 1.
+
+    WRITE: / 'Lineas totales:', lv_total.
+    WRITE: / 'Transferencias (_TRF):', lv_trf.
+    WRITE: / 'Extornos (_DEV):', lv_dev.
 
   ENDMETHOD.
 
