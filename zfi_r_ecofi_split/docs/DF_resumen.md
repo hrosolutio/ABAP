@@ -79,14 +79,23 @@ Analizados `YFRECAU_1239_260402.140017.txt` (378 líneas) y
   relleno de espacios + sufijo `0020` original). El ejemplo del DF muestra una
   línea más corta (sin relleno) — confirmar si el ancho fijo importa para el
   desarrollo 2 (creación del lote) o si es indiferente.
-- **Modo de ejecución en producción**: el programa ya tiene modo servidor
-  (`OPEN DATASET`/`TRANSFER`, radio button `p_server`, mismo patrón que
-  `ZFI_R_DEVOLUCIONES`), pero **sin probar aún dentro de SAP** y sin disparo
-  automático: hoy hay que indicar la ruta del servidor a mano y ejecutar en
-  SE38. Falta decidir cómo se dispara en producción contra la ruta AL11
-  (`/interfaces/cobros/transf_N43/in`, según el comentario de EVA): job
-  propio con esa ruta fija, o integrado en el job que hoy crea el lote de
-  transferencias.
+- **Modo de ejecución en producción**: el programa ya tiene modo servidor —
+  radio button `p_server`, sin pedir ruta (a diferencia del upload): escanea
+  automáticamente **todos** los ficheros de la carpeta de la ruta lógica
+  `ZFICA_COBROS_ECOFI` (`EPS2_GET_DIRECTORY_LISTING` + `OPEN DATASET`) y mueve
+  cada original a `procesados/` tras dividirlo (`ZXX_CL_FILE_UTILS=>
+  MOVE_SERVER_FILE`, la misma utilidad que ya usa `ZFI_R_DEVOLUCIONES`), para
+  no reprocesarlo. **Sin probar aún dentro de SAP** y sin disparo automático:
+  hoy hay que ejecutarlo a mano en SE38. Falta:
+  - Crear la ruta lógica `ZFICA_COBROS_ECOFI` (transacción `FILE`) apuntando
+    a la ruta física real (¿la misma AL11
+    `/interfaces/cobros/transf_N43/in` que menciona el comentario de EVA, o
+    una carpeta de staging distinta?).
+  - Decidir cómo se dispara en producción: job propio programado, o
+    integrado en el job que hoy crea el lote de transferencias.
+  - Qué pasa con los ficheros `_TRF`/`_DEV` generados (hoy se quedan en la
+    misma carpeta, sin moverse a ningún sitio) — si deben quedarse ahí para
+    que los recoja el siguiente paso, o moverse también.
 - Si la moneda puede ser distinta de `EUR` en algún caso (el programa localiza
   el concepto buscando la primera ocurrencia de `EUR` en la línea).
 - Alta del objeto en el sistema de transporte correspondiente al proyecto.

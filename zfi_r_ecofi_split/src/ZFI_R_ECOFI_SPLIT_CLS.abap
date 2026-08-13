@@ -19,13 +19,25 @@
 * en el fichero _DEV debe mantener el ancho fijo de 260 caracteres
 * (como hace este programa, rellenando con espacios tras el numero de
 * documento) o un formato mas corto como el del ejemplo del DF.
+*
+* Modo servidor: escanea TODOS los ficheros de la carpeta de la ruta
+* logica CO_LOGICAL_PATH (igual patron que ZFI_R_DEVOLUCIONES, que
+* resuelve su ruta logica con ZXX_CL_FILE_UTILS=>GET_DIRECTORY), los
+* divide uno a uno y mueve el original a la subcarpeta "procesados/"
+* (con ZXX_CL_FILE_UTILS=>MOVE_SERVER_FILE, la misma utilidad que usa
+* ZFI_R_DEVOLUCIONES para sus subcarpetas backup/error) para no
+* reprocesarlo en la siguiente ejecucion. No usa ZFI_T_FILE_LOG: el
+* fichero ECOFI es el primer eslabon de la cadena, no esta registrado
+* en ningun sitio todavia (a diferencia de ZFI_R_DEVOLUCIONES, que ya
+* recibe los ficheros pre-registrados por un paso anterior).
 CLASS lcl_ecofi_split DEFINITION.
   PUBLIC SECTION.
 
-    CONSTANTS: co_suffix_trf TYPE string VALUE '_TRF',
-               co_suffix_dev TYPE string VALUE '_DEV',
-               co_line_len   TYPE i      VALUE 260,
-               co_eur_tag    TYPE string VALUE 'EUR'.
+    CONSTANTS: co_suffix_trf     TYPE string    VALUE '_TRF',
+               co_suffix_dev     TYPE string    VALUE '_DEV',
+               co_eur_tag        TYPE string    VALUE 'EUR',
+               co_logical_path   TYPE pathintern VALUE 'ZFICA_COBROS_ECOFI',
+               co_processed_dir  TYPE string    VALUE 'procesados/'.
 
     METHODS:
       constructor IMPORTING iv_path   TYPE string
@@ -51,22 +63,35 @@ CLASS lcl_ecofi_split DEFINITION.
           gv_upload TYPE c.
 
     METHODS:
-      get_filename RETURNING VALUE(rv_filename) TYPE string,
+      execute_local,
 
-      read_lines RETURNING VALUE(rt_lines) TYPE string_table,
+      execute_server,
 
-      write_lines IMPORTING iv_filename TYPE string
-                             it_lines    TYPE string_table,
+      split_and_write_local IMPORTING it_lines TYPE string_table
+                                       iv_name  TYPE string,
+
+      split_and_write_server IMPORTING it_lines TYPE string_table
+                                        iv_name  TYPE string
+                                        iv_dir   TYPE string,
+
+      get_filename_from_path IMPORTING iv_path            TYPE string
+                              RETURNING VALUE(rv_filename) TYPE string,
+
+      get_server_directory RETURNING VALUE(rv_directory) TYPE string,
+
+      get_server_files IMPORTING iv_directory    TYPE string
+                        RETURNING VALUE(rt_files) TYPE string_table,
+
+      read_server_file IMPORTING iv_path         TYPE string
+                        RETURNING VALUE(rt_lines) TYPE string_table,
+
+      write_server_file IMPORTING iv_path  TYPE string
+                                   it_lines TYPE string_table,
 
       upload_lines RETURNING VALUE(rt_lines) TYPE string_table,
 
       download_lines IMPORTING iv_filename TYPE string
-                                it_lines    TYPE string_table,
-
-      read_lines_server RETURNING VALUE(rt_lines) TYPE string_table,
-
-      write_lines_server IMPORTING iv_filename TYPE string
-                                    it_lines    TYPE string_table.
+                                it_lines    TYPE string_table.
 
 ENDCLASS.
 
@@ -79,35 +104,120 @@ CLASS lcl_ecofi_split IMPLEMENTATION.
 
   METHOD execute.
 
-    DATA(lt_lines) = read_lines( ).
+    IF gv_upload = abap_true.
+      execute_local( ).
+    ELSE.
+      execute_server( ).
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD execute_local.
+
+    DATA(lt_lines) = upload_lines( ).
 
     IF lt_lines IS INITIAL.
       MESSAGE 'No se ha podido leer el fichero indicado.' TYPE 'E'.
       RETURN.
     ENDIF.
 
-    split_lines( EXPORTING it_lines = lt_lines
+    split_and_write_local( it_lines = lt_lines
+                            iv_name  = get_filename_from_path( gv_path ) ).
+
+  ENDMETHOD.
+
+  METHOD execute_server.
+
+    DATA(lv_dir) = get_server_directory( ).
+
+    IF lv_dir IS INITIAL.
+      MESSAGE 'No se ha podido resolver la ruta lógica del servidor.' TYPE 'E'.
+      RETURN.
+    ENDIF.
+
+    DATA(lt_files) = get_server_files( lv_dir ).
+
+    IF lt_files IS INITIAL.
+      MESSAGE 'No hay ficheros para procesar en el servidor.' TYPE 'I'.
+      RETURN.
+    ENDIF.
+
+    LOOP AT lt_files INTO DATA(lv_filename).
+
+      DATA(lt_lines) = read_server_file( lv_dir && lv_filename ).
+
+      IF lt_lines IS INITIAL.
+        WRITE: / 'No se ha podido leer:', lv_filename.
+        CONTINUE.
+      ENDIF.
+
+      split_and_write_server( it_lines = lt_lines
+                               iv_name  = lv_filename
+                               iv_dir   = lv_dir ).
+
+      " Se mueve el original para no reprocesarlo en la siguiente ejecucion
+      TRY.
+          zxx_cl_file_utils=>move_server_file(
+            EXPORTING
+              i_sourcepath = lv_dir
+              i_targetpath = lv_dir && co_processed_dir
+              i_filename   = lv_filename ).
+        CATCH zfi_cl_cx_file.
+          WRITE: / 'No se ha podido mover a procesados/:', lv_filename.
+      ENDTRY.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD split_and_write_local.
+
+    split_lines( EXPORTING it_lines = it_lines
                  IMPORTING et_trf   = DATA(lt_trf)
                            et_dev   = DATA(lt_dev) ).
 
-    DATA(lv_filename) = get_filename( ).
+    download_lines( iv_filename = build_output_filename( iv_filename = iv_name
+                                                           iv_suffix  = co_suffix_trf )
+                     it_lines    = lt_trf ).
 
-    write_lines( iv_filename = build_output_filename( iv_filename = lv_filename
-                                                        iv_suffix  = co_suffix_trf )
-                 it_lines    = lt_trf ).
-
-    write_lines( iv_filename = build_output_filename( iv_filename = lv_filename
-                                                        iv_suffix  = co_suffix_dev )
-                 it_lines    = lt_dev ).
+    download_lines( iv_filename = build_output_filename( iv_filename = iv_name
+                                                           iv_suffix  = co_suffix_dev )
+                     it_lines    = lt_dev ).
 
     " -1 por la linea de cabecera, que se cuenta en ambos ficheros
-    DATA(lv_total) = lines( lt_lines ) - 1.
+    DATA(lv_total) = lines( it_lines ) - 1.
     DATA(lv_trf)   = lines( lt_trf ) - 1.
     DATA(lv_dev)   = lines( lt_dev ) - 1.
 
-    WRITE: / 'Lineas totales:', lv_total.
-    WRITE: / 'Transferencias (_TRF):', lv_trf.
-    WRITE: / 'Extornos (_DEV):', lv_dev.
+    WRITE: / iv_name.
+    WRITE: / '  Lineas totales:', lv_total.
+    WRITE: / '  Transferencias (_TRF):', lv_trf.
+    WRITE: / '  Extornos (_DEV):', lv_dev.
+
+  ENDMETHOD.
+
+  METHOD split_and_write_server.
+
+    split_lines( EXPORTING it_lines = it_lines
+                 IMPORTING et_trf   = DATA(lt_trf)
+                           et_dev   = DATA(lt_dev) ).
+
+    write_server_file( iv_path  = iv_dir && build_output_filename( iv_filename = iv_name
+                                                                     iv_suffix  = co_suffix_trf )
+                        it_lines = lt_trf ).
+
+    write_server_file( iv_path  = iv_dir && build_output_filename( iv_filename = iv_name
+                                                                     iv_suffix  = co_suffix_dev )
+                        it_lines = lt_dev ).
+
+    DATA(lv_total) = lines( it_lines ) - 1.
+    DATA(lv_trf)   = lines( lt_trf ) - 1.
+    DATA(lv_dev)   = lines( lt_dev ) - 1.
+
+    WRITE: / iv_name.
+    WRITE: / '  Lineas totales:', lv_total.
+    WRITE: / '  Transferencias (_TRF):', lv_trf.
+    WRITE: / '  Extornos (_DEV):', lv_dev.
 
   ENDMETHOD.
 
@@ -183,75 +293,105 @@ CLASS lcl_ecofi_split IMPLEMENTATION.
 
   ENDMETHOD.
 
-  METHOD get_filename.
+  METHOD get_filename_from_path.
 
-    SPLIT gv_path AT '\' INTO TABLE DATA(lt_win).
+    SPLIT iv_path AT '\' INTO TABLE DATA(lt_win).
     IF lines( lt_win ) > 1.
       rv_filename = lt_win[ lines( lt_win ) ].
       RETURN.
     ENDIF.
 
-    SPLIT gv_path AT '/' INTO TABLE DATA(lt_unix).
+    SPLIT iv_path AT '/' INTO TABLE DATA(lt_unix).
     rv_filename = lt_unix[ lines( lt_unix ) ].
 
   ENDMETHOD.
 
-  METHOD read_lines.
+  METHOD get_server_directory.
 
-    rt_lines = COND #( WHEN gv_upload = abap_true THEN upload_lines( )
-                        ELSE read_lines_server( ) ).
+    TRY.
+        zxx_cl_file_utils=>get_directory(
+          EXPORTING i_logical_path = co_logical_path
+          IMPORTING e_directory    = rv_directory ).
 
-  ENDMETHOD.
+        REPLACE ALL OCCURRENCES OF '*' IN rv_directory WITH ''.
 
-  METHOD write_lines.
-
-    IF gv_upload = abap_true.
-      download_lines( iv_filename = iv_filename
-                       it_lines    = it_lines ).
-    ELSE.
-      write_lines_server( iv_filename = iv_filename
-                           it_lines    = it_lines ).
-    ENDIF.
+      CATCH zfi_cl_cx_file.
+        CLEAR rv_directory.
+    ENDTRY.
 
   ENDMETHOD.
 
-  METHOD read_lines_server.
+  METHOD get_server_files.
 
-    OPEN DATASET gv_path FOR INPUT IN TEXT MODE ENCODING DEFAULT.
+    DATA: lt_dir_list TYPE TABLE OF epsfili.
+
+    CALL FUNCTION 'EPS2_GET_DIRECTORY_LISTING'
+      EXPORTING
+        dir_name               = iv_directory
+      TABLES
+        dir_list                = lt_dir_list
+      EXCEPTIONS
+        invalid_eps_subdir      = 1
+        sapgparam_failed        = 2
+        build_directory_failed  = 3
+        no_authorization        = 4
+        read_directory_failed   = 5
+        too_many_read_errors    = 6
+        empty_directory_list    = 7
+        OTHERS                  = 8.
+
+    CHECK sy-subrc = 0.
+
+    " co_processed_dir es una subcarpeta (sin la barra final) dentro de
+    " esta misma carpeta: se excluye para no intentar "procesarla" como
+    " si fuese un fichero.
+    DATA(lv_processed_name) = co_processed_dir.
+    REPLACE '/' IN lv_processed_name WITH ''.
+
+    LOOP AT lt_dir_list INTO DATA(ls_dir).
+      CHECK ls_dir-name IS NOT INITIAL.
+      CHECK ls_dir-name <> lv_processed_name.
+      " Los ficheros _TRF/_DEV son la SALIDA de este mismo programa: si se
+      " escanean como si fuesen ECOFI de entrada, se reprocesarian sin fin
+      CHECK NOT ( ls_dir-name CS co_suffix_trf OR ls_dir-name CS co_suffix_dev ).
+      APPEND ls_dir-name TO rt_files.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD read_server_file.
+
+    OPEN DATASET iv_path FOR INPUT IN TEXT MODE ENCODING DEFAULT.
     IF sy-subrc <> 0.
-      MESSAGE |No se ha podido abrir { gv_path } en el servidor.| TYPE 'I'.
       RETURN.
     ENDIF.
 
     DO.
       DATA(lv_line) = ``.
-      READ DATASET gv_path INTO lv_line.
+      READ DATASET iv_path INTO lv_line.
       IF sy-subrc <> 0.
         EXIT.
       ENDIF.
       APPEND lv_line TO rt_lines.
     ENDDO.
 
-    CLOSE DATASET gv_path.
+    CLOSE DATASET iv_path.
 
   ENDMETHOD.
 
-  METHOD write_lines_server.
+  METHOD write_server_file.
 
-    DATA(lv_dir_len) = strlen( gv_path ) - strlen( get_filename( ) ).
-    DATA(lv_target)  = substring( val = gv_path len = lv_dir_len ) && iv_filename.
-
-    OPEN DATASET lv_target FOR OUTPUT IN TEXT MODE ENCODING DEFAULT.
+    OPEN DATASET iv_path FOR OUTPUT IN TEXT MODE ENCODING DEFAULT.
     IF sy-subrc <> 0.
-      MESSAGE |No se ha podido escribir { lv_target } en el servidor.| TYPE 'I'.
+      MESSAGE |No se ha podido escribir { iv_path } en el servidor.| TYPE 'I'.
       RETURN.
     ENDIF.
 
     LOOP AT it_lines INTO DATA(lv_line).
-      TRANSFER lv_line TO lv_target.
+      TRANSFER lv_line TO iv_path.
     ENDLOOP.
 
-    CLOSE DATASET lv_target.
+    CLOSE DATASET iv_path.
 
   ENDMETHOD.
 
@@ -290,8 +430,8 @@ CLASS lcl_ecofi_split IMPLEMENTATION.
   METHOD download_lines.
 
     " Sustituye el nombre de fichero de gv_path por iv_filename, manteniendo
-    " la misma carpeta (sin usar REGEX, ver get_filename para la misma logica)
-    DATA(lv_dir_len) = strlen( gv_path ) - strlen( get_filename( ) ).
+    " la misma carpeta (sin usar REGEX, ver get_filename_from_path)
+    DATA(lv_dir_len) = strlen( gv_path ) - strlen( get_filename_from_path( gv_path ) ).
     DATA(lv_target)  = substring( val = gv_path len = lv_dir_len ) && iv_filename.
 
     DATA(lt_lines) = it_lines.

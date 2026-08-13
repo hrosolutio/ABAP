@@ -2,11 +2,10 @@
 *& Include          ZFI_R_ECOFI_SPLIT_EVE
 *&---------------------------------------------------------------------*
 * Mismo patron server/upload que ZFI_R_DEVOLUCIONES:
-*   - p_server: P_PATH es una ruta del servidor de aplicaciones
-*     (OPEN DATASET). Pensado para la ejecucion automatica/por job
-*     contra la ruta AL11 (ver README "Pendiente / a definir": aun no
-*     hay job ni logica de disparo automatico, hay que indicar la ruta
-*     a mano).
+*   - p_server: procesa TODOS los ficheros que haya en la carpeta de la
+*     ruta logica lcl_ecofi_split=>co_logical_path (a crear en SAP con
+*     transaccion FILE, fisicamente la ruta AL11 correspondiente). No
+*     hace falta indicar ningun fichero: P_PATH se oculta.
 *   - p_upload: P_PATH es un fichero local, se sube/descarga via GUI
 *     (para poder probar el programa desde tu PC).
 
@@ -19,9 +18,25 @@ SELECTION-SCREEN END OF BLOCK b1.
 
 SELECTION-SCREEN BEGIN OF BLOCK b2 WITH FRAME TITLE TEXT-001.
 
-  PARAMETERS: p_path TYPE string LOWER CASE OBLIGATORY.
+  PARAMETERS: p_path TYPE string LOWER CASE.
 
 SELECTION-SCREEN END OF BLOCK b2.
+
+AT SELECTION-SCREEN OUTPUT.
+  LOOP AT SCREEN.
+    IF screen-name CS 'P_PATH'.
+      IF p_upload = 'X'.
+        screen-active = '1'.
+        screen-output = '1'.
+        screen-input  = '1'.
+      ELSE.
+        screen-active = '0'.
+        screen-output = '0'.
+        screen-input  = '0'.
+      ENDIF.
+    ENDIF.
+    MODIFY SCREEN.
+  ENDLOOP.
 
 AT SELECTION-SCREEN ON VALUE-REQUEST FOR p_path.
 
