@@ -159,9 +159,9 @@ CLASS lcl_ecofi_split IMPLEMENTATION.
       TRY.
           zxx_cl_file_utils=>move_server_file(
             EXPORTING
-              i_sourcepath = lv_dir
-              i_targetpath = lv_dir && co_processed_dir
-              i_filename   = lv_filename ).
+              i_sourcepath = CONV #( lv_dir )
+              i_targetpath = CONV #( lv_dir && co_processed_dir )
+              i_filename   = CONV #( lv_filename ) ).
         CATCH zfi_cl_cx_file.
           WRITE: / 'No se ha podido mover a procesados/:', lv_filename.
       ENDTRY.
@@ -308,16 +308,23 @@ CLASS lcl_ecofi_split IMPLEMENTATION.
 
   METHOD get_server_directory.
 
+    " E_DIRECTORY exige TYPE RSFILLST-DIRNAME (char de longitud fija), no
+    " STRING - se usa una variable intermedia y se pasa a STRING con
+    " CONCATENATE (que, a diferencia de &&, elimina los blancos finales
+    " propios de un campo de longitud fija).
+    DATA: lv_raw_dir TYPE rsfillst-dirname.
+
     TRY.
         zxx_cl_file_utils=>get_directory(
           EXPORTING i_logical_path = co_logical_path
-          IMPORTING e_directory    = rv_directory ).
-
-        REPLACE ALL OCCURRENCES OF '*' IN rv_directory WITH ''.
-
+          IMPORTING e_directory    = lv_raw_dir ).
       CATCH zfi_cl_cx_file.
-        CLEAR rv_directory.
+        RETURN.
     ENDTRY.
+
+    CONCATENATE lv_raw_dir '' INTO rv_directory.
+
+    REPLACE ALL OCCURRENCES OF '*' IN rv_directory WITH ''.
 
   ENDMETHOD.
 
