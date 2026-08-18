@@ -208,8 +208,8 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
       RETURN.
     ENDIF.
 
-    DATA(lv_auszug) = build_auszug( it_items = lt_items iv_seq = '00001' ).
-    DATA(lt_umsatz) = build_umsatz( it_items = lt_items iv_seq = '00001' ).
+    DATA(lv_auszug) = build_auszug( it_items = lt_items iv_seq = `00001` ).
+    DATA(lt_umsatz) = build_umsatz( it_items = lt_items iv_seq = `00001` ).
 
     DATA(lv_auszug_path) = gv_tmp_path && 'AUSZUG_TEST.txt'.
     DATA(lv_umsatz_path) = gv_tmp_path && 'UMSATZ_TEST.txt'.
@@ -226,7 +226,7 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
   METHOD process_dev_file.
 
     TRY.
-        go_file_log->create_log( EXPORTING iv_filename = iv_filename
+        go_file_log->create_log( EXPORTING iv_filename = CONV #( iv_filename )
                                   IMPORTING es_file_log = DATA(ls_file_log) ).
       CATCH zfi_cl_cx.
         WRITE: / 'No se ha podido registrar en ZFI_T_FILE_LOG:', iv_filename.
@@ -250,7 +250,7 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
     ls_file_log-importe = REDUCE zfi_t_file_log-importe(
       INIT s = 0 FOR item IN lt_items NEXT s = s + item-importe_cent / 100 ).
 
-    DATA(lv_seq) = '00001'. " PENDIENTE: numero de secuencia real del extracto, ver docs/DF_resumen.md
+    DATA(lv_seq) = `00001`. " PENDIENTE: numero de secuencia real del extracto, ver docs/DF_resumen.md
 
     DATA(lv_auszug) = build_auszug( it_items = lt_items iv_seq = lv_seq ).
     DATA(lt_umsatz) = build_umsatz( it_items = lt_items iv_seq = lv_seq ).
