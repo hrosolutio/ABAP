@@ -63,15 +63,21 @@ docs/
    `lcl_devoluciones_crea`, la constante `co_bank_code` (hoy vacía a
    propósito) — sin ese valor no se genera un `AUSZUG`/`UMSATZ` válido. Ver
    "Pendiente" abajo.
-5. Activar.
-6. **Primera prueba recomendada: modo Upload.** Coge un `_DEV` real (por
+5. **En AL11**, dentro de la carpeta física de la ruta lógica
+   `ZFICA_COBROS_ECOFI` (la misma que usa `zfi_r_ecofi_split`), crear a
+   mano las subcarpetas **`tmp/`**, **`procesados/`** y **`error/`** si no
+   existen ya — `OPEN DATASET` no las crea solo, y si faltan el programa no
+   escribe ningún fichero (desde esta versión al menos avisa por pantalla
+   en vez de decir "generado" sin haberlo hecho).
+6. Activar.
+7. **Primera prueba recomendada: modo Upload.** Coge un `_DEV` real (por
    ejemplo el que generó `zfi_r_ecofi_split` en su última prueba) y
    ejecútalo en modo Upload. El programa deja `AUSZUG_TEST.txt` /
    `UMSATZ_TEST.txt` en la carpeta `tmp/` del servidor — revísalos a mano
    contra los ejemplos de `docs/DF_resumen.md` antes de someter `RFKKA00`
    con ellos manualmente (`SE38` → `RFKKA00` → `p_auszf`/`p_umsf` apuntando
    a esos ficheros, `p_xcre = X`) para la primera validación real.
-7. Solo cuando el paso 6 haya confirmado que `RFKKA00` acepta el formato,
+8. Solo cuando el paso 7 haya confirmado que `RFKKA00` acepta el formato,
    probar el modo **Server** completo (genera, somete y traza
    automáticamente).
 

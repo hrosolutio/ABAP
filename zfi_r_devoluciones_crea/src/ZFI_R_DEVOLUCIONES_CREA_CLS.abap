@@ -94,8 +94,9 @@ CLASS lcl_devoluciones_crea DEFINITION.
       read_server_file IMPORTING iv_path         TYPE string
                         RETURNING VALUE(rt_lines) TYPE string_table,
 
-      write_server_file IMPORTING iv_path  TYPE string
-                                   it_lines TYPE string_table,
+      write_server_file IMPORTING iv_path        TYPE string
+                                   it_lines       TYPE string_table
+                         RETURNING VALUE(rv_ok)   TYPE flag,
 
       parse_dev_lines IMPORTING it_lines       TYPE string_table
                        RETURNING VALUE(rt_items) TYPE ty_t_item,
@@ -214,8 +215,13 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
     DATA(lv_auszug_path) = gv_tmp_path && 'AUSZUG_TEST.txt'.
     DATA(lv_umsatz_path) = gv_tmp_path && 'UMSATZ_TEST.txt'.
 
-    write_server_file( iv_path = lv_auszug_path it_lines = VALUE #( ( lv_auszug ) ) ).
-    write_server_file( iv_path = lv_umsatz_path it_lines = lt_umsatz ).
+    DATA(lv_ok_auszug) = write_server_file( iv_path = lv_auszug_path it_lines = VALUE #( ( lv_auszug ) ) ).
+    DATA(lv_ok_umsatz) = write_server_file( iv_path = lv_umsatz_path it_lines = lt_umsatz ).
+
+    IF lv_ok_auszug = abap_false OR lv_ok_umsatz = abap_false.
+      WRITE: / 'No se han podido generar los ficheros - revisa que exista la carpeta', gv_tmp_path.
+      RETURN.
+    ENDIF.
 
     WRITE: / 'AUSZUG generado:', lv_auszug_path.
     WRITE: / 'UMSATZ generado:', lv_umsatz_path, '(', lines( lt_umsatz ), 'líneas)'.
@@ -266,8 +272,18 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
     DATA(lv_auszug_path) = gv_tmp_path && lv_auszug_name.
     DATA(lv_umsatz_path) = gv_tmp_path && lv_umsatz_name.
 
-    write_server_file( iv_path = lv_auszug_path it_lines = VALUE #( ( lv_auszug ) ) ).
-    write_server_file( iv_path = lv_umsatz_path it_lines = lt_umsatz ).
+    DATA(lv_ok_auszug) = write_server_file( iv_path = lv_auszug_path it_lines = VALUE #( ( lv_auszug ) ) ).
+    DATA(lv_ok_umsatz) = write_server_file( iv_path = lv_umsatz_path it_lines = lt_umsatz ).
+
+    IF lv_ok_auszug = abap_false OR lv_ok_umsatz = abap_false.
+      ls_file_log-status = c_st_error.
+      ls_file_log-fecha_processo = sy-datum.
+      ls_file_log-hora_processo  = sy-uzeit.
+      ls_file_log-usuario        = sy-uname.
+      UPDATE zfi_t_file_log FROM ls_file_log.
+      transport_files( is_file_log = ls_file_log iv_path = gv_error_path ).
+      RETURN.
+    ENDIF.
 
     ls_file_log-file_name_header = lv_auszug_name.
     ls_file_log-file_name_items  = lv_umsatz_name.
@@ -365,9 +381,11 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
 
   METHOD write_server_file.
 
+    CLEAR rv_ok.
+
     OPEN DATASET iv_path FOR OUTPUT IN TEXT MODE ENCODING DEFAULT.
     IF sy-subrc <> 0.
-      MESSAGE |No se ha podido escribir { iv_path } en el servidor.| TYPE 'I'.
+      WRITE: / 'No se ha podido escribir en el servidor (¿existe la carpeta?):', iv_path.
       RETURN.
     ENDIF.
 
@@ -376,6 +394,8 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
     ENDLOOP.
 
     CLOSE DATASET iv_path.
+
+    rv_ok = abap_true.
 
   ENDMETHOD.
 
