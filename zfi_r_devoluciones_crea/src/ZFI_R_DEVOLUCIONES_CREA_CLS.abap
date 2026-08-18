@@ -488,6 +488,7 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
 
     DATA: lv_runid    TYPE runidbs_kk,
           lv_rundat    TYPE fkkbstmv-laufd,
+          lv_rlerr     TYPE fkkbstmv-rlerr,
           lv_progname  TYPE char20,
           lv_data_export TYPE REF TO data,
           lv_jobname   TYPE tbtco-jobname,
@@ -559,16 +560,16 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
         WAIT UP TO 1 SECONDS.
         CONTINUE.
       ELSE.
-        SELECT SINGLE rlerr FROM fkkbstmv INTO @DATA(lv_rlerr)
-          WHERE laufd = @lv_rundat AND laufi = @lv_runid.
+        SELECT SINGLE rlerr FROM fkkbstmv INTO lv_rlerr
+          WHERE laufd = lv_rundat AND laufi = lv_runid.
         IF sy-subrc = 0 AND lv_rlerr = 0.
           ev_ok = abap_true.
           go_msg_logs->append_messages(
             iv_msg_type   = 'S'
             iv_msg_class  = 'ZFI_MC_001'
             iv_msg_number = '016'
-            iv_param_v1   = CONV #( cs_file_log-file_name(50) )
-            iv_param_v2   = CONV #( cs_file_log-file_name+50(50) ) ).
+            iv_param_v1   = cs_file_log-file_name(50)
+            iv_param_v2   = cs_file_log-file_name+50(50) ).
         ELSE.
           go_msg_logs->append_messages(
             iv_msg_type   = 'E'
@@ -610,8 +611,8 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
           iv_msg_type   = 'E'
           iv_msg_class  = 'ZFI_MC_001'
           iv_msg_number = '014'
-          iv_param_v1   = condense( CONV symsgv( is_file_log-file_name(50) ) )
-          iv_param_v2   = condense( CONV symsgv( is_file_log-file_name+50(50) ) ) ).
+          iv_param_v1   = condense( is_file_log-file_name(50) )
+          iv_param_v2   = condense( is_file_log-file_name+50(50) ) ).
     ENDTRY.
 
   ENDMETHOD.
