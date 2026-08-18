@@ -393,7 +393,7 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
 
       " Importe: bloque de digitos justo antes de "EUR" (en centimos)
       DATA(lv_before_eur) = substring( val = lv_line len = lv_eur_off ).
-      FIND REGEX '(\d+)\s*$' IN lv_before_eur SUBMATCHES DATA(lv_digits).
+      FIND PCRE '(\d+)\s*$' IN lv_before_eur SUBMATCHES DATA(lv_digits).
       CHECK sy-subrc = 0.
 
       " Nº de documento SAP: 12 digitos justo despues de "EUR  " (ver
@@ -434,10 +434,10 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
       ( co_bank_account ) "2  cuenta
       ( iv_seq )           "3  nº secuencia extracto
       ( date_dots( ) )      "4  fecha
-      ( 'EUR' )             "5  moneda
-      ( '0.00' )            "6  saldo inicial
+      ( `EUR` )             "5  moneda
+      ( `0.00` )            "6  saldo inicial
       ( lv_total )          "7  movimiento total
-      ( '0.00' )            "8  (sin identificar, 0.00 en los ejemplos reales)
+      ( `0.00` )            "8  (sin identificar, 0.00 en los ejemplos reales)
       ( lv_total )          "9  saldo final
       ( ` ` ) ( ` ` ) ( ` ` ) ( ` ` ) ( ` ` ) ( ` ` ) ( ` ` ) ( ` ` )  "10-17 reservados
       ( `` )                "18 (vacio final, replica el ';' de cierre)
@@ -464,7 +464,7 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
         ( ` ` ) ( ` ` ) ( ` ` ) "8-10 reservados
         ( lv_amount )          "11 importe
         ( ` ` )                "12 categoria - PENDIENTE, no disponible en el _DEV
-        ( '0' )                "13 constante en los ejemplos reales
+        ( `0` )                "13 constante en los ejemplos reales
         ( date_spaces( ) )     "14 fecha (coincide con la del AUSZUG)
         ( ` ` ) ( ` ` ) ( ` ` ) ( ` ` ) ( ` ` ) ( ` ` ) ( ` ` )
         ( ` ` ) ( ` ` ) ( ` ` ) ( ` ` ) ( ` ` ) ( ` ` ) ( ` ` )
