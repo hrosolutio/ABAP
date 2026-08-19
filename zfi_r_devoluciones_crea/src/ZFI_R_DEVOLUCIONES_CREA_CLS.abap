@@ -64,6 +64,7 @@ CLASS lcl_devoluciones_crea DEFINITION.
 
     METHODS:
       constructor IMPORTING iv_path   TYPE string
+                            iv_outdir TYPE string
                             iv_upload TYPE c,
 
       execute RAISING zfi_cl_cx_load_file zfi_cl_cx_file.
@@ -71,6 +72,7 @@ CLASS lcl_devoluciones_crea DEFINITION.
   PRIVATE SECTION.
 
     DATA: gv_path        TYPE string,
+          gv_outdir      TYPE string,
           gv_upload      TYPE c,
           gv_root_path   TYPE string,
           gv_tmp_path    TYPE eseftappl,
@@ -132,6 +134,7 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
 
   METHOD constructor.
     gv_path   = iv_path.
+    gv_outdir = iv_outdir.
     gv_upload = iv_upload.
   ENDMETHOD.
 
@@ -184,10 +187,16 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
 
   METHOD execute_upload.
 
-    " Prueba rapida sin AL11: sube un _DEV local y genera/somete el lote,
-    " pero SIN traza en ZFI_T_FILE_LOG ni movimiento de ficheros (solo
-    " para validar la generacion de AUSZUG/UMSATZ + la llamada a RFKKA00).
-    get_directories( ).
+    " Prueba rapida sin AL11 ni ruta logica: sube un _DEV local y genera el
+    " AUSZUG/UMSATZ directamente en la carpeta fisica que se indique en
+    " P_OUTDIR (SIN traza en ZFI_T_FILE_LOG ni movimiento de ficheros,
+    " solo para validar la generacion antes de someter RFKKA00 a mano).
+    IF gv_outdir IS INITIAL.
+      MESSAGE 'Indica en P_OUTDIR una carpeta física del servidor donde escribir los ficheros de prueba.' TYPE 'E'.
+      RETURN.
+    ENDIF.
+
+    DATA(lv_outdir) = COND string( WHEN gv_outdir CP '*/' THEN gv_outdir ELSE gv_outdir && '/' ).
 
     DATA: lt_lines TYPE string_table.
 
@@ -212,14 +221,14 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
     DATA(lv_auszug) = build_auszug( it_items = lt_items iv_seq = `00001` ).
     DATA(lt_umsatz) = build_umsatz( it_items = lt_items iv_seq = `00001` ).
 
-    DATA(lv_auszug_path) = gv_tmp_path && 'AUSZUG_TEST.txt'.
-    DATA(lv_umsatz_path) = gv_tmp_path && 'UMSATZ_TEST.txt'.
+    DATA(lv_auszug_path) = lv_outdir && 'AUSZUG_TEST.txt'.
+    DATA(lv_umsatz_path) = lv_outdir && 'UMSATZ_TEST.txt'.
 
     DATA(lv_ok_auszug) = write_server_file( iv_path = lv_auszug_path it_lines = VALUE #( ( lv_auszug ) ) ).
     DATA(lv_ok_umsatz) = write_server_file( iv_path = lv_umsatz_path it_lines = lt_umsatz ).
 
     IF lv_ok_auszug = abap_false OR lv_ok_umsatz = abap_false.
-      WRITE: / 'No se han podido generar los ficheros - revisa que exista la carpeta', gv_tmp_path.
+      WRITE: / 'No se han podido generar los ficheros - revisa que exista la carpeta', lv_outdir.
       RETURN.
     ENDIF.
 

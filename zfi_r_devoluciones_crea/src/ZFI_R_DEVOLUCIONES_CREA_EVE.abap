@@ -20,13 +20,14 @@ SELECTION-SCREEN END OF BLOCK b1.
 
 SELECTION-SCREEN BEGIN OF BLOCK b2 WITH FRAME TITLE TEXT-001.
 
-  PARAMETERS: p_path TYPE string LOWER CASE.
+  PARAMETERS: p_path   TYPE string LOWER CASE,
+              p_outdir TYPE string LOWER CASE.
 
 SELECTION-SCREEN END OF BLOCK b2.
 
 AT SELECTION-SCREEN OUTPUT.
   LOOP AT SCREEN.
-    IF screen-name CS 'P_PATH'.
+    IF screen-name CS 'P_PATH' OR screen-name CS 'P_OUTDIR'.
       IF p_upload = 'X'.
         screen-active = '1'.
         screen-output = '1'.
