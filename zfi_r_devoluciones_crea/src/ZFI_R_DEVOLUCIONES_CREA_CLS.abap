@@ -25,7 +25,6 @@ CLASS lcl_devoluciones_crea DEFINITION.
       co_logical_path  TYPE pathintern           VALUE 'ZFICA_COBROS_ECOFI',
       co_processed_dir TYPE string                VALUE 'procesados/',
       co_error_dir     TYPE string                VALUE 'error/',
-      co_tmp_dir       TYPE string                VALUE 'tmp/',
       co_suffix_dev    TYPE string                VALUE '_DEV',
       co_eur_tag       TYPE string                VALUE 'EUR',
       co_tcode_mc      TYPE syst_tcode             VALUE 'FPB17',
@@ -64,7 +63,6 @@ CLASS lcl_devoluciones_crea DEFINITION.
 
     METHODS:
       constructor IMPORTING iv_path   TYPE string
-                            iv_outdir TYPE string
                             iv_upload TYPE c,
 
       execute RAISING zfi_cl_cx_load_file zfi_cl_cx_file.
@@ -72,10 +70,8 @@ CLASS lcl_devoluciones_crea DEFINITION.
   PRIVATE SECTION.
 
     DATA: gv_path        TYPE string,
-          gv_outdir      TYPE string,
           gv_upload      TYPE c,
           gv_root_path   TYPE string,
-          gv_tmp_path    TYPE eseftappl,
           gv_backup_path TYPE eseftappl,
           gv_error_path  TYPE eseftappl,
           go_file_log    TYPE REF TO zfi_cl_update_file_log,
@@ -99,6 +95,13 @@ CLASS lcl_devoluciones_crea DEFINITION.
       write_server_file IMPORTING iv_path        TYPE string
                                    it_lines       TYPE string_table
                          RETURNING VALUE(rv_ok)   TYPE flag,
+
+      get_filename_from_path IMPORTING iv_path            TYPE string
+                              RETURNING VALUE(rv_filename) TYPE string,
+
+      download_lines IMPORTING iv_filename TYPE string
+                                it_lines    TYPE string_table
+                      RETURNING VALUE(rv_ok) TYPE flag,
 
       parse_dev_lines IMPORTING it_lines       TYPE string_table
                        RETURNING VALUE(rt_items) TYPE ty_t_item,
@@ -134,7 +137,6 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
 
   METHOD constructor.
     gv_path   = iv_path.
-    gv_outdir = iv_outdir.
     gv_upload = iv_upload.
   ENDMETHOD.
 
@@ -187,17 +189,10 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
 
   METHOD execute_upload.
 
-    " Prueba rapida sin AL11 ni ruta logica: sube un _DEV local y genera el
-    " AUSZUG/UMSATZ directamente en la carpeta fisica que se indique en
-    " P_OUTDIR (SIN traza en ZFI_T_FILE_LOG ni movimiento de ficheros,
-    " solo para validar la generacion antes de someter RFKKA00 a mano).
-    IF gv_outdir IS INITIAL.
-      MESSAGE 'Indica en P_OUTDIR una carpeta física del servidor donde escribir los ficheros de prueba.' TYPE 'E'.
-      RETURN.
-    ENDIF.
-
-    DATA(lv_outdir) = COND string( WHEN gv_outdir CP '*/' THEN gv_outdir ELSE gv_outdir && '/' ).
-
+    " Prueba rapida sin AL11 ni ruta logica: sube un _DEV local y descarga
+    " el AUSZUG/UMSATZ generado a la MISMA carpeta local de donde se subio
+    " (igual criterio que ZFI_R_ECOFI_SPLIT), sin traza en ZFI_T_FILE_LOG
+    " ni someter RFKKA00 automaticamente (solo para validar la generacion).
     DATA: lt_lines TYPE string_table.
 
     cl_gui_frontend_services=>gui_upload(
@@ -221,20 +216,16 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
     DATA(lv_auszug) = build_auszug( it_items = lt_items iv_seq = `00001` ).
     DATA(lt_umsatz) = build_umsatz( it_items = lt_items iv_seq = `00001` ).
 
-    DATA(lv_auszug_path) = lv_outdir && 'AUSZUG_TEST.txt'.
-    DATA(lv_umsatz_path) = lv_outdir && 'UMSATZ_TEST.txt'.
-
-    DATA(lv_ok_auszug) = write_server_file( iv_path = lv_auszug_path it_lines = VALUE #( ( lv_auszug ) ) ).
-    DATA(lv_ok_umsatz) = write_server_file( iv_path = lv_umsatz_path it_lines = lt_umsatz ).
+    DATA(lv_ok_auszug) = download_lines( iv_filename = `AUSZUG_TEST.txt` it_lines = VALUE #( ( lv_auszug ) ) ).
+    DATA(lv_ok_umsatz) = download_lines( iv_filename = `UMSATZ_TEST.txt` it_lines = lt_umsatz ).
 
     IF lv_ok_auszug = abap_false OR lv_ok_umsatz = abap_false.
-      WRITE: / 'No se han podido generar los ficheros - revisa que exista la carpeta', lv_outdir.
       RETURN.
     ENDIF.
 
-    WRITE: / 'AUSZUG generado:', lv_auszug_path.
-    WRITE: / 'UMSATZ generado:', lv_umsatz_path, '(', lines( lt_umsatz ), 'líneas)'.
-    WRITE: / 'Revisa los ficheros en el servidor antes de someter RFKKA00 a mano.'.
+    WRITE: / 'AUSZUG generado: AUSZUG_TEST.txt'.
+    WRITE: / 'UMSATZ generado: UMSATZ_TEST.txt (', lines( lt_umsatz ), 'líneas)'.
+    WRITE: / 'Ambos junto al fichero _DEV que subiste. Revísalos antes de someter RFKKA00 a mano.'.
 
   ENDMETHOD.
 
@@ -278,8 +269,8 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
     DATA(lv_auszug_name) = |AUSZUG_{ co_dev }_{ lv_suffix }.txt|.
     DATA(lv_umsatz_name) = |UMSATZ_{ co_dev }_{ lv_suffix }.txt|.
 
-    DATA(lv_auszug_path) = gv_tmp_path && lv_auszug_name.
-    DATA(lv_umsatz_path) = gv_tmp_path && lv_umsatz_name.
+    DATA(lv_auszug_path) = gv_root_path && lv_auszug_name.
+    DATA(lv_umsatz_path) = gv_root_path && lv_umsatz_name.
 
     DATA(lv_ok_auszug) = write_server_file( iv_path = lv_auszug_path it_lines = VALUE #( ( lv_auszug ) ) ).
     DATA(lv_ok_umsatz) = write_server_file( iv_path = lv_umsatz_path it_lines = lt_umsatz ).
@@ -333,7 +324,6 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
     CONCATENATE lv_raw_dir '' INTO gv_root_path.
     REPLACE ALL OCCURRENCES OF '*' IN gv_root_path WITH ''.
 
-    CONCATENATE gv_root_path co_tmp_dir       INTO gv_tmp_path.
     CONCATENATE gv_root_path co_processed_dir INTO gv_backup_path.
     CONCATENATE gv_root_path co_error_dir     INTO gv_error_path.
 
@@ -403,6 +393,43 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
     ENDLOOP.
 
     CLOSE DATASET iv_path.
+
+    rv_ok = abap_true.
+
+  ENDMETHOD.
+
+  METHOD get_filename_from_path.
+
+    SPLIT iv_path AT '\' INTO TABLE DATA(lt_win).
+    IF lines( lt_win ) > 1.
+      rv_filename = lt_win[ lines( lt_win ) ].
+      RETURN.
+    ENDIF.
+
+    SPLIT iv_path AT '/' INTO TABLE DATA(lt_unix).
+    rv_filename = lt_unix[ lines( lt_unix ) ].
+
+  ENDMETHOD.
+
+  METHOD download_lines.
+
+    " Sustituye el nombre de fichero de gv_path por iv_filename, manteniendo
+    " la misma carpeta local (mismo criterio que ZFI_R_ECOFI_SPLIT_CLS)
+    DATA(lv_dir_len) = strlen( gv_path ) - strlen( get_filename_from_path( gv_path ) ).
+    DATA(lv_target)  = substring( val = gv_path len = lv_dir_len ) && iv_filename.
+
+    DATA(lt_lines) = it_lines.
+
+    cl_gui_frontend_services=>gui_download(
+      EXPORTING filename                = lv_target
+                filetype                = 'ASC'
+      CHANGING  data_tab                = lt_lines
+      EXCEPTIONS OTHERS                 = 1 ).
+
+    IF sy-subrc <> 0.
+      WRITE: / 'No se ha podido escribir', iv_filename, 'en el PC.'.
+      RETURN.
+    ENDIF.
 
     rv_ok = abap_true.
 
@@ -624,13 +651,13 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
         IF is_file_log-file_name_header IS NOT INITIAL AND is_file_log-file_name_items IS NOT INITIAL.
           zxx_cl_file_utils=>move_server_file(
             EXPORTING
-              i_sourcepath = gv_tmp_path
+              i_sourcepath = CONV #( gv_root_path )
               i_targetpath = iv_path
               i_filename   = CONV #( is_file_log-file_name_header ) ).
 
           zxx_cl_file_utils=>move_server_file(
             EXPORTING
-              i_sourcepath = gv_tmp_path
+              i_sourcepath = CONV #( gv_root_path )
               i_targetpath = iv_path
               i_filename   = CONV #( is_file_log-file_name_items ) ).
         ENDIF.

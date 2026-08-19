@@ -26,14 +26,13 @@ INCLUDE zfi_r_devoluciones_crea_cls.
 
 START-OF-SELECTION.
 
-*En modo Upload se debe indicar el fichero local y la carpeta de salida
-  IF p_upload EQ 'X' AND ( p_path IS INITIAL OR p_outdir IS INITIAL ).
-    MESSAGE 'Para carga local se debe indicar el fichero y la carpeta de salida.' TYPE 'E'.
+*En modo Upload se debe indicar el fichero local
+  IF p_upload EQ 'X' AND p_path IS INITIAL.
+    MESSAGE 'Para carga local se debe indicar el fichero.' TYPE 'E'.
   ENDIF.
 
   TRY.
       DATA(go_devoluciones_crea) = NEW lcl_devoluciones_crea( iv_path   = p_path
-                                                                iv_outdir = p_outdir
                                                                 iv_upload = p_upload ).
       go_devoluciones_crea->execute( ).
 

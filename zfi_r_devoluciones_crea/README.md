@@ -30,19 +30,22 @@ valores por defecto porque el `_DEV` no lleva esa información (ver
 **Antes de dar esto por bueno hace falta una prueba real en Integración.**
 
 Modo de ejecución: **servidor o upload**, mismo patrón que
-`zfi_r_ecofi_split`:
+`zfi_r_ecofi_split` — **norma acordada: el `AUSZUG`/`UMSATZ` se deja
+siempre en la misma carpeta de donde se cargó el `_DEV`**, tanto en local
+como en servidor (así hasta que se diga lo contrario):
 - **Server**: escanea automáticamente todos los ficheros `*_DEV*` de la
   carpeta de la ruta lógica `ZFICA_COBROS_ECOFI` (la misma donde
-  `ZFI_R_ECOFI_SPLIT` deja sus `_DEV`), genera `AUSZUG`/`UMSATZ`, somete
-  `RFKKA00` y traza en `ZFI_T_FILE_LOG`.
+  `ZFI_R_ECOFI_SPLIT` deja sus `_DEV`), genera `AUSZUG`/`UMSATZ` **en esa
+  misma carpeta** (no en una subcarpeta `tmp/`), somete `RFKKA00` y traza
+  en `ZFI_T_FILE_LOG`.
 - **Upload**: prueba rápida con un `_DEV` local (`P_PATH`) — genera
-  `AUSZUG`/`UMSATZ` en la carpeta física que se indique en `P_OUTDIR`
-  (cualquier carpeta que ya exista en el servidor de aplicaciones, no hace
-  falta que sea la ruta lógica `ZFICA_COBROS_ECOFI` ni que exista AL11
-  configurado para nada de esto — precisamente porque `ZFICA_COBROS_ECOFI`
-  **todavía no está creada en ningún sistema**, ver "Pendiente"). **Sin**
-  traza en `ZFI_T_FILE_LOG` ni mover ficheros, solo para validar la
-  generación antes de someter `RFKKA00` a mano.
+  `AUSZUG`/`UMSATZ` y los descarga a la **misma carpeta local** de donde
+  se subió el `_DEV`, sin depender de AL11 ni de la ruta lógica
+  `ZFICA_COBROS_ECOFI` para nada de esto (precisamente porque
+  `ZFICA_COBROS_ECOFI` **todavía no está creada en ningún sistema**, ver
+  "Pendiente"). **Sin** traza en `ZFI_T_FILE_LOG` ni someter `RFKKA00`
+  automáticamente, solo para validar la generación antes de someterlo a
+  mano.
 
 ## Contenido del repositorio
 
@@ -61,31 +64,32 @@ docs/
 1. Crear el programa **`ZFI_R_DEVOLUCIONES_CREA`** (tipo *Report ejecutable*).
 2. Crear los includes **`ZFI_R_DEVOLUCIONES_CREA_TOP`**, **`_EVE`**, **`_CLS`**
    con el contenido de `src/`, incluidos en ese orden.
-3. Crear los elementos de texto **`TEXT-001`** (título bloque `P_PATH`/
-   `P_OUTDIR`, p.ej. "Fichero y carpeta de salida") y **`TEXT-002`** (título
-   bloque de modo), igual que en `zfi_r_ecofi_split`.
+3. Crear el elemento de texto **`TEXT-001`** (título bloque `P_PATH`, p.ej.
+   "Fichero `_DEV`") y **`TEXT-002`** (título bloque de modo), igual que en
+   `zfi_r_ecofi_split`.
 4. **Antes de nada**, rellenar en `ZFI_R_DEVOLUCIONES_CREA_CLS`, clase
    `lcl_devoluciones_crea`, la constante `co_bank_code` (hoy vacía a
    propósito) — sin ese valor no se genera un `AUSZUG`/`UMSATZ` válido. Ver
    "Pendiente" abajo.
 5. Activar.
 6. **Primera prueba: modo Upload.** Coge un `_DEV` de prueba (el que ya
-   generó `zfi_r_ecofi_split` en modo Upload vale) y ejecuta en modo Upload
-   indicando en `P_OUTDIR` cualquier carpeta física que ya exista en el
-   servidor de aplicaciones (pregunta a Basis si no conoces ninguna, o usa
-   una ruta de la que ya sepas que se puede escribir). El programa deja
-   `AUSZUG_TEST.txt`/`UMSATZ_TEST.txt` ahí — revísalos a mano contra los
-   ejemplos de `docs/DF_resumen.md` antes de someter `RFKKA00` con ellos
-   manualmente (`SE38` → `RFKKA00` → `p_auszf`/`p_umsf` apuntando a esos
-   ficheros, `p_xcre = X`) para la primera validación real.
+   generó `zfi_r_ecofi_split` en modo Upload vale) y ejecuta en modo
+   Upload. El programa descarga `AUSZUG_TEST.txt`/`UMSATZ_TEST.txt` a la
+   misma carpeta local de donde subiste el `_DEV` — revísalos a mano
+   contra los ejemplos de `docs/DF_resumen.md` antes de someter `RFKKA00`
+   con ellos manualmente (`SE38` → `RFKKA00` → `p_auszf`/`p_umsf`
+   apuntando a esos ficheros ya subidos al servidor por otra vía, p.ej.
+   AL11 o CG3Z, `p_xcre = X`) para la primera validación real.
 7. **El modo Server necesita antes que Basis/funcional den de alta la ruta
    lógica `ZFICA_COBROS_ECOFI`** (transacción `FILE`) — hoy **no existe en
    ningún sistema**, ni Integración ni DES (solo se ha probado
    `zfi_r_ecofi_split` en modo Upload). Dentro de esa carpeta física hay
-   que crear además las subcarpetas `tmp/`, `procesados/` y `error/` (`OPEN
-   DATASET` no las crea solas). Solo cuando eso exista y el paso 6 haya
-   confirmado que `RFKKA00` acepta el formato, probar el modo Server
-   completo (genera, somete y traza automáticamente).
+   que crear además las subcarpetas `procesados/` y `error/` (`OPEN
+   DATASET` no las crea solas; `AUSZUG`/`UMSATZ` se generan directamente en
+   la carpeta raíz, junto al `_DEV`, no en una subcarpeta aparte). Solo
+   cuando eso exista y el paso 6 haya confirmado que `RFKKA00` acepta el
+   formato, probar el modo Server completo (genera, somete y traza
+   automáticamente).
 
 ## Pendiente / a definir con el cliente
 

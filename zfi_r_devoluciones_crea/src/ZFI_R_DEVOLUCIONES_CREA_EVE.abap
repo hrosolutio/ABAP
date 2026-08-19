@@ -7,9 +7,10 @@
 *     carpeta donde ZFI_R_ECOFI_SPLIT deja sus ficheros _DEV). No hace
 *     falta indicar ningun fichero: P_PATH se oculta.
 *   - p_upload: prueba rapida con un _DEV local (sin AL11), sube el
-*     fichero via GUI y genera/somete el lote iguel que en modo servidor,
-*     pero sin traza en ZFI_T_FILE_LOG ni movimiento de ficheros (solo
-*     para probar la generacion de AUSZUG/UMSATZ y la llamada a RFKKA00).
+*     fichero via GUI, genera AUSZUG/UMSATZ y los descarga a la MISMA
+*     carpeta local del _DEV subido (igual criterio que ZFI_R_ECOFI_SPLIT:
+*     el fichero se queda donde se cargo), sin traza en ZFI_T_FILE_LOG ni
+*     someter RFKKA00 automaticamente (solo para probar la generacion).
 
 SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-002.
 
@@ -20,14 +21,13 @@ SELECTION-SCREEN END OF BLOCK b1.
 
 SELECTION-SCREEN BEGIN OF BLOCK b2 WITH FRAME TITLE TEXT-001.
 
-  PARAMETERS: p_path   TYPE string LOWER CASE,
-              p_outdir TYPE string LOWER CASE.
+  PARAMETERS: p_path TYPE string LOWER CASE.
 
 SELECTION-SCREEN END OF BLOCK b2.
 
 AT SELECTION-SCREEN OUTPUT.
   LOOP AT SCREEN.
-    IF screen-name CS 'P_PATH' OR screen-name CS 'P_OUTDIR'.
+    IF screen-name CS 'P_PATH'.
       IF p_upload = 'X'.
         screen-active = '1'.
         screen-output = '1'.
