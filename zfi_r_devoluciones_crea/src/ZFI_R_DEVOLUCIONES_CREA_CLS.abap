@@ -466,9 +466,20 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
 
   METHOD format_amount.
 
-    DATA(lv_abs) = abs( iv_cent ).
-    rv_result = |{ lv_abs / 100 DECIMALS = 2 }-|.
-    CONDENSE rv_result.
+    " Euros y centimos por aritmetica entera (DIV/MOD), sin usar "/" - con
+    " dos operandos TYPE i, "/" no da el decimal exacto (redondea a entero
+    " antes de aplicar DECIMALS, p.ej. 1459 / 100 -> "15.00" en vez de
+    " "14.59"), asi que se evita del todo.
+    DATA(lv_abs)   = abs( iv_cent ).
+    DATA(lv_euros) = lv_abs DIV 100.
+    DATA(lv_cents) = lv_abs MOD 100.
+
+    DATA(lv_cents_str) = |{ lv_cents }|.
+    IF strlen( lv_cents_str ) = 1.
+      lv_cents_str = |0{ lv_cents_str }|.
+    ENDIF.
+
+    rv_result = |{ lv_euros }.{ lv_cents_str }-|.
 
   ENDMETHOD.
 

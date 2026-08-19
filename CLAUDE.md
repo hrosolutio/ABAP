@@ -70,6 +70,23 @@ un valor que ya es del tipo que espera el parámetro — p.ej. un substring
 `campo(50)` pasado a un parámetro de tipo genérico compatible. Es solo un
 aviso, no bloquea la activación, pero conviene quitarlo cuando lo señale.
 
+## División `/` entre dos `TYPE i` redondea, no da el decimal exacto
+
+`lv_resultado = lv_entero_a / lv_entero_b.` (o dentro de un string template,
+`|{ lv_entero_a / lv_entero_b DECIMALS = 2 }|`) con **los dos operandos
+`TYPE i`** no calcula el cociente decimal real: redondea al entero más
+cercano y solo entonces aplica el formato de decimales — activa sin error
+ni aviso, así que no salta a la vista. Ejemplo real: convertir céntimos
+(`TYPE i`) a euros con `lv_cent / 100` daba `1459 / 100` → `"15.00"` en vez
+de `"14.59"`.
+
+**Regla:** para dividir dos enteros y quedarte con el resultado decimal
+exacto, no uses `/` a secas — separa la parte entera y el resto con `DIV` y
+`MOD` (aritmética entera explícita) y compón el string a mano, o convierte
+antes uno de los operandos a un tipo con decimales (`CONV p( ... )` con
+`DECIMALS` explícitos, o un campo `TYPE p DECIMALS n` de verdad) antes de
+dividir.
+
 ## Si GitHub falla
 
 Si la web de GitHub da error (incidencia de su lado, no del repo — se
