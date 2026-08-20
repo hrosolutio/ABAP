@@ -203,9 +203,39 @@ FKK_RLS_ITEM_SAVE_MASS
 8. `COMMIT WORK` (los FMs no parecen comitear ellos solos, a juzgar por
    cómo lo hace `LCL_RLOT->save()` a mano tras el `INSERT`).
 
-**Pendiente**: nombres exactos de campo dentro de `DFKKRK` (motivo,
-cta. compensación) y `DFKKRP` (importe, referencia/documento) — consultar
-en `SE11` la estructura de ambas.
+### Campos confirmados (`SE11`)
+
+**`DFKKRK`** (cabecera): `BUKRS`=sociedad (`1239`), `RLGRD`=motivo de
+devolución (`Z01`), `RLSKO`=cta. bancaria de compensación para devolución
+(`4305500150`/`4305500250` en DES), `WAERS`=moneda, `BLART`=clase doc.
+(`DV`), `HBKID`/`HKTID`=banco propio/clave cuenta (se derivan solos de
+`RLSKO`, confirmado en pantalla), `KEYR1`=lote (lo calcula
+`FKK_RLS_HDR_PREPARE`, no se rellena a mano).
+
+**`DFKKRP`** (posición): `BETRR`=importe de devolución (**en negativo**,
+confirmado con el error `>4703`). Para el documento original hay dos
+campos relacionados, sin confirmar aún cuál usar directamente en las
+llamadas a los FM (en pantalla se usa el primero):
+- `SELT1`/`SELW1` = tipo de selección / valor a buscar — es lo que ya
+  probamos en pantalla (`T.`=`B`, `Val.selección`=nº documento), un
+  mecanismo de búsqueda.
+- `OPBEL` = "Doc.pago p.devoluciones" — pinta a ser el campo final donde
+  queda el documento de pago que se devuelve, probablemente relleno tras
+  resolver la búsqueda anterior.
+
+También en `DFKKRP`: `BANKL`/`BANKK`/`BANKN`/`IBAN` (banco/IBAN del
+deudor) — **si se derivan solos al indicar el documento de pago original**
+(vía `SELT1`/`SELW1` u `OPBEL`), esto resolvería completamente el hueco que
+teníamos con el enfoque `RFKKA00` (el `_DEV` no lleva esos datos). Falta
+confirmar completando el flujo en pantalla hasta Grabar de verdad.
+
+`RLBEL`/`URBEL` en `DFKKRP` parecen campos de salida (nº del documento de
+devolución/abono generado tras contabilizar), no de entrada.
+
+**Pendiente**: completar el flujo en pantalla (`FP09`, Integración) con las
+3 posiciones de prueba hasta Grabar de verdad (sin depurar), para confirmar
+si el banco/IBAN del deudor se rellena solo al indicar el documento
+original.
 
 ## Enfoque descartado: `RFKKA00`/multicash (no usar, referencia solamente)
 
