@@ -2,39 +2,29 @@
 
 Implementa **RU_02** del DF *"Procedimiento Gestión de extornos"* (CDI_11):
 a partir del fichero `_DEV` (salida de [`zfi_r_ecofi_split/`](../zfi_r_ecofi_split/README.md),
-desarrollo 1), crea el lote de devoluciones en FI-CA.
+desarrollo 1), crea el lote de devoluciones en FI-CA vía la API real de
+`FP09` (localizada por depuración — ver `docs/DF_resumen.md`).
 
 Es el desarrollo 2 de 3 del proyecto CDI_11:
 1. **División del fichero ECOFI** → [`zfi_r_ecofi_split/`](../zfi_r_ecofi_split/README.md)
 2. **Creación del lote de devoluciones** → este programa.
 3. **Cierre y contabilización del lote** → [`zfi_r_devoluciones2/`](../zfi_r_devoluciones2/README.md)
 
-## Estado: PARADO, pendiente de depurar `FP09`
+## Estado: probado con éxito en Integración, pendiente de probar en SE38
 
-El DF pide expresamente la transacción **`FP09`** (alta manual de lote de
-pago) para RU_02. El código que hay hoy en `src/` está construido sobre
-`RFKKA00`/`FPB17` (el motor de carga masiva de extractos bancarios) por una
-lectura incorrecta del DF — **no es el camino a seguir**. Ver
-`docs/DF_resumen.md` ("Enfoque actual" / "Enfoque descartado") para el
-detalle completo.
+Reescrito sobre la API pública del grupo de función `FKR2` (dominio
+"Rückläuferstapel" = lote de devoluciones), localizada depurando el botón
+Grabar de `FP09` — no sobre `RFKKA00` (enfoque anterior, descartado por
+lectura incorrecta del DF; ver `docs/DF_resumen.md` para el detalle
+completo de la depuración).
 
-**Antes de tocar más código hace falta depurar `FP09` en SAP** (mismo método
-que ya funcionó para `zfi_fm_paylot_reverse`/`FP08` y
-`zfi_fm_payment_lot_clarify2`/`FPCPL`) para encontrar la cadena real de
-módulos de función que crea el lote — eso es trabajo que requiere acceso al
-sistema y no se puede hacer desde aquí.
+**Ya probado directamente vía los módulos de función** (sin pasar aún por
+este programa ABAP): en Integración, con 3 posiciones reales del `_DEV` de
+`zfi_r_ecofi_split`, se creó el lote `260819CDI110` con éxito
+("Se han grabado los datos"), confirmado en `DFKKRP` por `SE16N`.
 
-**Lo que sí sigue sirviendo** del código actual, independientemente del
-motor de creación del lote:
-- El parseo del `_DEV` (extraer nº de documento SAP e importe de cada línea
-  de extorno) — en `ZFI_R_DEVOLUCIONES_CREA_CLS`, métodos `parse_dev_lines`/
-  `format_amount`.
-- El escaneo de ficheros `*_DEV*` en servidor y la traza en
-  `ZFI_T_FILE_LOG` (`get_dev_files`, `get_directories`, `transport_files`).
-
-**Lo que probablemente sobra** si se confirma la vía `FP09`: todo el
-generador de `AUSZUG`/`UMSATZ` (`build_auszug`, `build_umsatz`,
-`date_dots`/`date_spaces`) y la llamada a `RFKKA00` (`submit_rfkkka00`).
+**Pendiente**: activar `ZFI_R_DEVOLUCIONES_CREA_CLS` (reescrito) en SE38 y
+probar el programa completo (modo Upload primero, con el `_DEV` de prueba).
 
 ## Contenido del repositorio
 
@@ -43,19 +33,40 @@ src/
   ZFI_R_DEVOLUCIONES_CREA.abap        Programa principal (REPORT)
   ZFI_R_DEVOLUCIONES_CREA_TOP.abap    Include TOP
   ZFI_R_DEVOLUCIONES_CREA_EVE.abap    Include EVE (pantalla de selección)
-  ZFI_R_DEVOLUCIONES_CREA_CLS.abap    Include CLS (clase lcl_devoluciones_crea) — construido sobre RFKKA00, pendiente de rehacer sobre FP09
+  ZFI_R_DEVOLUCIONES_CREA_CLS.abap    Include CLS (clase lcl_devoluciones_crea) — sobre FKK_RLS_HDR_PREPARE/_SAVE + FKK_RLS_ITEM_PREPARE/_SAVE_MASS
 docs/
-  DF_resumen.md                        Resumen del Diseño Funcional, incluyendo por qué se descartó RFKKA00
+  DF_resumen.md                        Resumen del Diseño Funcional + historial completo de la depuración de FP09
 ```
 
-## Próximo paso
+## Cómo probarlo (SE38)
 
-1. Depurar `FP09` en SAP (Integración o DES) hasta localizar la cadena real
-   de módulos de función que crea la cabecera del lote (`DFKKZK`) y sus
-   posiciones (`DFKKZP`), siguiendo el método de
-   `../zfi_fm_paylot_reverse/README.md`.
-2. Con esa cadena localizada, reescribir `ZFI_R_DEVOLUCIONES_CREA_CLS` para
-   llamarla directamente desde ABAP con los datos del `_DEV` (sociedad
-   `1239`, motivo `Z01`, cta. compensación `4305500150`, una posición por
-   línea con importe + nº de documento), sin generar ningún fichero
-   intermedio.
+1. Crear/actualizar el programa **`ZFI_R_DEVOLUCIONES_CREA`** y sus 3
+   includes (`_TOP`, `_EVE`, `_CLS`) con el contenido de `src/`.
+2. Crear los elementos de texto **`TEXT-001`** (título bloque `P_PATH`,
+   p.ej. "Fichero `_DEV`") y **`TEXT-002`** (título bloque de modo).
+3. Revisar la constante `co_cta_comp` en `ZFI_R_DEVOLUCIONES_CREA_CLS` — el
+   valor del DF (`4305500150`) no está configurado en DES (no deriva
+   banco/cuenta); usar el que sí funcione en el sistema donde se pruebe
+   (en Integración, `4305500150` si ya está bien, o el que se haya usado
+   en las pruebas — ver `docs/DF_resumen.md`).
+4. Activar.
+5. **Primera prueba: modo Upload**, con un `_DEV` de prueba (el que ya
+   generó `zfi_r_ecofi_split`). **Ojo: no es una simulación** — crea el
+   lote de verdad en el sistema donde se ejecute. El programa escribe en
+   pantalla el nº de lote creado (`AAMMDDCDI11x`) o el error, si lo hay.
+6. Solo cuando el paso 5 confirme que funciona bien end-to-end, probar el
+   modo **Server** (escanea la carpeta de `ZFICA_COBROS_ECOFI` — ver
+   "Pendiente" en `docs/DF_resumen.md`, esa ruta lógica todavía no existe
+   en ningún sistema).
+
+## Pendiente
+
+Ver `docs/DF_resumen.md` para el detalle completo. Resumen:
+
+- `co_cta_comp` (`4305500150`) no está configurada en DES — confirmar con
+  Basis/funcional el valor correcto por sistema.
+- La ruta lógica `ZFICA_COBROS_ECOFI` no existe en ningún sistema todavía
+  (necesaria solo para el modo Server).
+- Confirmar si el motivo `Z01` existe como valor válido en el customizing
+  de motivos de devolución.
+- Alta del objeto en el sistema de transporte correspondiente al proyecto.

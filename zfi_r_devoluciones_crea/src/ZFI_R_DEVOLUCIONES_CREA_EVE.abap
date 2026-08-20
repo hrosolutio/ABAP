@@ -5,12 +5,13 @@
 *   - p_server: escanea TODOS los ficheros "*_DEV*" que haya en la carpeta
 *     de la ruta logica lcl_devoluciones_crea=>co_logical_path (la misma
 *     carpeta donde ZFI_R_ECOFI_SPLIT deja sus ficheros _DEV). No hace
-*     falta indicar ningun fichero: P_PATH se oculta.
+*     falta indicar ningun fichero: P_PATH se oculta. Crea un lote de
+*     devoluciones real (FP09/FKK_RLS_*) por cada _DEV, con traza en
+*     ZFI_T_FILE_LOG.
 *   - p_upload: prueba rapida con un _DEV local (sin AL11), sube el
-*     fichero via GUI, genera AUSZUG/UMSATZ y los descarga a la MISMA
-*     carpeta local del _DEV subido (igual criterio que ZFI_R_ECOFI_SPLIT:
-*     el fichero se queda donde se cargo), sin traza en ZFI_T_FILE_LOG ni
-*     someter RFKKA00 automaticamente (solo para probar la generacion).
+*     fichero via GUI y crea el lote real igual que en modo servidor, pero
+*     sin traza en ZFI_T_FILE_LOG. OJO: no es una simulacion, crea el lote
+*     de verdad en el sistema donde se ejecute.
 
 SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-002.
 

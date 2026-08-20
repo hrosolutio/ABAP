@@ -232,10 +232,32 @@ confirmar completando el flujo en pantalla hasta Grabar de verdad.
 `RLBEL`/`URBEL` en `DFKKRP` parecen campos de salida (nº del documento de
 devolución/abono generado tras contabilizar), no de entrada.
 
-**Pendiente**: completar el flujo en pantalla (`FP09`, Integración) con las
-3 posiciones de prueba hasta Grabar de verdad (sin depurar), para confirmar
-si el banco/IBAN del deudor se rellena solo al indicar el documento
-original.
+**Confirmado con prueba real en Integración** (lote `260819CDI110`, 3
+posiciones, grabado con éxito — "Se han grabado los datos. Se puede
+proseguir el tratamiento"). Consultado `DFKKRP` por `SE16N`:
+
+| KEYR1 | POSRA | BANKL/BANKK/BANKN/IBAN | OPBEL | HBKID/HKTID | SELT1 | RLGRD | BETRR | SELW1 |
+|---|---|---|---|---|---|---|---|---|
+| 260819CDI110 | 000001 | (vacíos) | (vacío) | CXB01/CXB01 | B | Z01 | 60,49- | 491000011392 |
+| 260819CDI110 | 000002 | (vacíos) | (vacío) | CXB01/CXB01 | B | Z01 | 30,34- | 491000011455 |
+| 260819CDI110 | 000003 | (vacíos) | (vacío) | CXB01/CXB01 | B | Z01 | 14,59- | 491000011482 |
+
+**Conclusión**: `BANKL`/`BANKK`/`BANKN`/`IBAN`/`OPBEL` se quedan vacíos y
+el lote se graba igualmente sin error — **no hacen falta para crear el
+lote** (RU_02). Probablemente se resuelven en el cierre/contabilización
+(RU_03, `ZFI_R_DEVOLUCIONES2`), no en la creación. Esto cierra el hueco de
+datos que arrastrábamos desde el enfoque `RFKKA00` (banco/IBAN del deudor
+no disponibles en el `_DEV`) — **con el enfoque `FP09`/`FKK_RLS_*` no
+hacen falta en absoluto**.
+
+**Campos mínimos confirmados para crear el lote:**
+- Cabecera (`DFKKRK`): `BUKRS`, `RLGRD`, `RLSKO`, `WAERS` (`BLART` ya viene
+  `DV` por defecto).
+- Posición (`DFKKRP`), por cada línea del `_DEV`: `BETRR` (importe, **en
+  negativo**), `SELT1` = `B`, `SELW1` = nº de documento SAP.
+
+Con esto ya se puede escribir el código ABAP real (ver
+`../src/ZFI_R_DEVOLUCIONES_CREA_CLS.abap`).
 
 ## Enfoque descartado: `RFKKA00`/multicash (no usar, referencia solamente)
 

@@ -10,12 +10,19 @@
 *-----------------------------------------------------------------------*
 * NO.MOD  | DATE       | NAME             | FUNC NAME           |DEV ID *
 *-----------------------------------------------------------------------*
-* 001     | 17.08.2026 |                  | Version inicial,      |CDI_11 *
-*         |            |                  | generacion de          |       *
-*         |            |                  | AUSZUG/UMSATZ desde     |       *
-*         |            |                  | el _DEV + SUBMIT       |       *
-*         |            |                  | RFKKA00 (solo crea,    |       *
-*         |            |                  | ver README)             |       *
+* 001     | 17.08.2026 |                  | Version inicial (SIN  |CDI_11 *
+*         |            |                  | USAR), generaba        |       *
+*         |            |                  | AUSZUG/UMSATZ + SUBMIT |       *
+*         |            |                  | RFKKA00 - enfoque      |       *
+*         |            |                  | descartado, el DF pide |       *
+*         |            |                  | FP09, no RFKKA00        |       *
+* 002     | 20.08.2026 |                  | Reescrito sobre la    |CDI_11 *
+*         |            |                  | API real de FP09        |       *
+*         |            |                  | (FKK_RLS_HDR_PREPARE/  |       *
+*         |            |                  | _SAVE, FKK_RLS_ITEM_    |       *
+*         |            |                  | PREPARE/_SAVE_MASS),   |       *
+*         |            |                  | localizada depurando   |       *
+*         |            |                  | FP09 (ver DF_resumen)  |       *
 *                                                                       *
 *************************************************************************
 REPORT zfi_r_devoluciones_crea LINE-SIZE 255.
