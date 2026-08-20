@@ -126,13 +126,32 @@ programa).
 5. Si no es lote nuevo: `FKK_RLS_HDR_EDIT` (edición) y, si cambió algo,
    otra vez `FKK_RLS_HDR_SAVE`.
 
-**Conclusión práctica**: la cabecera se puede grabar con el FM público
-`FKK_RLS_HDR_SAVE`. Las posiciones no tienen FM — hay que montar la
-estructura `DFKKRP` (y `DFKKRP3`) a mano nosotros mismos e insertarla
-directamente, replicando los campos que en pantalla calcula la clase antes
-de llegar a `SAVE_POSITIONS`. **Pendiente**: consultar en `SE11` la
-estructura de `DFKKRP`/`DFKKRP3` para saber qué campos hay que rellenar
-(qué es `KEYR1`, `POSRA`, `LFDNR` y qué más lleva la posición).
+**Corrección**: aunque `SAVE_POSITIONS` (el método interno de `LCL_RLOT`)
+hace `INSERT` directo, **sí existe una API pública completa** para todo
+esto en el grupo de función `FKR2` (dominio "Rückläuferstapel" = lote de
+devoluciones/extornos — es literalmente nuestro caso). Se obtuvo el listado
+completo de FMs del grupo por `SE80`; los relevantes:
+
+**Para crear el lote (este programa, RU_02):**
+- `FKK_RLS_HDR_PREPARE` — Vorbereiten des Headers für einen RLS (prepara la cabecera)
+- `FKK_RLS_HDR_SAVE` — Sichern eines Rückläuferstapel-Headers (graba la cabecera; ya confirmado que es el que usa `FP09`)
+- `FKK_RLS_ITEM_PREPARE` — Bereitet eine neue Position für Eingabe vor (prepara una posición nueva — candidato a calcular `KEYR1`/`POSRA`/`LFDNR`)
+- `FKK_RLS_ITEM_VALIDATE` — Überprüft, ob eine Rückläuferzeile vernünftige Daten enthält (valida una posición)
+- `FKK_RLS_ITEM_SAVE` — Speichern einer Rückläuferzeile (graba una posición)
+- `FKK_RLS_ITEM_SAVE_MASS` — Massenspeicherung von Rückläufer-Zeilen (graba varias posiciones de golpe — probablemente el más adecuado para procesar todas las líneas del `_DEV` de una vez)
+
+**Para cerrar/contabilizar (relevante para el programa 3, `ZFI_R_DEVOLUCIONES2`, no este):**
+- `FKK_RLS_CLOSE` — Schließt einen Rückläuferstapel
+- `FKK_RLS_POST_LOT` / `FKK_RLS_POST_ITEM` — Buchen eines Rückläuferstapels / einer einzelnen Position
+
+**Otros del grupo que pueden hacer falta**: `FKK_RLS_EXISTS` (comprobar si
+el lote ya existe), `FKK_RLS_LOCK`/`FKK_RLS_UNLOCK` (bloqueo del lote),
+`FKK_RLS_ITEMS_READ` (releer posiciones), `FKK_RLS_ITEM_DELETE`.
+
+**Pendiente**: consultar en `SE37` la interfaz (parámetros) de
+`FKK_RLS_HDR_PREPARE`, `FKK_RLS_ITEM_PREPARE`, `FKK_RLS_ITEM_VALIDATE` y
+`FKK_RLS_ITEM_SAVE`/`FKK_RLS_ITEM_SAVE_MASS`, para poder escribir la
+llamada real desde ABAP.
 
 ## Enfoque descartado: `RFKKA00`/multicash (no usar, referencia solamente)
 
