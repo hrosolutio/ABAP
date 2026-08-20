@@ -7,7 +7,7 @@ el contexto completo de los 3 desarrollos.
 ## Requisito del DF
 
 **RU_02 — Creación del lote de devoluciones** en SAP, transacción **`FP09`**, a
-partir del fichero `_DEV`, con nomenclatura `AAMMDDCDI11xx`, sociedad `1239`,
+partir del fichero `_DEV`, con nomenclatura `AAMMDDCDI11x`, sociedad `1239`,
 clase `DV`, motivo `Z01`, cta. compensación `4305500150`, una posición por línea
 del fichero.
 
@@ -43,6 +43,37 @@ del deudor, ni número de secuencia de extracto. Solo los datos fijos del DF
 (sociedad, motivo, cta. compensación) y, por posición, el importe y el nº de
 documento del `_DEV`.
 
+## Progreso de la depuración de `FP09` (en curso)
+
+Confirmado en pantalla real (`FP09` → Crear → "Devoluciones: Datos prefijados
+y status tratar"):
+
+- **Nomenclatura del lote**: SAP la genera solo, no se teclea a mano. Con
+  fecha 20.08.2026 generó `260819CDI110` — **12 caracteres**, no 13. La
+  nomenclatura real es `AAMMDDCDI11x` (un solo dígito de secuencial), no
+  `AAMMDDCDI11xx` como decía el DF literalmente.
+- **Clase de documento**: ya viene `DV` por defecto — coincide con el DF.
+- **Clave de reconciliación**: se autorrellena igual que el nº de lote.
+- Campos de cabecera vistos: Sociedad, División, Clase de documento, Clave
+  de reconciliación, Moneda, Motivo de devolución, Fecha de documento/
+  contabilización/valor, Clase de contab. (dropdown, p.ej. "Anular pago"),
+  Gestión devoluciones ampliada, indicadores de impuestos. La cta. de
+  compensación está en una pestaña aparte ("Cta.compensación y gestión").
+- Las posiciones se añaden con el botón **"Posiciones nuevas"**.
+
+Pendiente: rellenar con los datos de prueba (sociedad `1239`, moneda `EUR`,
+motivo `Z01` si existe como valor válido, cta. `4305500150`), añadir 2-3
+posiciones de prueba (ver tabla de nº documento/importe más abajo) y
+depurar el botón final de grabar.
+
+### Datos de prueba para depurar (reales, del `_DEV` de `zfi_r_ecofi_split`)
+
+| Nº documento | Importe |
+|---|---|
+| `491000011392` | 60,49 € |
+| `491000011455` | 30,34 € |
+| `491000011482` | 14,59 € |
+
 ## Enfoque descartado: `RFKKA00`/multicash (no usar, referencia solamente)
 
 Se dejó el trabajo hecho documentado por si resulta útil más adelante (p.ej.
@@ -56,7 +87,7 @@ formato se dedujo de 6 ejemplos reales (`ZFI_T_FILE_LOG`, 4 bancos distintos)
 sacados de Integración — ver el detalle campo a campo en el historial de git
 de este fichero si hiciera falta recuperarlo. Quedaban varios campos sin
 resolver (cuenta bancaria de cobro, BIC/IBAN/motivo del deudor, número de
-secuencia del extracto, encaje de la nomenclatura `AAMMDDCDI11xx` con el
+secuencia del extracto, encaje de la nomenclatura `AAMMDDCDI11x` con el
 límite de 6 caracteres de `RUNIDBS_KK`) — nunca se llegó a confirmar contra
 una ejecución real de `RFKKA00`.
 
