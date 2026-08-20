@@ -148,10 +148,64 @@ completo de FMs del grupo por `SE80`; los relevantes:
 el lote ya existe), `FKK_RLS_LOCK`/`FKK_RLS_UNLOCK` (bloqueo del lote),
 `FKK_RLS_ITEMS_READ` (releer posiciones), `FKK_RLS_ITEM_DELETE`.
 
-**Pendiente**: consultar en `SE37` la interfaz (parámetros) de
-`FKK_RLS_HDR_PREPARE`, `FKK_RLS_ITEM_PREPARE`, `FKK_RLS_ITEM_VALIDATE` y
-`FKK_RLS_ITEM_SAVE`/`FKK_RLS_ITEM_SAVE_MASS`, para poder escribir la
-llamada real desde ABAP.
+### Interfaces confirmadas (`SE37`)
+
+```
+FKK_RLS_HDR_PREPARE
+  CHANGING  C_DFKKRK  LIKE DFKKRK
+  EXCEPTIONS NO_AUTHORIZATION, LOT_EXISTS, LOCKED, FAILURE
+
+FKK_RLS_ITEM_PREPARE
+  IMPORTING I_KEYR1       LIKE DFKKRK-KEYR1
+            I_DFKKRK      LIKE DFKKRK
+            I_LINE_COUNT  TYPE I DEFAULT 1
+  EXPORTING E_DFKKRP      LIKE DFKKRP
+  TABLES    T_DFKKRP      LIKE DFKKRP
+  EXCEPTIONS FAILURE
+
+FKK_RLS_ITEM_VALIDATE
+  IMPORTING I_DFKKRK   LIKE DFKKRK
+  CHANGING  C_DFKKRP   LIKE DFKKRP
+  TABLES    T_DFKKRP3  LIKE DFKKRP3
+
+FKK_RLS_ITEM_SAVE
+  IMPORTING I_DFKKRP    LIKE DFKKRP
+            I_DONTCHECK TYPE CHAR1 DEFAULT SPACE
+  CHANGING  C_DFKKRK    LIKE DFKKRK
+  TABLES    T_DFKKRP3   LIKE DFKKRP3
+  EXCEPTIONS HEADER_UPDATE_FAILED, HEADER_NOT_FOUND, LOCK_FAILED, RP3CHECK_FAILED
+
+FKK_RLS_ITEM_SAVE_MASS
+  IMPORTING I_DONTCHECK   TYPE CHAR1 DEFAULT SPACE
+  CHANGING  C_DFKKRK      LIKE DFKKRK
+  TABLES    T_DFKKRP      LIKE DFKKRP
+            T_DFKKRP_DEL  LIKE DFKKRP
+            T_DFKKRP3     LIKE DFKKRP3
+  EXCEPTIONS NO_ENTRIES, HEADER_UPDATE_FAILED, UPDATE_FAILED, DELETE_FAILED, INSERT_FAILED
+```
+
+**Flujo propuesto** para este programa (RU_02):
+
+1. Montar `ls_dfkkrk` con lo que ya sabemos (sociedad `1239`, motivo `Z01`,
+   cta. compensación, moneda `EUR`...).
+2. `CALL FUNCTION 'FKK_RLS_HDR_PREPARE' CHANGING c_dfkkrk = ls_dfkkrk.`
+   (deriva `KEYR1` y defaults, incluido banco propio/ID cuenta si es igual
+   que en pantalla).
+3. `CALL FUNCTION 'FKK_RLS_HDR_SAVE' CHANGING c_dfkkrk = ls_dfkkrk.`
+4. `CALL FUNCTION 'FKK_RLS_ITEM_PREPARE'` con `i_line_count` = nº de líneas
+   del `_DEV`, para obtener `lt_dfkkrp` con las plantillas ya numeradas.
+5. Recorrer `lt_dfkkrp` y rellenar cada línea con el importe (**en
+   negativo**, confirmado con el error `>4703`) y la referencia del
+   documento del `_DEV`.
+6. (Opcional) `FKK_RLS_ITEM_VALIDATE` línea a línea.
+7. `CALL FUNCTION 'FKK_RLS_ITEM_SAVE_MASS'` con `t_dfkkrp` = todas las
+   líneas, `t_dfkkrp_del`/`t_dfkkrp3` vacías.
+8. `COMMIT WORK` (los FMs no parecen comitear ellos solos, a juzgar por
+   cómo lo hace `LCL_RLOT->save()` a mano tras el `INSERT`).
+
+**Pendiente**: nombres exactos de campo dentro de `DFKKRK` (motivo,
+cta. compensación) y `DFKKRP` (importe, referencia/documento) — consultar
+en `SE11` la estructura de ambas.
 
 ## Enfoque descartado: `RFKKA00`/multicash (no usar, referencia solamente)
 
