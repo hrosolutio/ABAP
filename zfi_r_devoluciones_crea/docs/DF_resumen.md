@@ -60,6 +60,16 @@ y status tratar"):
   Gestión devoluciones ampliada, indicadores de impuestos. La cta. de
   compensación está en una pestaña aparte ("Cta.compensación y gestión").
 - Las posiciones se añaden con el botón **"Posiciones nuevas"**.
+- **`Banco propio`/`ID de cuenta` se derivan automáticamente de
+  `Cta.compensación devoluciones`** (customizing, no son datos
+  independientes a rellenar a mano). **`4305500150` (la cuenta que pide el
+  DF) no está configurada en DES** — al ponerla, esos dos campos quedan en
+  blanco. Con `4305500250` sí deriva (`Banco propio = CXB01`, `ID de cuenta
+  = CXB01`). **Pendiente real de configuración** (Basis/funcional): dar de
+  alta `4305500150` en DES, o confirmar si ese sigue siendo el valor
+  correcto. Para la depuración se sigue con `4305500250`, que sí funciona
+  — la corrección del dato final es un asunto aparte que no bloquea
+  encontrar la cadena de FMs.
 
 Pendiente: rellenar con los datos de prueba (sociedad `1239`, moneda `EUR`,
 motivo `Z01` si existe como valor válido, cta. `4305500150`), añadir 2-3
