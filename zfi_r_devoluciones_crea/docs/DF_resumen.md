@@ -84,6 +84,56 @@ depurar el botón final de grabar.
 | `491000011455` | 30,34 € |
 | `491000011482` | 14,59 € |
 
+**Importante**: en una posición de devolución el importe hay que meterlo en
+**negativo** (`-60,49`, no `60,49`) — probado en Integración con el primer
+documento: en positivo SAP da el error `>4703` ("Existe una devolución para
+un abono... verifique el signo"), porque en positivo lo interpreta como un
+abono en la cuenta bancaria, no como una devolución.
+
+**Nº de documento de prueba**: los nº de documento reales del `_DEV`
+(sociedad `1239` de Integración) no existen en DES — para depurar en DES hay
+que buscar uno real en la sociedad `1239` que sí exista (tabla `DFKKZP`,
+campo `OPBEL` no vacío — esa tabla son posiciones de lote de pago, así que
+cualquier `OPBEL` de ahí es, por definición, un documento de pago válido).
+En DES había muy pocos registros (7) — la depuración final se hizo en
+Integración en su lugar (mismo código, no afecta a la cadena de FMs).
+
+### Cadena real encontrada (clase `LCL_RLOT`, pool de funciones `FKR2DLG`)
+
+Depurando el botón "Grabar" de `FP09`: el objeto que gestiona el lote en
+pantalla es `o_rlot`, una instancia de **`LCL_RLOT`**, clase **local** del
+pool de funciones **`FKR2DLG`** (grupo de función `FKR2`) — **no se puede
+instanciar/llamar desde fuera** (no está en `SE24`, es privada de ese
+programa).
+
+`o_rlot->save( )` hace, en este orden:
+
+1. `COMPLETE_CHECK` (método interno, valida antes de grabar).
+2. Si es lote nuevo: **`CALL FUNCTION 'FKK_RLS_HDR_SAVE'`** — `CHANGING
+   C_DFKKRK = HEADER` (estructura `DFKKRK`, es la cabecera del lote). **Este
+   FM sí es público** — se puede llamar directamente desde nuestro código
+   para grabar la cabecera.
+3. `SAVE_POSITIONS` (método interno) — **aquí NO hay ningún FM**: hace
+   `INSERT DFKKRP FROM TABLE IT_DFKKRP.` e `INSERT DFKKRP3 FROM TABLE
+   IT_DFKKRP3.` directos a tabla, seguido de `COMMIT WORK.`. `IT_DFKKRP` se
+   monta con `MOVE-CORRESPONDING` desde una tabla interna `T_LINES`
+   (estructura `TY_RLSLINE`) que ya viene con todos los campos calculados
+   de antes (incluido `KEYR1`/`POSRA`/`LFDNR`) — esa parte del cálculo
+   ocurre en otro punto de la clase que aún no se ha depurado (donde se
+   procesa la rejilla "Posiciones nuevas" al teclear).
+4. `UPDATE_STATS` (interno) + `FKK_RLS_PROPERTY_SET` (marca `DIALOG=X`,
+   probablemente no aplica a un uso por programa).
+5. Si no es lote nuevo: `FKK_RLS_HDR_EDIT` (edición) y, si cambió algo,
+   otra vez `FKK_RLS_HDR_SAVE`.
+
+**Conclusión práctica**: la cabecera se puede grabar con el FM público
+`FKK_RLS_HDR_SAVE`. Las posiciones no tienen FM — hay que montar la
+estructura `DFKKRP` (y `DFKKRP3`) a mano nosotros mismos e insertarla
+directamente, replicando los campos que en pantalla calcula la clase antes
+de llegar a `SAVE_POSITIONS`. **Pendiente**: consultar en `SE11` la
+estructura de `DFKKRP`/`DFKKRP3` para saber qué campos hay que rellenar
+(qué es `KEYR1`, `POSRA`, `LFDNR` y qué más lleva la posición).
+
 ## Enfoque descartado: `RFKKA00`/multicash (no usar, referencia solamente)
 
 Se dejó el trabajo hecho documentado por si resulta útil más adelante (p.ej.
