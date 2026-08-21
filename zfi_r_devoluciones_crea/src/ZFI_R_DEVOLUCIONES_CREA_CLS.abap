@@ -472,27 +472,48 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
       RETURN.
     ENDIF.
 
+    " FKK_RLS_ITEM_PREPARE capa I_LINE_COUNT a una variable interna del
+    " grupo de funcion (MAX_LINES, visto en su codigo fuente via SE37) -
+    " puede devolver menos posiciones de las pedidas si hay muchas lineas.
+    " La numeracion de POSRA depende de I_DFKKRK-ANZPO (nº de posiciones
+    " que le decimos que ya existen), asi que es seguro llamarlo varias
+    " veces seguidas actualizando ANZPO a mano con lo ya conseguido, hasta
+    " completar todas las lineas del _DEV.
     DATA: lt_dfkkrp TYPE STANDARD TABLE OF dfkkrp.
 
-    CALL FUNCTION 'FKK_RLS_ITEM_PREPARE'
-      EXPORTING
-        i_keyr1      = ls_dfkkrk-keyr1
-        i_dfkkrk     = ls_dfkkrk
-        i_line_count = lines( it_items )
-      TABLES
-        t_dfkkrp = lt_dfkkrp
-      EXCEPTIONS
-        failure  = 1
-        OTHERS   = 2.
-    IF sy-subrc <> 0.
-      ev_error = |FKK_RLS_ITEM_PREPARE: error { sy-subrc }|.
-      RETURN.
-    ENDIF.
+    DO.
+      DATA(lv_pending) = lines( it_items ) - lines( lt_dfkkrp ).
+      IF lv_pending <= 0.
+        EXIT.
+      ENDIF.
 
-    IF lines( lt_dfkkrp ) <> lines( it_items ).
-      ev_error = |FKK_RLS_ITEM_PREPARE ha devuelto { lines( lt_dfkkrp ) } posiciones, se pidieron { lines( it_items ) }|.
-      RETURN.
-    ENDIF.
+      ls_dfkkrk-anzpo = lines( lt_dfkkrp ).
+
+      DATA: lt_dfkkrp_batch TYPE STANDARD TABLE OF dfkkrp.
+      CLEAR lt_dfkkrp_batch.
+
+      CALL FUNCTION 'FKK_RLS_ITEM_PREPARE'
+        EXPORTING
+          i_keyr1      = ls_dfkkrk-keyr1
+          i_dfkkrk     = ls_dfkkrk
+          i_line_count = lv_pending
+        TABLES
+          t_dfkkrp = lt_dfkkrp_batch
+        EXCEPTIONS
+          failure  = 1
+          OTHERS   = 2.
+      IF sy-subrc <> 0.
+        ev_error = |FKK_RLS_ITEM_PREPARE: error { sy-subrc }|.
+        RETURN.
+      ENDIF.
+
+      IF lt_dfkkrp_batch IS INITIAL.
+        ev_error = |FKK_RLS_ITEM_PREPARE no ha devuelto mas posiciones ({ lines( lt_dfkkrp ) } de { lines( it_items ) })|.
+        RETURN.
+      ENDIF.
+
+      APPEND LINES OF lt_dfkkrp_batch TO lt_dfkkrp.
+    ENDDO.
 
     LOOP AT lt_dfkkrp ASSIGNING FIELD-SYMBOL(<fs_dfkkrp>).
       DATA(ls_item) = it_items[ sy-tabix ].

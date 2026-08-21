@@ -259,6 +259,36 @@ hacen falta en absoluto**.
 Con esto ya se puede escribir el código ABAP real (ver
 `../src/ZFI_R_DEVOLUCIONES_CREA_CLS.abap`).
 
+### Primera prueba real del programa (DES): `FKK_RLS_ITEM_PREPARE` capa a `MAX_LINES`
+
+Primera ejecución completa de `ZFI_R_DEVOLUCIONES_CREA` (modo Upload, DES,
+tras dar de alta `ZFI_T_CONSTANTS`/`ZFI_T_PROCESS`) con un `_DEV` de 72
+líneas: `FKK_RLS_ITEM_PREPARE` devolvió solo 50 posiciones de las 72
+pedidas. Visto el código fuente del FM (`SE37`):
+
+```abap
+IF I_LINE_COUNT < 0. I_LINE_COUNT = 1. ENDIF.
+IF I_LINE_COUNT > MAX_LINES. I_LINE_COUNT = MAX_LINES. ENDIF.
+...
+I = I_DFKKRK-ANZPO + 1.
+DO I_LINE_COUNT TIMES.
+  ...
+  P_DFKKRP-POSRA = I.
+  I = I + 1.
+  ...
+ENDDO.
+```
+
+`MAX_LINES` es una variable/constante global del grupo de función `FKR2`
+que capa `I_LINE_COUNT` — con el `_DEV` de prueba, 50. La numeración de
+`POSRA` (nº de posición) arranca en `I_DFKKRK-ANZPO + 1`, es decir,
+depende del nº de posiciones que le digamos que ya tiene el lote
+(`ANZPO`), no de ningún buffer interno oculto — por tanto es seguro llamar
+al FM varias veces seguidas para completar el pedido: en cada vuelta se
+actualiza `ls_dfkkrk-anzpo` con las posiciones ya conseguidas y se pide
+solo lo que falta, hasta llegar al total de líneas del `_DEV`. Implementado
+como bucle `DO` en `create_lot` (`ZFI_R_DEVOLUCIONES_CREA_CLS`).
+
 ### Configuración vía `ZFI_T_CONSTANTS` (sin hardcode)
 
 `BUKRS`/`RLGRD`/`RLSKO` (sociedad, motivo, cta. compensación) no van como
