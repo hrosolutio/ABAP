@@ -490,7 +490,7 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
     ENDIF.
 
     IF lines( lt_dfkkrp ) <> lines( it_items ).
-      ev_error = 'FKK_RLS_ITEM_PREPARE no ha devuelto tantas posiciones como se pidieron.'.
+      ev_error = |FKK_RLS_ITEM_PREPARE ha devuelto { lines( lt_dfkkrp ) } posiciones, se pidieron { lines( it_items ) }|.
       RETURN.
     ENDIF.
 
