@@ -10,7 +10,7 @@ Es el desarrollo 2 de 3 del proyecto CDI_11:
 2. **Creación del lote de devoluciones** → este programa.
 3. **Cierre y contabilización del lote** → [`zfi_r_devoluciones2/`](../zfi_r_devoluciones2/README.md)
 
-## Estado: probado con éxito en Integración, pendiente de probar en SE38
+## Estado: probado con éxito end-to-end en DES (modo Upload)
 
 Reescrito sobre la API pública del grupo de función `FKR2` (dominio
 "Rückläuferstapel" = lote de devoluciones), localizada depurando el botón
@@ -18,13 +18,19 @@ Grabar de `FP09` — no sobre `RFKKA00` (enfoque anterior, descartado por
 lectura incorrecta del DF; ver `docs/DF_resumen.md` para el detalle
 completo de la depuración).
 
-**Ya probado directamente vía los módulos de función** (sin pasar aún por
-este programa ABAP): en Integración, con 3 posiciones reales del `_DEV` de
-`zfi_r_ecofi_split`, se creó el lote `260819CDI110` con éxito
+**Probado directamente vía los módulos de función** (Integración, 3
+posiciones reales del `_DEV`): lote `260819CDI110` creado con éxito
 ("Se han grabado los datos"), confirmado en `DFKKRP` por `SE16N`.
 
-**Pendiente**: activar `ZFI_R_DEVOLUCIONES_CREA_CLS` (reescrito) en SE38 y
-probar el programa completo (modo Upload primero, con el `_DEV` de prueba).
+**Probado el programa completo** (DES, modo Upload, `_DEV` real de 72
+líneas): lote `RL2026082103` creado con éxito, las 72 posiciones
+confirmadas en `DFKKRP`/`DFKKRK` por `SE16N` (sin huecos ni duplicados de
+`POSRA`, incluido el corte donde `FKK_RLS_ITEM_PREPARE` capa a `MAX_LINES`
+— ver `docs/DF_resumen.md`).
+
+**Pendiente**: probar el modo **Server** (bloqueado hasta que exista una
+ruta lógica de fichero real — ver `RUTA_LOGICA` en `ZFI_T_CONSTANTS` más
+abajo).
 
 ## Contenido del repositorio
 
@@ -55,7 +61,11 @@ docs/
 5. **Primera prueba: modo Upload**, con un `_DEV` de prueba (el que ya
    generó `zfi_r_ecofi_split`). **Ojo: no es una simulación** — crea el
    lote de verdad en el sistema donde se ejecute. El programa escribe en
-   pantalla el nº de lote creado (`AAMMDDCDI11x`) o el error, si lo hay.
+   pantalla el nº de lote creado y el nº de posiciones, o el error, si lo
+   hay. El formato del nº de lote lo decide el número de rango configurado
+   en cada sistema (en DES ha salido `RL2026082103`, no `AAMMDDCDI11x` como
+   en la prueba manual de Integración — es customizing, no afecta a que el
+   lote sea válido).
 6. Solo cuando el paso 5 confirme que funciona bien end-to-end, probar el
    modo **Server** (escanea la carpeta de `ZFICA_COBROS_ECOFI` — ver
    "Pendiente" en `docs/DF_resumen.md`, esa ruta lógica todavía no existe
@@ -97,11 +107,8 @@ en `ZFI_T_CONSTANTS`, sin tocar ni reactivar código.
 
 Ver `docs/DF_resumen.md` para el detalle completo. Resumen:
 
-- Dar de alta las filas de `ZFI_T_CONSTANTS` de la tabla anterior en cada
-  sistema (DES, Integración) con el valor de `CTA_COMPENSACION` correcto
-  en cada uno.
+- Dar de alta las filas de `ZFI_T_CONSTANTS` en Integración (en DES ya
+  están, probadas con éxito).
 - La ruta lógica `ZFICA_COBROS_ECOFI` no existe en ningún sistema todavía
   (necesaria solo para el modo Server).
-- Confirmar si el motivo `Z01` existe como valor válido en el customizing
-  de motivos de devolución.
 - Alta del objeto en el sistema de transporte correspondiente al proyecto.

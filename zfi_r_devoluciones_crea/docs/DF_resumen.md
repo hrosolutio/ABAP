@@ -322,15 +322,23 @@ cuenta en DES — ver más arriba). Con `ZFI_T_CONSTANTS` es una fila de
 customizing por sistema, sin tocar código.
 
 **Filas a dar de alta** (una vez por sistema, con el `CONSTANT_VALUE`
-correcto en cada uno):
+correcto en cada uno; en DES ya están dadas de alta y probadas con éxito —
+ver más abajo):
 
 | `CONSTANT_ID` | DES | Integración |
 |---|---|---|
 | `SOCIEDAD` | `1239` | `1239` |
-| `MOTIVO` | `Z01` (a confirmar que existe en customizing) | `Z01` |
+| `MOTIVO` | `Z01` (confirmado válido, prueba real end-to-end en DES) | `Z01` |
 | `CTA_COMPENSACION` | `4305500250` (la que deriva banco/cuenta en DES; `4305500150` del DF no está configurada) | `4305500150` (probado con éxito, ver tabla de test más abajo) |
 | `RUTA_LOGICA` | `ZFICA_COBROS_ECOFI` (no existe todavía) o cualquier otra ruta lógica ya existente en DES, para poder probar el modo Server sin esperar a que se cree | igual |
 | `MONEDA` | `EUR` | `EUR` |
+
+Además, `APPLICATION_ID`/`PROCESS_ID` no son texto libre: `PROCESS_ID`
+también valida contra una tabla de verificación propia (`ZFI_T_PROCESS`,
+por `APPLICATION_ID`) — `DEVOL_CREA` tampoco estaba ahí, se dio de alta
+como fila nueva (`APPLICATION_ID='FICA'`, `PROCESS_ID='DEVOL_CREA'`,
+`ACTIVE='X'`), igual que ya hay `CONTRATAS`, `MIGRACION`, `VULNERABLE`,
+etc. — es una tabla de mantenimiento del equipo, no un dominio fijo de SAP.
 
 `RUTA_LOGICA` y `MONEDA` se añadieron por el mismo motivo que las tres
 anteriores: eran `CONSTANTS` hardcodeadas en la clase
