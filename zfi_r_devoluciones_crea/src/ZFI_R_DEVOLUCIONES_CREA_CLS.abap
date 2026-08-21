@@ -47,7 +47,7 @@ CLASS lcl_devoluciones_crea DEFINITION.
       " compensacion es distinta en DES que en Integracion, y la ruta
       " logica puede apuntar a otra ya existente mientras ZFICA_COBROS_
       " ECOFI no se cree en ningun sistema, ver docs/DF_resumen.md).
-      co_application_id  TYPE zfi_de_application_id VALUE 'CDI_11',
+      co_application_id  TYPE zfi_de_application_id VALUE 'FICA',
       co_process_id      TYPE zfi_de_process_id     VALUE 'DEVOL_CREA',
       co_sub_process_id  TYPE zfi_de_sub_process_id VALUE space,
       co_const_sociedad  TYPE zfi_de_constant_id    VALUE 'SOCIEDAD',

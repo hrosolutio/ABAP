@@ -68,7 +68,7 @@ la tabla `ZFI_T_CONSTANTS`, con esta clave:
 
 | Campo | Valor |
 |---|---|
-| `APPLICATION_ID` | `CDI_11` |
+| `APPLICATION_ID` | `FICA` (`CDI_11` no está registrado como valor válido — hay una tabla de verificación/valores fijos detrás de `APPLICATION_ID`) |
 | `PROCESS_ID` | `DEVOL_CREA` |
 | `SUB_PROCESS_ID` | (en blanco) |
 | `ACTIVE` | `X` |

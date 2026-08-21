@@ -269,11 +269,16 @@ TABLE` (no `SELECT SINGLE` por constante) filtrando por las claves propias
 de la tabla:
 
 ```
-APPLICATION_ID = 'CDI_11'
+APPLICATION_ID = 'FICA'
 PROCESS_ID     = 'DEVOL_CREA'
 SUB_PROCESS_ID = <blanco>
 ACTIVE         = 'X'
 ```
+
+(`APPLICATION_ID` no es texto libre: `zfi_de_application_id` tiene una
+tabla de verificación/valores fijos detrás. `'CDI_11'` — el nombre del
+proyecto — no está dado de alta ahí; se usa `'FICA'`, que sí es un valor
+válido.)
 
 y un `LOOP` + `CASE` sobre `CONSTANT_ID` (`SOCIEDAD`, `MOTIVO`,
 `CTA_COMPENSACION`) para rellenar `gv_sociedad`/`gv_motivo`/`gv_cta_comp`.
