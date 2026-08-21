@@ -82,9 +82,16 @@ distintos, p.ej. la cta. de compensación — ver `docs/DF_resumen.md`):
 | `SOCIEDAD` | Sociedad (`DFKKRK-BUKRS`) | `1239` |
 | `MOTIVO` | Motivo de devolución (`DFKKRK-RLGRD`) | `Z01` |
 | `CTA_COMPENSACION` | Cta. compensación devoluciones (`DFKKRK-RLSKO`) | `4305500150` (DF) — no configurada en DES, ahí usar `4305500250` (ver `docs/DF_resumen.md`) |
+| `RUTA_LOGICA` | Ruta lógica de fichero (modo Server) donde se buscan los `_DEV` | `ZFICA_COBROS_ECOFI` — **no existe en ningún sistema todavía**; para probar, poner aquí otra ruta lógica que sí exista en el sistema de prueba |
+| `MONEDA` | Moneda (`DFKKRK-WAERS`) y tag de moneda que identifica el importe dentro de la línea del `_DEV` | `EUR` |
 
-Si falta cualquiera de las 3 filas (o `ACTIVE` no es `X`), el programa
+Si falta cualquiera de las 5 filas (o `ACTIVE` no es `X`), el programa
 aborta sin crear ningún lote.
+
+`RUTA_LOGICA` y `MONEDA` son, además de datos de sistema, la vía para
+**probar sin depender de que `ZFICA_COBROS_ECOFI` exista o de que el
+fichero de prueba esté en euros**: basta con cambiar el valor de esa fila
+en `ZFI_T_CONSTANTS`, sin tocar ni reactivar código.
 
 ## Pendiente
 

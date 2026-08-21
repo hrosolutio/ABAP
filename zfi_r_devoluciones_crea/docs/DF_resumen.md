@@ -294,6 +294,20 @@ correcto en cada uno):
 | `SOCIEDAD` | `1239` | `1239` |
 | `MOTIVO` | `Z01` (a confirmar que existe en customizing) | `Z01` |
 | `CTA_COMPENSACION` | `4305500250` (la que deriva banco/cuenta en DES; `4305500150` del DF no está configurada) | `4305500150` (probado con éxito, ver tabla de test más abajo) |
+| `RUTA_LOGICA` | `ZFICA_COBROS_ECOFI` (no existe todavía) o cualquier otra ruta lógica ya existente en DES, para poder probar el modo Server sin esperar a que se cree | igual |
+| `MONEDA` | `EUR` | `EUR` |
+
+`RUTA_LOGICA` y `MONEDA` se añadieron por el mismo motivo que las tres
+anteriores: eran `CONSTANTS` hardcodeadas en la clase
+(`co_logical_path`/`co_eur_tag`) y, a diferencia de `co_processed_dir`/
+`co_error_dir` (que son solo nombres de subcarpeta internos, no datos de
+configuración), sí son valores que conviene poder cambiar sin tocar
+código — en concreto para poder probar el modo Server apuntando a una
+ruta lógica que ya exista (mientras `ZFICA_COBROS_ECOFI` no se cree en
+ningún sistema), o repetir la prueba con un fichero en otra moneda sin
+reactivar la clase. `MONEDA` se usa tanto para `DFKKRK-WAERS` (moneda del
+lote) como para localizar el importe dentro de la línea del `_DEV`
+(`parse_dev_lines` busca ese mismo tag en el texto).
 
 ## Enfoque descartado: `RFKKA00`/multicash (no usar, referencia solamente)
 

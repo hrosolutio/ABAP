@@ -31,28 +31,30 @@ CLASS lcl_devoluciones_crea DEFINITION.
   PUBLIC SECTION.
 
     CONSTANTS:
-      co_logical_path  TYPE pathintern VALUE 'ZFICA_COBROS_ECOFI',
       co_processed_dir TYPE string     VALUE 'procesados/',
       co_error_dir     TYPE string     VALUE 'error/',
       co_suffix_dev    TYPE string     VALUE '_DEV',
-      co_eur_tag       TYPE string     VALUE 'EUR',
 
       " Proceso propio en ZFI_T_FILE_LOG (BUSINESS_DESC), distinto de
       " 'DEV' para no mezclar con las devoluciones bancarias reales.
       co_dev           TYPE string     VALUE 'EXT',
 
       " --- Claves en ZFI_T_CONSTANTS de los valores fijos del DF (RU_02):
-      " sociedad, motivo de devolucion y cta. de compensacion. Se leen en
-      " GET_CONSTANTS al principio de la ejecucion (no son valores fijos
-      " en el codigo, cambian por sistema sin tocar ni reactivar ABAP -
-      " p.ej. la cta. de compensacion es distinta en DES que en
-      " Integracion, ver docs/DF_resumen.md).
-      co_application_id TYPE zfi_de_application_id VALUE 'CDI_11',
-      co_process_id     TYPE zfi_de_process_id     VALUE 'DEVOL_CREA',
-      co_sub_process_id TYPE zfi_de_sub_process_id VALUE space,
-      co_const_sociedad TYPE zfi_de_constant_id    VALUE 'SOCIEDAD',
-      co_const_motivo   TYPE zfi_de_constant_id    VALUE 'MOTIVO',
-      co_const_cta_comp TYPE zfi_de_constant_id    VALUE 'CTA_COMPENSACION'.
+      " sociedad, motivo de devolucion, cta. de compensacion, ruta logica
+      " de fichero y moneda. Se leen en GET_CONSTANTS al principio de la
+      " ejecucion (no son valores fijos en el codigo, cambian por sistema
+      " o por prueba sin tocar ni reactivar ABAP - p.ej. la cta. de
+      " compensacion es distinta en DES que en Integracion, y la ruta
+      " logica puede apuntar a otra ya existente mientras ZFICA_COBROS_
+      " ECOFI no se cree en ningun sistema, ver docs/DF_resumen.md).
+      co_application_id  TYPE zfi_de_application_id VALUE 'CDI_11',
+      co_process_id      TYPE zfi_de_process_id     VALUE 'DEVOL_CREA',
+      co_sub_process_id  TYPE zfi_de_sub_process_id VALUE space,
+      co_const_sociedad  TYPE zfi_de_constant_id    VALUE 'SOCIEDAD',
+      co_const_motivo    TYPE zfi_de_constant_id    VALUE 'MOTIVO',
+      co_const_cta_comp  TYPE zfi_de_constant_id    VALUE 'CTA_COMPENSACION',
+      co_const_ruta_log  TYPE zfi_de_constant_id    VALUE 'RUTA_LOGICA',
+      co_const_moneda    TYPE zfi_de_constant_id    VALUE 'MONEDA'.
 
     TYPES:
       BEGIN OF ty_s_item,
@@ -79,9 +81,14 @@ CLASS lcl_devoluciones_crea DEFINITION.
 
       " Rellenas por GET_CONSTANTS a partir de ZFI_T_CONSTANTS - no son
       " constantes de programa, son datos de configuracion por sistema.
-      gv_sociedad    TYPE dfkkrk-bukrs,
-      gv_motivo      TYPE dfkkrk-rlgrd,
-      gv_cta_comp    TYPE dfkkrk-rlsko.
+      gv_sociedad     TYPE dfkkrk-bukrs,
+      gv_motivo       TYPE dfkkrk-rlgrd,
+      gv_cta_comp     TYPE dfkkrk-rlsko,
+      gv_logical_path TYPE pathintern,
+      " STRING (no dfkkrk-waers) para que la busqueda del tag de moneda en
+      " el fichero (FIND FIRST OCCURRENCE) no arrastre blancos de relleno
+      " de un tipo de longitud fija - ver CLAUDE.md.
+      gv_moneda       TYPE string.
 
     METHODS:
       get_constants RETURNING VALUE(rv_ok) TYPE flag,
@@ -165,10 +172,15 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
           gv_motivo = ls_constant-constant_value.
         WHEN co_const_cta_comp.
           gv_cta_comp = ls_constant-constant_value.
+        WHEN co_const_ruta_log.
+          gv_logical_path = ls_constant-constant_value.
+        WHEN co_const_moneda.
+          gv_moneda = ls_constant-constant_value.
       ENDCASE.
     ENDLOOP.
 
-    IF gv_sociedad IS INITIAL OR gv_motivo IS INITIAL OR gv_cta_comp IS INITIAL.
+    IF gv_sociedad IS INITIAL OR gv_motivo IS INITIAL OR gv_cta_comp IS INITIAL
+       OR gv_logical_path IS INITIAL OR gv_moneda IS INITIAL.
       WRITE: / 'Faltan constantes en ZFI_T_CONSTANTS para', co_application_id, co_process_id.
       RETURN.
     ENDIF.
@@ -307,7 +319,7 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
 
     TRY.
         zxx_cl_file_utils=>get_directory(
-          EXPORTING i_logical_path = co_logical_path
+          EXPORTING i_logical_path = gv_logical_path
           IMPORTING e_directory    = lv_raw_dir ).
       CATCH zfi_cl_cx_file.
         RETURN.
@@ -379,15 +391,15 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
         CONTINUE.
       ENDIF.
 
-      FIND FIRST OCCURRENCE OF co_eur_tag IN lv_line MATCH OFFSET DATA(lv_eur_off).
+      FIND FIRST OCCURRENCE OF gv_moneda IN lv_line MATCH OFFSET DATA(lv_eur_off).
       CHECK sy-subrc = 0.
 
-      " Importe: bloque de digitos justo antes de "EUR" (en centimos)
+      " Importe: bloque de digitos justo antes de la moneda (en centimos)
       DATA(lv_before_eur) = substring( val = lv_line len = lv_eur_off ).
       FIND PCRE '(\d+)\s*$' IN lv_before_eur SUBMATCHES DATA(lv_digits).
       CHECK sy-subrc = 0.
 
-      " Nº de documento SAP: 12 digitos justo despues de "EUR  " (ver
+      " Nº de documento SAP: 12 digitos justo despues de la moneda (ver
       " ZFI_R_ECOFI_SPLIT_CLS, metodo SPLIT_LINES, que es quien los escribe)
       DATA(lv_docnum) = substring( val = lv_line off = lv_eur_off + 3 + 2 len = 12 ).
       CHECK lv_docnum CO '0123456789'.
@@ -428,7 +440,7 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
     ls_dfkkrk-bukrs = gv_sociedad.
     ls_dfkkrk-rlgrd = gv_motivo.
     ls_dfkkrk-rlsko = gv_cta_comp.
-    ls_dfkkrk-waers = `EUR`.
+    ls_dfkkrk-waers = gv_moneda.
     ls_dfkkrk-blart = `DV`.
 
     CALL FUNCTION 'FKK_RLS_HDR_PREPARE'
