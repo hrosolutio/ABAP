@@ -37,18 +37,22 @@ CLASS lcl_devoluciones_crea DEFINITION.
       co_suffix_dev    TYPE string     VALUE '_DEV',
       co_eur_tag       TYPE string     VALUE 'EUR',
 
-      " --- Fijos segun el DF (RU_02) ---
-      co_sociedad      TYPE bukrs      VALUE '1239',
-      co_motivo        TYPE dfkkrk-rlgrd VALUE 'Z01',
-      " Cta. bancaria de compensacion para devolucion (DFKKRK-RLSKO). El
-      " valor del DF (4305500150) no esta configurada en DES (probado:
-      " banco propio/ID cuenta no se derivan) - ahi hay que usar la que
-      " si funcione (p.ej. 4305500250) hasta que se de de alta la buena.
-      co_cta_comp      TYPE dfkkrk-rlsko VALUE '4305500150',
-
       " Proceso propio en ZFI_T_FILE_LOG (BUSINESS_DESC), distinto de
       " 'DEV' para no mezclar con las devoluciones bancarias reales.
-      co_dev           TYPE string     VALUE 'EXT'.
+      co_dev           TYPE string     VALUE 'EXT',
+
+      " --- Claves en ZFI_T_CONSTANTS de los valores fijos del DF (RU_02):
+      " sociedad, motivo de devolucion y cta. de compensacion. Se leen en
+      " GET_CONSTANTS al principio de la ejecucion (no son valores fijos
+      " en el codigo, cambian por sistema sin tocar ni reactivar ABAP -
+      " p.ej. la cta. de compensacion es distinta en DES que en
+      " Integracion, ver docs/DF_resumen.md).
+      co_application_id TYPE zfi_de_application_id VALUE 'CDI_11',
+      co_process_id     TYPE zfi_de_process_id     VALUE 'DEVOL_CREA',
+      co_sub_process_id TYPE zfi_de_sub_process_id VALUE space,
+      co_const_sociedad TYPE zfi_de_constant_id    VALUE 'SOCIEDAD',
+      co_const_motivo   TYPE zfi_de_constant_id    VALUE 'MOTIVO',
+      co_const_cta_comp TYPE zfi_de_constant_id    VALUE 'CTA_COMPENSACION'.
 
     TYPES:
       BEGIN OF ty_s_item,
@@ -71,9 +75,17 @@ CLASS lcl_devoluciones_crea DEFINITION.
           gv_backup_path TYPE eseftappl,
           gv_error_path  TYPE eseftappl,
           go_file_log    TYPE REF TO zfi_cl_update_file_log,
-          go_msg_logs    TYPE REF TO zxx_cl_msg_logs.
+          go_msg_logs    TYPE REF TO zxx_cl_msg_logs,
+
+      " Rellenas por GET_CONSTANTS a partir de ZFI_T_CONSTANTS - no son
+      " constantes de programa, son datos de configuracion por sistema.
+      gv_sociedad    TYPE dfkkrk-bukrs,
+      gv_motivo      TYPE dfkkrk-rlgrd,
+      gv_cta_comp    TYPE dfkkrk-rlsko.
 
     METHODS:
+      get_constants RETURNING VALUE(rv_ok) TYPE flag,
+
       execute_server RAISING zfi_cl_cx_load_file zfi_cl_cx_file,
       execute_upload RAISING zfi_cl_cx_load_file zfi_cl_cx_file,
 
@@ -119,6 +131,10 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
     go_msg_logs = NEW zxx_cl_msg_logs( ).
     go_file_log = NEW zfi_cl_update_file_log( iv_process = co_dev ).
 
+    IF get_constants( ) = abap_false.
+      RETURN.
+    ENDIF.
+
     IF gv_upload = abap_true.
       execute_upload( ).
     ELSE.
@@ -126,6 +142,38 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
     ENDIF.
 
     show_log_msg( ).
+
+  ENDMETHOD.
+
+  METHOD get_constants.
+
+    CLEAR rv_ok.
+
+    DATA: lt_constants TYPE TABLE OF zfi_t_constants.
+
+    SELECT * FROM zfi_t_constants INTO TABLE lt_constants
+      WHERE application_id = co_application_id
+        AND process_id     = co_process_id
+        AND sub_process_id = co_sub_process_id
+        AND active         = abap_true.
+
+    LOOP AT lt_constants INTO DATA(ls_constant).
+      CASE ls_constant-constant_id.
+        WHEN co_const_sociedad.
+          gv_sociedad = ls_constant-constant_value.
+        WHEN co_const_motivo.
+          gv_motivo = ls_constant-constant_value.
+        WHEN co_const_cta_comp.
+          gv_cta_comp = ls_constant-constant_value.
+      ENDCASE.
+    ENDLOOP.
+
+    IF gv_sociedad IS INITIAL OR gv_motivo IS INITIAL OR gv_cta_comp IS INITIAL.
+      WRITE: / 'Faltan constantes en ZFI_T_CONSTANTS para', co_application_id, co_process_id.
+      RETURN.
+    ENDIF.
+
+    rv_ok = abap_true.
 
   ENDMETHOD.
 
@@ -377,9 +425,9 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
 
     DATA: ls_dfkkrk TYPE dfkkrk.
 
-    ls_dfkkrk-bukrs = co_sociedad.
-    ls_dfkkrk-rlgrd = co_motivo.
-    ls_dfkkrk-rlsko = co_cta_comp.
+    ls_dfkkrk-bukrs = gv_sociedad.
+    ls_dfkkrk-rlgrd = gv_motivo.
+    ls_dfkkrk-rlsko = gv_cta_comp.
     ls_dfkkrk-waers = `EUR`.
     ls_dfkkrk-blart = `DV`.
 

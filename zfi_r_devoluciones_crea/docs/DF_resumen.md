@@ -259,6 +259,42 @@ hacen falta en absoluto**.
 Con esto ya se puede escribir el código ABAP real (ver
 `../src/ZFI_R_DEVOLUCIONES_CREA_CLS.abap`).
 
+### Configuración vía `ZFI_T_CONSTANTS` (sin hardcode)
+
+`BUKRS`/`RLGRD`/`RLSKO` (sociedad, motivo, cta. compensación) no van como
+`CONSTANTS` en la clase — se leen de la tabla genérica `ZFI_T_CONSTANTS`
+(reutilizada, ya existe en el sistema) con un único método `get_constants`
+llamado al principio de `execute( )`, con un solo `SELECT * ... INTO
+TABLE` (no `SELECT SINGLE` por constante) filtrando por las claves propias
+de la tabla:
+
+```
+APPLICATION_ID = 'CDI_11'
+PROCESS_ID     = 'DEVOL_CREA'
+SUB_PROCESS_ID = <blanco>
+ACTIVE         = 'X'
+```
+
+y un `LOOP` + `CASE` sobre `CONSTANT_ID` (`SOCIEDAD`, `MOTIVO`,
+`CTA_COMPENSACION`) para rellenar `gv_sociedad`/`gv_motivo`/`gv_cta_comp`.
+Si falta alguna, el programa aborta con mensaje antes de tocar `FKK_RLS_*`.
+
+Motivo del cambio: los valores hardcodeados anteriores (`co_sociedad`,
+`co_motivo`, `co_cta_comp`) obligaban a editar y reactivar la clase para
+cambiar un dato de configuración entre sistemas (p.ej. la cta.
+`4305500150` del DF frente a `4305500250`, la única que deriva banco/
+cuenta en DES — ver más arriba). Con `ZFI_T_CONSTANTS` es una fila de
+customizing por sistema, sin tocar código.
+
+**Filas a dar de alta** (una vez por sistema, con el `CONSTANT_VALUE`
+correcto en cada uno):
+
+| `CONSTANT_ID` | DES | Integración |
+|---|---|---|
+| `SOCIEDAD` | `1239` | `1239` |
+| `MOTIVO` | `Z01` (a confirmar que existe en customizing) | `Z01` |
+| `CTA_COMPENSACION` | `4305500250` (la que deriva banco/cuenta en DES; `4305500150` del DF no está configurada) | `4305500150` (probado con éxito, ver tabla de test más abajo) |
+
 ## Enfoque descartado: `RFKKA00`/multicash (no usar, referencia solamente)
 
 Se dejó el trabajo hecho documentado por si resulta útil más adelante (p.ej.

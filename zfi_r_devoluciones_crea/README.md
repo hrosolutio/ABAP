@@ -44,11 +44,13 @@ docs/
    includes (`_TOP`, `_EVE`, `_CLS`) con el contenido de `src/`.
 2. Crear los elementos de texto **`TEXT-001`** (título bloque `P_PATH`,
    p.ej. "Fichero `_DEV`") y **`TEXT-002`** (título bloque de modo).
-3. Revisar la constante `co_cta_comp` en `ZFI_R_DEVOLUCIONES_CREA_CLS` — el
-   valor del DF (`4305500150`) no está configurado en DES (no deriva
-   banco/cuenta); usar el que sí funcione en el sistema donde se pruebe
-   (en Integración, `4305500150` si ya está bien, o el que se haya usado
-   en las pruebas — ver `docs/DF_resumen.md`).
+3. Dar de alta en **`ZFI_T_CONSTANTS`** las 3 filas que necesita el
+   programa (sociedad, motivo, cta. compensación) — ya no son constantes
+   ABAP hardcodeadas, se leen en tiempo de ejecución con el método
+   `get_constants` de `ZFI_R_DEVOLUCIONES_CREA_CLS`. Claves y valores en
+   la sección "Configuración (`ZFI_T_CONSTANTS`)" más abajo — **el
+   programa no arranca si faltan** (aborta con mensaje "Faltan constantes
+   en ZFI_T_CONSTANTS...").
 4. Activar.
 5. **Primera prueba: modo Upload**, con un `_DEV` de prueba (el que ya
    generó `zfi_r_ecofi_split`). **Ojo: no es una simulación** — crea el
@@ -59,12 +61,38 @@ docs/
    "Pendiente" en `docs/DF_resumen.md`, esa ruta lógica todavía no existe
    en ningún sistema).
 
+## Configuración (`ZFI_T_CONSTANTS`)
+
+El programa lee sus valores de negocio (antes hardcodeados en la clase) de
+la tabla `ZFI_T_CONSTANTS`, con esta clave:
+
+| Campo | Valor |
+|---|---|
+| `APPLICATION_ID` | `CDI_11` |
+| `PROCESS_ID` | `DEVOL_CREA` |
+| `SUB_PROCESS_ID` | (en blanco) |
+| `ACTIVE` | `X` |
+
+Y una fila por cada `CONSTANT_ID` necesario, con el `CONSTANT_VALUE` que
+corresponda **en cada sistema** (DES/Integración pueden tener valores
+distintos, p.ej. la cta. de compensación — ver `docs/DF_resumen.md`):
+
+| `CONSTANT_ID` | Significado | Valor de referencia (DF) |
+|---|---|---|
+| `SOCIEDAD` | Sociedad (`DFKKRK-BUKRS`) | `1239` |
+| `MOTIVO` | Motivo de devolución (`DFKKRK-RLGRD`) | `Z01` |
+| `CTA_COMPENSACION` | Cta. compensación devoluciones (`DFKKRK-RLSKO`) | `4305500150` (DF) — no configurada en DES, ahí usar `4305500250` (ver `docs/DF_resumen.md`) |
+
+Si falta cualquiera de las 3 filas (o `ACTIVE` no es `X`), el programa
+aborta sin crear ningún lote.
+
 ## Pendiente
 
 Ver `docs/DF_resumen.md` para el detalle completo. Resumen:
 
-- `co_cta_comp` (`4305500150`) no está configurada en DES — confirmar con
-  Basis/funcional el valor correcto por sistema.
+- Dar de alta las filas de `ZFI_T_CONSTANTS` de la tabla anterior en cada
+  sistema (DES, Integración) con el valor de `CTA_COMPENSACION` correcto
+  en cada uno.
 - La ruta lógica `ZFICA_COBROS_ECOFI` no existe en ningún sistema todavía
   (necesaria solo para el modo Server).
 - Confirmar si el motivo `Z01` existe como valor válido en el customizing
