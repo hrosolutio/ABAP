@@ -87,6 +87,13 @@ antes uno de los operandos a un tipo con decimales (`CONV p( ... )` con
 `DECIMALS` explícitos, o un campo `TYPE p DECIMALS n` de verdad) antes de
 dividir.
 
+## Orden fijo de los parámetros en `CALL FUNCTION`
+
+`CALL FUNCTION` exige las secciones en este orden exacto: `EXPORTING` →
+`IMPORTING` → `TABLES` → `CHANGING` → `EXCEPTIONS`. No es una convención de
+estilo, es sintaxis: poner `CHANGING` antes que `TABLES` (u otro orden
+distinto al de arriba) da error de sintaxis al activar.
+
 ## Si GitHub falla
 
 Si la web de GitHub da error (incidencia de su lado, no del repo — se

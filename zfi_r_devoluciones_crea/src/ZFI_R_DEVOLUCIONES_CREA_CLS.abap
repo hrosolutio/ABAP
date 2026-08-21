@@ -507,12 +507,12 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
     CALL FUNCTION 'FKK_RLS_ITEM_SAVE_MASS'
       EXPORTING
         i_dontcheck           = space
-      CHANGING
-        c_dfkkrk              = ls_dfkkrk
       TABLES
         t_dfkkrp              = lt_dfkkrp
         t_dfkkrp_del          = lt_dfkkrp_del
-        t_dfkkrp3              = lt_dfkkrp3
+        t_dfkkrp3             = lt_dfkkrp3
+      CHANGING
+        c_dfkkrk              = ls_dfkkrk
       EXCEPTIONS
         no_entries            = 1
         header_update_failed  = 2
