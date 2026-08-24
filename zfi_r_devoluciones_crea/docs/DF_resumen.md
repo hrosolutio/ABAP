@@ -471,15 +471,23 @@ numerar `POSRA` correctamente en cada tanda, pero nunca se deja al total
 final antes de llamar a `FKK_RLS_ITEM_SAVE_MASS` — se queda con el valor
 de la penúltima tanda (o `0` si solo hizo falta una).
 
-**Fix**: `ls_dfkkrk-anzpo = lines( lt_dfkkrp ).` justo antes de
-`FKK_RLS_ITEM_SAVE_MASS`, con el total real de posiciones. Se mantiene la
-llamada a `FKK_RLS_ITEM_VALIDATE` (mismo criterio de `COMPLETE_CHECK`:
-comprobar validez antes de grabar, aunque el resultado se descarte) por
-seguridad, pero ya no se documenta como necesaria para nada más que
-detectar un `SELW1` inválido.
+**Primer intento del fix**: `ls_dfkkrk-anzpo = lines( lt_dfkkrp ).` justo
+antes de `FKK_RLS_ITEM_SAVE_MASS`, pasándolo en `C_DFKKRK` (`CHANGING`).
+Probado en DES: confirmado con un breakpoint justo antes de la llamada
+que `ls_dfkkrk-anzpo` = `72` en ese momento — pero tras grabar, `SE16N`
+sigue mostrando `DFKKRK-ANZPO` = `0`. **`FKK_RLS_ITEM_SAVE_MASS` no
+persiste `ANZPO`** aunque se lo pasemos relleno.
 
-**Pendiente**: probar el ciclo completo con el fix de `ANZPO` (crear lote
-→ confirmar `ANZPO` correcto por `SE16N` → `FP09` → Cerrar →
+**Fix definitivo**: en vez de un `UPDATE` directo a la tabla (descartado,
+demasiado chapucero/arriesgado en una tabla estándar), `create_lot`
+vuelve a llamar a `FKK_RLS_HDR_SAVE` — una **segunda vez**, con la
+cabecera ya existente en BD y `ANZPO` puesto al total real de
+posiciones — justo después de `FKK_RLS_ITEM_SAVE_MASS`, antes del
+`COMMIT WORK` final. Usa la propia API pública de SAP en vez de tocar la
+tabla a mano.
+
+**Pendiente**: probar el ciclo completo con este fix (crear lote →
+confirmar `ANZPO` correcto por `SE16N` → `FP09` → Cerrar →
 Contabilizar) — todavía no probado. Si funciona, seguir depurando qué FMs
 reales usa "Cerrar"/"Contabilizar" para RU_03 (`ZFI_R_DEVOLUCIONES2`) —
 muy probablemente `FKK_RLS_CLOSE`/`FKK_RLS_POST_LOT` del mismo grupo de

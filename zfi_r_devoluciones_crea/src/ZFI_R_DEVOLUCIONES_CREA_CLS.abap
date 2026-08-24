@@ -614,15 +614,6 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
       ENDIF.
     ENDLOOP.
 
-    " ANZPO se ha ido pisando dentro del bucle de ITEM_PREPARE (para
-    " numerar POSRA por tandas) y se queda con el valor de la penultima
-    " tanda, no el total final - hay que ponerlo al numero real de
-    " posiciones antes de grabar, si no la cabecera se queda con ANZPO=0
-    " aunque DFKKRP tenga las posiciones (confirmado con SE16N: lote real
-    " con 72 filas en DFKKRP pero DFKKRK-ANZPO=0 - probablemente el motivo
-    " real del error >2549 al cerrar, no la resolucion de OPBEL).
-    ls_dfkkrk-anzpo = lines( lt_dfkkrp ).
-
     DATA: lt_dfkkrp_del TYPE STANDARD TABLE OF dfkkrp,
           lt_dfkkrp3    TYPE STANDARD TABLE OF dfkkrp3.
 
@@ -644,6 +635,29 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
         OTHERS                = 6.
     IF sy-subrc <> 0.
       ev_error = |FKK_RLS_ITEM_SAVE_MASS: error { sy-subrc }|.
+      RETURN.
+    ENDIF.
+
+    " FKK_RLS_ITEM_SAVE_MASS no actualiza DFKKRK-ANZPO en BD aunque se le
+    " pase relleno en C_DFKKRK (confirmado: ls_dfkkrk-anzpo = 72 justo
+    " antes de la llamada, pero la tabla se queda con ANZPO=0 despues).
+    " Volvemos a llamar a FKK_RLS_HDR_SAVE (ya con la cabecera existente,
+    " ANZPO puesto al total real) para que sea SAP quien la persista via
+    " su propia API, en vez de un UPDATE directo a la tabla.
+    ls_dfkkrk-anzpo = lines( lt_dfkkrp ).
+
+    CALL FUNCTION 'FKK_RLS_HDR_SAVE'
+      CHANGING
+        c_dfkkrk         = ls_dfkkrk
+      EXCEPTIONS
+        error_message    = 1
+        lot_locked       = 2
+        no_authorization = 3
+        update_error     = 4
+        not_valid        = 5
+        OTHERS           = 6.
+    IF sy-subrc <> 0.
+      ev_error = |FKK_RLS_HDR_SAVE (ANZPO): error { sy-subrc }|.
       RETURN.
     ENDIF.
 

@@ -90,13 +90,16 @@ ver `docs/DF_resumen.md`).
 
 Lo que **sí hace falta** es que `DFKKRK-ANZPO` (nº de posiciones que dice
 tener la cabecera) quede con el valor correcto al grabar — si se queda a
-`0` (aunque `DFKKRP` tenga las posiciones de verdad, que es lo que
-pasaba: el bucle de `FKK_RLS_ITEM_PREPARE` por tandas pisa `ANZPO` con
-valores intermedios y nunca lo deja al total final antes de llamar a
-`FKK_RLS_ITEM_SAVE_MASS`), `FP09` → "Cerrar" da el error `>2549` ("No
-existen entradas para la remesa") aunque las posiciones existan. Fix:
-`create_lot` fija `ls_dfkkrk-anzpo` al total real justo antes de
-`FKK_RLS_ITEM_SAVE_MASS`.
+`0` (aunque `DFKKRP` tenga las posiciones de verdad), `FP09` → "Cerrar" da
+el error `>2549` ("No existen entradas para la remesa") aunque las
+posiciones existan. Confirmado que **`FKK_RLS_ITEM_SAVE_MASS` no
+actualiza `ANZPO` en BD** aunque se le pase relleno en `C_DFKKRK`
+(probado: `ls_dfkkrk-anzpo` = 72 justo antes de la llamada, la tabla
+queda con `0` después). Fix: `create_lot` vuelve a llamar a
+`FKK_RLS_HDR_SAVE` (una segunda vez, ya con la cabecera existente y
+`ANZPO` puesto al total real) justo después de `FKK_RLS_ITEM_SAVE_MASS` —
+usando la propia API de SAP para persistirlo, no un `UPDATE` directo a la
+tabla.
 
 **Sobre abortar con `NOT_VALID`**: la cabecera ya está grabada en ese
 punto (`FKK_RLS_HDR_SAVE` se llama justo después de `HDR_PREPARE`, ver
