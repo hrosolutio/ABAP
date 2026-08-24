@@ -48,10 +48,16 @@ documento del `_DEV`.
 Confirmado en pantalla real (`FP09` → Crear → "Devoluciones: Datos prefijados
 y status tratar"):
 
-- **Nomenclatura del lote**: SAP la genera solo, no se teclea a mano. Con
-  fecha 20.08.2026 generó `260819CDI110` — **12 caracteres**, no 13. La
-  nomenclatura real es `AAMMDDCDI11x` (un solo dígito de secuencial), no
-  `AAMMDDCDI11xx` como decía el DF literalmente.
+- **Nomenclatura del lote**: `260819CDI110` (12 caracteres) fue en
+  realidad **tecleado a mano** en la pantalla de `FP09` (un valor
+  propuesto de 13 caracteres, `260819CDI1101`, que el campo cortó a 12) —
+  corrección de una nota anterior de este documento que decía lo
+  contrario sin base real. **No hay confirmación de que SAP genere este
+  formato solo** en ningún sistema; probado después con el programa (ver
+  más abajo), sin exit de cliente `FKK_RLS_HDR_PREPARE` cae al formato
+  estándar `RL`+fecha+secuencial. El límite de **12 caracteres** de
+  `KEYR1` sí es real y confirmado (el DF pide `AAMMDDCDI11xx`, 13
+  caracteres, que no caben).
 - **Clase de documento**: ya viene `DV` por defecto — coincide con el DF.
 - **Clave de reconciliación**: se autorrellena igual que el nº de lote.
 - Campos de cabecera vistos: Sociedad, División, Clase de documento, Clave
