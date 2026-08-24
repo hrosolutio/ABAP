@@ -423,13 +423,67 @@ lote vacío desde `FP09`, tal como indica el propio mensaje `>2549` de
 SAP) — ya no es un abort 100% limpio como se pretendía, pero es el único
 orden con el que `ITEM_VALIDATE` resuelve `OPBEL` de verdad.
 
-**Pendiente**: repetir la prueba completa (crear lote con el fix
-corregido → confirmar `OPBEL` relleno por `SE16N` → `FP09` → Cerrar →
-Contabilizar) para confirmar que ya se puede cerrar, y seguir depurando
-qué FMs reales usa "Cerrar"/"Contabilizar" para RU_03
-(`ZFI_R_DEVOLUCIONES2`) — muy probablemente `FKK_RLS_CLOSE`/
-`FKK_RLS_POST_LOT` del mismo grupo de función, no `RFKKKA00` (ver
-`../zfi_r_devoluciones2/docs/DF_resumen.md`).
+### Tercer intento: `OPBEL` era una pista falsa, el problema real es `ANZPO`
+
+Con el fix anterior (`HDR_SAVE`+`COMMIT` antes de `ITEM_VALIDATE`) se creó
+el lote `260824CDI113` en DES: `sy-subrc = 0` tras `ITEM_VALIDATE`, pero
+depurando con breakpoint justo después de la llamada dentro de nuestro
+propio `create_lot`, `<fs_dfkkrp_val>-opbel` seguía **vacío** — la
+persistencia de la cabecera tampoco era la explicación completa.
+
+Pedimos ver la pila de llamadas de la prueba manual en `FP09` (breakpoint
+de función en `FKK_RLS_ITEM_VALIDATE`): la llamada real viene de
+`LCL_RLOT->COMPLETE_CHECK` (el mismo método que ya sabíamos que es el
+primer paso de `SAVE`, ver más arriba). Su código fuente aclara todo:
+
+```abap
+LOOP AT IT_DFKKRP INTO WA_DFKKRP WHERE RLBEL = SPACE AND ( XVOID = SPACE OR XVOID IS INITIAL ).
+  ...
+* Validate: Wenn die manuellen Angaben einen Fehler melden, sollte an
+* dieser Stelle nichts passieren außer vielleicht einem Hinweis; der
+* Fehler darf erst bei CLOSE hochkommen
+  CALL FUNCTION 'FKK_RLS_ITEM_VALIDATE'
+       EXPORTING I_DFKKRK  = HEADER
+       TABLES    T_DFKKRP3 = IT_DFKKRP3
+       CHANGING  C_DFKKRP  = WA_DFKKRP
+       EXCEPTIONS NOT_VALID = 1 OTHERS = 2.
+  IF SY-SUBRC <> 0.
+    CALL METHOD CATCH_ERROR EXPORTING I_POSRA = WA_DFKKRP-POSRA.
+  ENDIF.
+  PERFORM ('CHECK_RETURNS_POS') IN PROGRAM (PROG_NAME) IF FOUND USING WA_DFKKRP.
+ENDLOOP.
+```
+
+`WA_DFKKRP` es una copia local (`LOOP...INTO`) y **nunca se hace `MODIFY`
+de vuelta** a `IT_DFKKRP`/`T_LINES` después de la llamada — el propio SAP
+**tira el `OPBEL` resuelto**, solo usa la llamada para comprobar si sería
+válido (el comentario original lo confirma: el error solo debe saltar en
+`CLOSE`, no aquí). Conclusión: **`OPBEL` nunca hace falta resolverlo ni
+grabarlo** para nada — ni para grabar el lote ni para cerrarlo. La
+hipótesis de los dos intentos anteriores era incorrecta.
+
+Con eso descartado, se revisó qué otro dato de la cabecera podría estar
+mal: **`DFKKRK-ANZPO`** (nº de posiciones), comprobado por `SE16N` en el
+lote real `260824CDI113` → **`000000`**, pese a que `DFKKRP` sí tiene sus
+72 posiciones. Causa: dentro del bucle `DO` que llama a
+`FKK_RLS_ITEM_PREPARE` por tandas, `ls_dfkkrk-anzpo` se actualiza para
+numerar `POSRA` correctamente en cada tanda, pero nunca se deja al total
+final antes de llamar a `FKK_RLS_ITEM_SAVE_MASS` — se queda con el valor
+de la penúltima tanda (o `0` si solo hizo falta una).
+
+**Fix**: `ls_dfkkrk-anzpo = lines( lt_dfkkrp ).` justo antes de
+`FKK_RLS_ITEM_SAVE_MASS`, con el total real de posiciones. Se mantiene la
+llamada a `FKK_RLS_ITEM_VALIDATE` (mismo criterio de `COMPLETE_CHECK`:
+comprobar validez antes de grabar, aunque el resultado se descarte) por
+seguridad, pero ya no se documenta como necesaria para nada más que
+detectar un `SELW1` inválido.
+
+**Pendiente**: probar el ciclo completo con el fix de `ANZPO` (crear lote
+→ confirmar `ANZPO` correcto por `SE16N` → `FP09` → Cerrar →
+Contabilizar) — todavía no probado. Si funciona, seguir depurando qué FMs
+reales usa "Cerrar"/"Contabilizar" para RU_03 (`ZFI_R_DEVOLUCIONES2`) —
+muy probablemente `FKK_RLS_CLOSE`/`FKK_RLS_POST_LOT` del mismo grupo de
+función, no `RFKKKA00` (ver `../zfi_r_devoluciones2/docs/DF_resumen.md`).
 
 ### Configuración vía `ZFI_T_CONSTANTS` (sin hardcode)
 

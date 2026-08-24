@@ -33,17 +33,18 @@ secuencial del día), también con éxito y 72 posiciones correctas.
 
 **Corrección importante (encontrada depurando RU_03)**: el lote se
 grababa pero no se podía cerrar/contabilizar (`FP09` → "Cerrar" daba
-"No existen entradas para la remesa", mensaje `>2549`) porque faltaba
-resolver cada posición contra su documento de pago real
-(`FKK_RLS_ITEM_VALIDATE`, que rellena `OPBEL`) — sin eso, `DFKKRP` tiene
-las posiciones pero ninguna cuenta como "entrada". Añadido a `create_lot`
-(ver "Resolución de posiciones (`OPBEL`)" más abajo).
+"No existen entradas para la remesa", mensaje `>2549`) porque
+`DFKKRK-ANZPO` (nº de posiciones de la cabecera) se quedaba a `0` aunque
+`DFKKRP` sí tuviera las 72 posiciones reales — no por `OPBEL` sin
+resolver, como se pensó en un primer momento (ver "Validación de
+posiciones y `ANZPO`" más abajo para el detalle completo, incluida la
+hipótesis descartada).
 
 **Pendiente**: confirmar con el funcional el secuencial de 1 dígito para
 el nº de lote (ver más abajo), volver a probar el ciclo completo
-crear→cerrar→contabilizar con el fix de `FKK_RLS_ITEM_VALIDATE`, y probar
-el modo **Server** (bloqueado hasta que exista una ruta lógica de fichero
-real — ver `RUTA_LOGICA` en `ZFI_T_CONSTANTS` más abajo).
+crear→cerrar→contabilizar con el fix de `ANZPO` (todavía no probado), y
+probar el modo **Server** (bloqueado hasta que exista una ruta lógica de
+fichero real — ver `RUTA_LOGICA` en `ZFI_T_CONSTANTS` más abajo).
 
 ## Nomenclatura del lote
 
@@ -72,32 +73,39 @@ los 10 valores de un día, `generate_keyr1` devuelve vacío y
 **Confirmar con el funcional que esta desviación del DF (secuencial de 1
 dígito, no 2) es aceptable.**
 
-## Resolución de posiciones (`OPBEL`)
+## Validación de posiciones y `ANZPO`
 
-`SELT1`='B'/`SELW1`=nº de documento (lo que rellenaba `create_lot` hasta
-ahora) es solo un **criterio de búsqueda**, no el documento resuelto. Para
-que la posición cuente como "entrada" real del lote (necesario para poder
-cerrarlo/contabilizarlo en RU_03), hay que llamar a
-`FKK_RLS_ITEM_VALIDATE` por cada posición — resuelve la búsqueda y rellena
-`OPBEL` (confirmado depurando `FP09`: sin este paso, `DFKKRP-OPBEL` se
-queda vacío y `FP09` → "Cerrar" da el error `>2549`, "No existen entradas
-para la remesa").
+`SELT1`='B'/`SELW1`=nº de documento es solo un **criterio de búsqueda**,
+no el documento resuelto. `create_lot` llama a `FKK_RLS_ITEM_VALIDATE`
+por cada posición para comprobar que resuelve contra un documento de pago
+real (mismo paso que hace `LCL_RLOT->COMPLETE_CHECK` antes de grabar en
+`FP09`, confirmado viendo su código fuente) — si un documento no es
+válido (excepción `NOT_VALID`, p.ej. no existe), se aborta. **Ojo:**
+`OPBEL`, el campo que resuelve esta llamada, **no hace falta para nada
+más** — ni siquiera el propio `COMPLETE_CHECK` de SAP lo guarda (llama a
+la FM sobre una copia local y nunca hace `MODIFY` después); es solo una
+comprobación de validez, no bloquea ni grabar ni cerrar el lote (una
+hipótesis inicial de que sí hacía falta resolverlo resultó equivocada,
+ver `docs/DF_resumen.md`).
 
-**Ojo, `FKK_RLS_ITEM_VALIDATE` necesita la cabecera ya grabada en BD**
-para resolver `OPBEL` — probado: llamándolo con la cabecera solo
-preparada en memoria (antes de `HDR_SAVE`), no resuelve nada y `OPBEL`
-se queda vacío sin dar ningún error. Por eso `create_lot` llama a
-`FKK_RLS_HDR_SAVE` (+ `COMMIT WORK`, para que quede realmente persistida,
-no solo en tarea de actualización) **antes** de `FKK_RLS_ITEM_VALIDATE`,
-no después como en un primer intento. Si un documento no es válido
-(excepción `NOT_VALID`, p.ej. no existe), se aborta — la cabecera ya
-queda creada sin posiciones (se puede borrar desde `FP09` → Remesa de
-devoluciones → Borrar, como indica el propio mensaje `>2549` de SAP); no
-hay forma de evitar esto sin arriesgarse a que `ITEM_VALIDATE` no
-resuelva nada, así que es el trade-off aceptado. Mismo criterio de
-todo-o-nada (sin granularidad por línea) que ya usan
-`ZFI_R_DEVOLUCIONES_CREA`/`ZFI_R_DEVOLUCIONES` a nivel de fichero
-completo.
+Lo que **sí hace falta** es que `DFKKRK-ANZPO` (nº de posiciones que dice
+tener la cabecera) quede con el valor correcto al grabar — si se queda a
+`0` (aunque `DFKKRP` tenga las posiciones de verdad, que es lo que
+pasaba: el bucle de `FKK_RLS_ITEM_PREPARE` por tandas pisa `ANZPO` con
+valores intermedios y nunca lo deja al total final antes de llamar a
+`FKK_RLS_ITEM_SAVE_MASS`), `FP09` → "Cerrar" da el error `>2549` ("No
+existen entradas para la remesa") aunque las posiciones existan. Fix:
+`create_lot` fija `ls_dfkkrk-anzpo` al total real justo antes de
+`FKK_RLS_ITEM_SAVE_MASS`.
+
+**Sobre abortar con `NOT_VALID`**: la cabecera ya está grabada en ese
+punto (`FKK_RLS_HDR_SAVE` se llama justo después de `HDR_PREPARE`, ver
+más abajo), así que un documento inválido deja un lote creado sin
+posiciones (se puede borrar desde `FP09` → Remesa de devoluciones →
+Borrar, como indica el propio mensaje `>2549`) — no es un abort 100%
+limpio, pero es el mismo criterio de todo-o-nada (sin granularidad por
+línea) que ya usan `ZFI_R_DEVOLUCIONES_CREA`/`ZFI_R_DEVOLUCIONES` a nivel
+de fichero completo.
 
 ## Contenido del repositorio
 

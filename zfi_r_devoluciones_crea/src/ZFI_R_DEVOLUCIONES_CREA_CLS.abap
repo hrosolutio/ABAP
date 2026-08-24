@@ -12,8 +12,10 @@
 *                            lote AAMMDDCDI11x)
 *   FKK_RLS_ITEM_PREPARE  -> pide N posiciones plantilla (KEYR1/POSRA ya
 *                            calculados)
-*   FKK_RLS_ITEM_VALIDATE -> resuelve SELT1/SELW1 contra el documento de
-*                            pago real y rellena OPBEL en la posicion
+*   FKK_RLS_ITEM_VALIDATE -> comprueba si SELT1/SELW1 resuelven contra un
+*                            documento de pago real (solo validacion, ver
+*                            comentario en CREATE_LOT - no hace falta
+*                            para grabar ni cerrar el lote)
 *   FKK_RLS_HDR_SAVE       -> graba la cabecera
 *   FKK_RLS_ITEM_SAVE_MASS -> graba todas las posiciones de una vez
 *
@@ -27,12 +29,13 @@
 *   Posicion (DFKKRP), por linea del _DEV: BETRR (importe, EN NEGATIVO -
 *   confirmado con el error real >4703 al meterlo en positivo), SELT1 = 'B',
 *   SELW1 = nº de documento SAP. El banco/IBAN del deudor (BANKL/BANKK/
-*   BANKN/IBAN) se quedan vacios y el lote se graba igual - no hacen falta
-*   para crear el lote. OPBEL SI hace falta resuelto (via
-*   FKK_RLS_ITEM_VALIDATE) para que la posicion cuente como "entrada" al
-*   cerrar el lote en RU_03 (ZFI_R_DEVOLUCIONES2) - confirmado con el
-*   error real >2549 ("No existen entradas para la remesa") al intentar
-*   cerrar un lote creado sin este paso.
+*   BANKN/IBAN) y OPBEL se quedan vacios y el lote se graba igual - no
+*   hacen falta para crear el lote.
+*
+* DFKKRK-ANZPO (nº de posiciones de la cabecera) SI hay que ponerlo bien
+* antes de grabar - si se queda a 0 (aunque DFKKRP tenga posiciones de
+* verdad), el cierre del lote en RU_03 (ZFI_R_DEVOLUCIONES2) falla con el
+* error real >2549 ("No existen entradas para la remesa").
 CLASS lcl_devoluciones_crea DEFINITION.
   PUBLIC SECTION.
 
@@ -576,15 +579,21 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
       <fs_dfkkrp>-selw1 = ls_item-docnum.
     ENDLOOP.
 
-    " FKK_RLS_ITEM_VALIDATE resuelve SELT1/SELW1 contra el documento de
-    " pago real y rellena OPBEL en la propia posicion (confirmado
-    " depurando FP09: sin este paso, DFKKRP-OPBEL se queda vacio y el
-    " lote se graba pero FP09 lo rechaza al cerrar - "No existen entradas
-    " para la remesa", mensaje >2549 - porque una posicion sin OPBEL no
-    " cuenta como "entrada"). Si un documento no es valido (NOT_VALID), se
-    " aborta - la cabecera ya esta grabada (ver comentario en HDR_SAVE
-    " mas arriba), pero sin posiciones no queda ningun dato de negocio
-    " comprometido; se puede borrar el lote vacio desde FP09 si hace falta.
+    " FKK_RLS_ITEM_VALIDATE comprueba si SELT1/SELW1 resuelven contra un
+    " documento de pago real. Es lo mismo que hace LCL_RLOT->COMPLETE_CHECK
+    " antes de grabar (confirmado viendo su codigo fuente via un breakpoint
+    " de modulo de funcion) - el propio comentario original dice que el
+    " error solo debe hacerse notar al cerrar el lote, no aqui, pero
+    " preferimos abortar ya (mismo criterio todo-o-nada que el resto del
+    " programa) en vez de dejar pasar una posicion invalida silenciosamente.
+    " OJO: el OPBEL que resuelve esta llamada NO se usa para nada mas -
+    " ni siquiera COMPLETE_CHECK lo guarda en ningun sitio (llama a la FM
+    " sobre una copia local y no hace MODIFY despues) - es solo una
+    " comprobacion de validez, no hace falta para grabar ni cerrar el lote.
+    " Si un documento no es valido (NOT_VALID), se aborta - la cabecera ya
+    " esta grabada (ver comentario en HDR_SAVE mas arriba), pero sin
+    " posiciones no queda ningun dato de negocio comprometido; se puede
+    " borrar el lote vacio desde FP09 si hace falta.
     LOOP AT lt_dfkkrp ASSIGNING FIELD-SYMBOL(<fs_dfkkrp_val>).
       DATA: lt_dfkkrp3_dummy TYPE STANDARD TABLE OF dfkkrp3.
       CLEAR lt_dfkkrp3_dummy.
@@ -604,6 +613,15 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
         RETURN.
       ENDIF.
     ENDLOOP.
+
+    " ANZPO se ha ido pisando dentro del bucle de ITEM_PREPARE (para
+    " numerar POSRA por tandas) y se queda con el valor de la penultima
+    " tanda, no el total final - hay que ponerlo al numero real de
+    " posiciones antes de grabar, si no la cabecera se queda con ANZPO=0
+    " aunque DFKKRP tenga las posiciones (confirmado con SE16N: lote real
+    " con 72 filas en DFKKRP pero DFKKRK-ANZPO=0 - probablemente el motivo
+    " real del error >2549 al cerrar, no la resolucion de OPBEL).
+    ls_dfkkrk-anzpo = lines( lt_dfkkrp ).
 
     DATA: lt_dfkkrp_del TYPE STANDARD TABLE OF dfkkrp,
           lt_dfkkrp3    TYPE STANDARD TABLE OF dfkkrp3.
