@@ -83,15 +83,21 @@ cerrarlo/contabilizarlo en RU_03), hay que llamar a
 queda vacío y `FP09` → "Cerrar" da el error `>2549`, "No existen entradas
 para la remesa").
 
-`create_lot` llama a `FKK_RLS_ITEM_VALIDATE` para todas las posiciones
-**antes** de `FKK_RLS_HDR_SAVE`/`FKK_RLS_ITEM_SAVE_MASS` (ni
-`HDR_PREPARE` ni `ITEM_PREPARE` ni `ITEM_VALIDATE` escriben en BD —
-confirmado depurando `FP09`, la tabla `T_DFKKRP3` entra y sale vacía de
-`ITEM_VALIDATE`). Si un documento no es válido (excepción `NOT_VALID`,
-p.ej. no existe), se **aborta todo el lote** sin haber tocado la base de
-datos — mismo criterio de todo-o-nada que ya usan
+**Ojo, `FKK_RLS_ITEM_VALIDATE` necesita la cabecera ya grabada en BD**
+para resolver `OPBEL` — probado: llamándolo con la cabecera solo
+preparada en memoria (antes de `HDR_SAVE`), no resuelve nada y `OPBEL`
+se queda vacío sin dar ningún error. Por eso `create_lot` llama a
+`FKK_RLS_HDR_SAVE` (+ `COMMIT WORK`, para que quede realmente persistida,
+no solo en tarea de actualización) **antes** de `FKK_RLS_ITEM_VALIDATE`,
+no después como en un primer intento. Si un documento no es válido
+(excepción `NOT_VALID`, p.ej. no existe), se aborta — la cabecera ya
+queda creada sin posiciones (se puede borrar desde `FP09` → Remesa de
+devoluciones → Borrar, como indica el propio mensaje `>2549` de SAP); no
+hay forma de evitar esto sin arriesgarse a que `ITEM_VALIDATE` no
+resuelva nada, así que es el trade-off aceptado. Mismo criterio de
+todo-o-nada (sin granularidad por línea) que ya usan
 `ZFI_R_DEVOLUCIONES_CREA`/`ZFI_R_DEVOLUCIONES` a nivel de fichero
-completo (no hay granularidad por línea en ninguno de los 3 desarrollos).
+completo.
 
 ## Contenido del repositorio
 

@@ -499,12 +499,32 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
       RETURN.
     ENDIF.
 
-    " FKK_RLS_HDR_SAVE se llama mas abajo, DESPUES de validar todas las
-    " posiciones (FKK_RLS_ITEM_VALIDATE) - ni HDR_PREPARE ni ITEM_PREPARE
-    " ni ITEM_VALIDATE escriben en BD (confirmado depurando FP09: la
-    " tabla T_DFKKRP3 entra y sale vacia de ITEM_VALIDATE), asi que si una
-    " posicion no es valida se puede abortar aqui sin haber tocado la BD
-    " y sin dejar ningun lote a medias.
+    " FKK_RLS_HDR_SAVE se llama YA aqui (no despues de validar las
+    " posiciones): probado que FKK_RLS_ITEM_VALIDATE no resuelve OPBEL si
+    " la cabecera no esta todavia grabada en BD (en la prueba manual de
+    " FP09 que confirmo el comportamiento, siempre fue sobre un lote ya
+    " existente). El COMMIT WORK siguiente fuerza que quede realmente
+    " persistida (FKK_RLS_HDR_SAVE por si sola solo la deja en tarea de
+    " actualizacion) antes de intentar validar. Si alguna posicion falla
+    " despues, el lote queda creado sin posiciones (se puede borrar desde
+    " FP09 -> Remesa de devoluciones -> Borrar, como indica el propio
+    " mensaje >2549 de SAP).
+    CALL FUNCTION 'FKK_RLS_HDR_SAVE'
+      CHANGING
+        c_dfkkrk         = ls_dfkkrk
+      EXCEPTIONS
+        error_message    = 1
+        lot_locked       = 2
+        no_authorization = 3
+        update_error     = 4
+        not_valid        = 5
+        OTHERS           = 6.
+    IF sy-subrc <> 0.
+      ev_error = |FKK_RLS_HDR_SAVE: error { sy-subrc }|.
+      RETURN.
+    ENDIF.
+
+    COMMIT WORK.
 
     " FKK_RLS_ITEM_PREPARE capa I_LINE_COUNT a una variable interna del
     " grupo de funcion (MAX_LINES, visto en su codigo fuente via SE37) -
@@ -561,10 +581,10 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
     " depurando FP09: sin este paso, DFKKRP-OPBEL se queda vacio y el
     " lote se graba pero FP09 lo rechaza al cerrar - "No existen entradas
     " para la remesa", mensaje >2549 - porque una posicion sin OPBEL no
-    " cuenta como "entrada"). Si un documento no es valido (NOT_VALID),
-    " se aborta todo el lote sin haber tocado la BD todavia (mismo
-    " criterio de todo-o-nada que ya usan ZFI_R_DEVOLUCIONES_CREA y
-    " ZFI_R_DEVOLUCIONES a nivel de fichero).
+    " cuenta como "entrada"). Si un documento no es valido (NOT_VALID), se
+    " aborta - la cabecera ya esta grabada (ver comentario en HDR_SAVE
+    " mas arriba), pero sin posiciones no queda ningun dato de negocio
+    " comprometido; se puede borrar el lote vacio desde FP09 si hace falta.
     LOOP AT lt_dfkkrp ASSIGNING FIELD-SYMBOL(<fs_dfkkrp_val>).
       DATA: lt_dfkkrp3_dummy TYPE STANDARD TABLE OF dfkkrp3.
       CLEAR lt_dfkkrp3_dummy.
@@ -580,25 +600,10 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
           not_valid = 1
           OTHERS    = 2.
       IF sy-subrc <> 0.
-        ev_error = |FKK_RLS_ITEM_VALIDATE: documento { <fs_dfkkrp_val>-selw1 } no válido (error { sy-subrc })|.
+        ev_error = |FKK_RLS_ITEM_VALIDATE: documento { <fs_dfkkrp_val>-selw1 } no válido (error { sy-subrc } - lote { ls_dfkkrk-keyr1 } ya creado sin posiciones, borrar si hace falta)|.
         RETURN.
       ENDIF.
     ENDLOOP.
-
-    CALL FUNCTION 'FKK_RLS_HDR_SAVE'
-      CHANGING
-        c_dfkkrk         = ls_dfkkrk
-      EXCEPTIONS
-        error_message    = 1
-        lot_locked       = 2
-        no_authorization = 3
-        update_error     = 4
-        not_valid        = 5
-        OTHERS           = 6.
-    IF sy-subrc <> 0.
-      ev_error = |FKK_RLS_HDR_SAVE: error { sy-subrc }|.
-      RETURN.
-    ENDIF.
 
     DATA: lt_dfkkrp_del TYPE STANDARD TABLE OF dfkkrp,
           lt_dfkkrp3    TYPE STANDARD TABLE OF dfkkrp3.

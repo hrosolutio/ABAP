@@ -395,12 +395,41 @@ criterio de todo-o-nada que ya usan `ZFI_R_DEVOLUCIONES_CREA`/
 `ZFI_R_DEVOLUCIONES` a nivel de fichero completo (ninguno de los 3
 desarrollos tiene granularidad de error por línea).
 
-**Pendiente**: repetir la prueba completa (crear lote con el fix →
-`FP09` → Cerrar → Contabilizar) para confirmar que con `OPBEL` resuelto
-ya se puede cerrar, y seguir depurando qué FMs reales usa "Cerrar"/
-"Contabilizar" para RU_03 (`ZFI_R_DEVOLUCIONES2`) — muy probablemente
-`FKK_RLS_CLOSE`/`FKK_RLS_POST_LOT` del mismo grupo de función, no
-`RFKKKA00` (ver `../zfi_r_devoluciones2/docs/DF_resumen.md`).
+### Segundo intento fallido: `ITEM_VALIDATE` necesita la cabecera ya en BD
+
+Primera implementación del fix: `FKK_RLS_ITEM_VALIDATE` para todas las
+posiciones **antes** de `FKK_RLS_HDR_SAVE` (para poder abortar sin haber
+escrito nada en BD si un documento no era válido). Probado en DES: lote
+`260824CDI111` creado sin error, pero `OPBEL` seguía **vacío** — puesto
+un breakpoint justo después de la llamada dentro de nuestro propio
+`create_lot` (en vez de en `FP09`), se confirma que `C_DFKKRP-OPBEL` no
+se rellena ahí, sin ningún error (`sy-subrc` = 0 igualmente).
+
+Diferencia con la prueba manual que sí funcionó: en `FP09` siempre se
+probó sobre un lote **ya existente** (entrando en "Tratar" de un lote
+creado en una transacción anterior, ya comiteado). Conclusión:
+`FKK_RLS_ITEM_VALIDATE` necesita que la cabecera ya esté **persistida en
+BD** (no solo preparada en memoria) para poder resolver el documento —
+probablemente hace una lectura a BD por `KEYR1`/`FIKEY` en vez de usar
+solo lo que se le pasa en `I_DFKKRK`.
+
+**Fix corregido**: `FKK_RLS_HDR_SAVE` + `COMMIT WORK` se llaman ya justo
+después de `FKK_RLS_HDR_PREPARE` (el `COMMIT WORK` es necesario porque
+`HDR_SAVE` por sí sola solo deja el `INSERT` en tarea de actualización,
+no persistido hasta el siguiente commit) — **antes** de `ITEM_PREPARE`/
+`ITEM_VALIDATE`, no después. Coste: si una posición falla `NOT_VALID`, la
+cabecera ya queda creada en BD sin posiciones (recuperable borrando el
+lote vacío desde `FP09`, tal como indica el propio mensaje `>2549` de
+SAP) — ya no es un abort 100% limpio como se pretendía, pero es el único
+orden con el que `ITEM_VALIDATE` resuelve `OPBEL` de verdad.
+
+**Pendiente**: repetir la prueba completa (crear lote con el fix
+corregido → confirmar `OPBEL` relleno por `SE16N` → `FP09` → Cerrar →
+Contabilizar) para confirmar que ya se puede cerrar, y seguir depurando
+qué FMs reales usa "Cerrar"/"Contabilizar" para RU_03
+(`ZFI_R_DEVOLUCIONES2`) — muy probablemente `FKK_RLS_CLOSE`/
+`FKK_RLS_POST_LOT` del mismo grupo de función, no `RFKKKA00` (ver
+`../zfi_r_devoluciones2/docs/DF_resumen.md`).
 
 ### Configuración vía `ZFI_T_CONSTANTS` (sin hardcode)
 
