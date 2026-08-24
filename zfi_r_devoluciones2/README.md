@@ -5,7 +5,7 @@
 punto de partida para el desarrollo 3 de 3 del proyecto CDI_11 (gestión de
 extornos): **"Servicio para cerrar y contabilizar lotes de devoluciones"**,
 siguiendo la sugerencia de EVA en RU_03 de reutilizar el motor de
-`ZFI_R_DEVOLUCIONES` (vía `RFKKA00`) en vez de crear un servicio RFC nuevo.
+`ZFI_R_DEVOLUCIONES` (vía `RFKKKA00`) en vez de crear un servicio RFC nuevo.
 
 Es uno de los 3 desarrollos del proyecto CDI_11:
 1. **División del fichero ECOFI** en transferencias/extornos → [`zfi_r_ecofi_split/`](../zfi_r_ecofi_split/README.md)
@@ -45,11 +45,11 @@ docs/
 ## Pendiente / a definir con el cliente
 
 - Fichero de ejemplo `AUSZUG`/`UMSATZ` generado hoy por `ZFI_R_DEVOLUCIONES`,
-  para fijar el layout exacto que espera `RFKKA00` y poder generarlo desde el
+  para fijar el layout exacto que espera `RFKKKA00` y poder generarlo desde el
   fichero `_DEV` de extornos (que no es XML SEPA).
 - Formato final acordado del fichero `_DEV` (RU_01): si el concepto se sustituye
   por el nº de documento PG (propuesta de EVA) o se mantiene la línea completa.
-- Nomenclatura de lote `AAMMDDCDI11xx`: cómo se traslada a `RFKKA00`/`p_runid`.
+- Nomenclatura de lote `AAMMDDCDI11xx`: cómo se traslada a `RFKKKA00`/`p_runid`.
 - Sociedad/motivo/cuenta fijos del DF vs. consulta a `ZFI_T_COBRO_CONF` (y si
   aplica un `tipo_cobro` propio para extornos, distinto de `DEV`).
 - Traza en `ZFI_T_FILE_LOG`: proceso/`co_dev` a usar para extornos.

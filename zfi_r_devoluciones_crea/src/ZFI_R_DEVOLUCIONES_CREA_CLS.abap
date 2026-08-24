@@ -26,7 +26,7 @@
 *   SELW1 = nº de documento SAP. El banco/IBAN del deudor (BANKL/BANKK/
 *   BANKN/IBAN) y OPBEL se quedan vacios y el lote se graba igual - no
 *   hacen falta para crear el lote (a diferencia del enfoque descartado
-*   con RFKKA00/multicash, que si los necesitaba).
+*   con RFKKKA00/multicash, que si los necesitaba).
 CLASS lcl_devoluciones_crea DEFINITION.
   PUBLIC SECTION.
 

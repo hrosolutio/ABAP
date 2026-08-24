@@ -7,7 +7,7 @@ comentarios de EVA).
 Ternero), que hoy gestiona devoluciones bancarias SEPA recibidas en XML. Se parte de
 esta copia (sin modificar aún) siguiendo la sugerencia de EVA en RU_03: en vez de
 exponer un servicio RFC nuevo, reutilizar el motor estándar que ya crea, cierra y
-contabiliza lotes de devolución (`RFKKA00`, vía `SUBMIT ... WITH p_xcre/p_xcls/p_xbu`),
+contabiliza lotes de devolución (`RFKKKA00`, vía `SUBMIT ... WITH p_xcre/p_xcls/p_xbu`),
 adaptado para que la entrada sea el fichero de extornos (`_DEV`) derivado del fichero
 bancario de transferencias, en vez de un XML de devolución SEPA.
 
@@ -25,7 +25,7 @@ no uno solo.
   (`_DEV`), detectando extorno por concepto de 24 dígitos.
   → Desarrollo 1: [`zfi_r_ecofi_split/`](../zfi_r_ecofi_split/README.md). *(Fuera de
   alcance de este programa.)*
-- **RU_02 — Creación del lote de devoluciones** en SAP (FP09/RFKKA00) a partir del
+- **RU_02 — Creación del lote de devoluciones** en SAP (FP09/RFKKKA00) a partir del
   fichero `_DEV`, con nomenclatura `AAMMDDCDI11xx`, sociedad `1239`, clase `DV`,
   motivo `Z01`, cta. compensación `4305500150`, una posición por línea del fichero.
   → Desarrollo 2: programa aparte, pendiente de empezar. *(Fuera de alcance de
@@ -57,21 +57,21 @@ funcione con el fichero de extornos hace falta decidir/adaptar, como mínimo:
    no XML. Hace falta un método de lectura nuevo para este formato.
 2. **Conversión a multicash (`convert_multicash`) y creación del lote**: el
    original convierte el XML a los ficheros `AUSZUG`/`UMSATZ` (formato multicash
-   que espera `RFKKA00`) mediante `SUBMIT rfkksepa_dd_rjct`, y con esos ficheros
+   que espera `RFKKKA00`) mediante `SUBMIT rfkksepa_dd_rjct`, y con esos ficheros
    **crea** el lote (`SUBMIT rfkkka00 ... WITH p_xcre = gv_crear`). Ahora que RU_02
    (crear el lote) es un desarrollo aparte, este paso probablemente **sobra en
    `ZFI_R_DEVOLUCIONES2`**: si el desarrollo 2 ya deja el lote creado, este
    programa solo necesitaría el tramo de `submit_rfkkka00` con `p_xcls`/`p_xbu`
    (cerrar/contabilizar) apuntando al lote/`runid` ya existente, sin volver a
    generar `AUSZUG`/`UMSATZ` ni volver a crear nada. **Pendiente de confirmar**:
-   ¿`RFKKA00` permite cerrar/contabilizar un lote ya creado solo con
+   ¿`RFKKKA00` permite cerrar/contabilizar un lote ya creado solo con
    `p_rundat`/`p_runid` (sin volver a pasarle `p_auszf`/`p_umsf`), o siempre
    necesita los ficheros de entrada aunque el lote ya exista? Necesito
-   verificarlo en SE38 (F1 en los parámetros de `RFKKA00`) o depurando una
+   verificarlo en SE38 (F1 en los parámetros de `RFKKKA00`) o depurando una
    ejecución real de cierre/contabilización de un lote de devolución existente.
 3. **Nomenclatura del lote**: el DF pide `AAMMDDCDI11xx`; el original construye
    `lv_runid` a partir de `file_id` (`co_key = 'Z_ID'`). Falta confirmar si
-   `RFKKA00`/`p_runid` permite fijar directamente esa nomenclatura o si el nombre
+   `RFKKKA00`/`p_runid` permite fijar directamente esa nomenclatura o si el nombre
    de lote (`DFKKZK-KEYZ1`) lo asigna el propio motor estándar a partir de otro
    criterio.
 4. **Sociedad/cuenta/motivo fijos**: `get_importe` calcula sociedad, banco y motivo

@@ -14,8 +14,8 @@ del fichero.
 ## Enfoque actual: pendiente de depurar `FP09`
 
 El primer borrador de este programa (ver "Enfoque descartado" más abajo) se
-construyó sobre `RFKKA00`/`FPB17` por una lectura incorrecta del DF (se
-escribió "FP09/RFKKA00" como si fueran equivalentes, sin comprobarlo). El DF
+construyó sobre `RFKKKA00`/`FPB17` por una lectura incorrecta del DF (se
+escribió "FP09/RFKKKA00" como si fueran equivalentes, sin comprobarlo). El DF
 pide **`FP09`**, que es la transacción de **alta manual de lote de pago**
 (cabecera + posiciones una a una), no el motor de carga masiva de extractos
 bancarios multicash que usa `ZFI_R_DEVOLUCIONES`.
@@ -37,7 +37,7 @@ sistema):**
 - Confirmar la estructura exacta de `DFKKZK`/`DFKKZP` a rellenar y qué campos
   son obligatorios.
 
-**Ventaja de este enfoque frente al de `RFKKA00`**: si funciona, no hace falta
+**Ventaja de este enfoque frente al de `RFKKKA00`**: si funciona, no hace falta
 ningún dato que no tengamos — no requiere `AUSZUG`/`UMSATZ`, ni banco/IBAN/BIC
 del deudor, ni número de secuencia de extracto. Solo los datos fijos del DF
 (sociedad, motivo, cta. compensación) y, por posición, el importe y el nº de
@@ -286,7 +286,7 @@ llamadas a los FM (en pantalla se usa el primero):
 También en `DFKKRP`: `BANKL`/`BANKK`/`BANKN`/`IBAN` (banco/IBAN del
 deudor) — **si se derivan solos al indicar el documento de pago original**
 (vía `SELT1`/`SELW1` u `OPBEL`), esto resolvería completamente el hueco que
-teníamos con el enfoque `RFKKA00` (el `_DEV` no lleva esos datos). Falta
+teníamos con el enfoque `RFKKKA00` (el `_DEV` no lleva esos datos). Falta
 confirmar completando el flujo en pantalla hasta Grabar de verdad.
 
 `RLBEL`/`URBEL` en `DFKKRP` parecen campos de salida (nº del documento de
@@ -306,7 +306,7 @@ proseguir el tratamiento"). Consultado `DFKKRP` por `SE16N`:
 el lote se graba igualmente sin error — **no hacen falta para crear el
 lote** (RU_02). Probablemente se resuelven en el cierre/contabilización
 (RU_03, `ZFI_R_DEVOLUCIONES2`), no en la creación. Esto cierra el hueco de
-datos que arrastrábamos desde el enfoque `RFKKA00` (banco/IBAN del deudor
+datos que arrastrábamos desde el enfoque `RFKKKA00` (banco/IBAN del deudor
 no disponibles en el `_DEV`) — **con el enfoque `FP09`/`FKK_RLS_*` no
 hacen falta en absoluto**.
 
@@ -412,13 +412,13 @@ reactivar la clase. `MONEDA` se usa tanto para `DFKKRK-WAERS` (moneda del
 lote) como para localizar el importe dentro de la línea del `_DEV`
 (`parse_dev_lines` busca ese mismo tag en el texto).
 
-## Enfoque descartado: `RFKKA00`/multicash (no usar, referencia solamente)
+## Enfoque descartado: `RFKKKA00`/multicash (no usar, referencia solamente)
 
 Se dejó el trabajo hecho documentado por si resulta útil más adelante (p.ej.
 si `FP09` resultara no ser viable), pero **no es el camino a seguir** salvo
 que se decida lo contrario explícitamente.
 
-Generaba a mano los ficheros multicash `AUSZUG`/`UMSATZ` que espera `RFKKA00`
+Generaba a mano los ficheros multicash `AUSZUG`/`UMSATZ` que espera `RFKKKA00`
 (el original `ZFI_R_DEVOLUCIONES` los genera con `RFKKSEPA_DD_RJCT` a partir
 de un XML SEPA real, que aquí no aplica porque el `_DEV` no es XML). El
 formato se dedujo de 6 ejemplos reales (`ZFI_T_FILE_LOG`, 4 bancos distintos)
@@ -427,7 +427,7 @@ de este fichero si hiciera falta recuperarlo. Quedaban varios campos sin
 resolver (cuenta bancaria de cobro, BIC/IBAN/motivo del deudor, número de
 secuencia del extracto, encaje de la nomenclatura `AAMMDDCDI11x` con el
 límite de 6 caracteres de `RUNIDBS_KK`) — nunca se llegó a confirmar contra
-una ejecución real de `RFKKA00`.
+una ejecución real de `RFKKKA00`.
 
 ## Premisas / Dependencias
 

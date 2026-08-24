@@ -14,7 +14,7 @@ Es el desarrollo 2 de 3 del proyecto CDI_11:
 
 Reescrito sobre la API pública del grupo de función `FKR2` (dominio
 "Rückläuferstapel" = lote de devoluciones), localizada depurando el botón
-Grabar de `FP09` — no sobre `RFKKA00` (enfoque anterior, descartado por
+Grabar de `FP09` — no sobre `RFKKKA00` (enfoque anterior, descartado por
 lectura incorrecta del DF; ver `docs/DF_resumen.md` para el detalle
 completo de la depuración).
 

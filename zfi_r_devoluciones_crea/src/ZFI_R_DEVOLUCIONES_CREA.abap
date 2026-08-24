@@ -13,9 +13,9 @@
 * 001     | 17.08.2026 |                  | Version inicial (SIN  |CDI_11 *
 *         |            |                  | USAR), generaba        |       *
 *         |            |                  | AUSZUG/UMSATZ + SUBMIT |       *
-*         |            |                  | RFKKA00 - enfoque      |       *
+*         |            |                  | RFKKKA00 - enfoque      |       *
 *         |            |                  | descartado, el DF pide |       *
-*         |            |                  | FP09, no RFKKA00        |       *
+*         |            |                  | FP09, no RFKKKA00        |       *
 * 002     | 20.08.2026 |                  | Reescrito sobre la    |CDI_11 *
 *         |            |                  | API real de FP09        |       *
 *         |            |                  | (FKK_RLS_HDR_PREPARE/  |       *
