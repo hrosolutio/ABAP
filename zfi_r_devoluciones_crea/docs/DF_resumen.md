@@ -52,12 +52,52 @@ y status tratar"):
   realidad **tecleado a mano** en la pantalla de `FP09` (un valor
   propuesto de 13 caracteres, `260819CDI1101`, que el campo cortó a 12) —
   corrección de una nota anterior de este documento que decía lo
-  contrario sin base real. **No hay confirmación de que SAP genere este
-  formato solo** en ningún sistema; probado después con el programa (ver
-  más abajo), sin exit de cliente `FKK_RLS_HDR_PREPARE` cae al formato
-  estándar `RL`+fecha+secuencial. El límite de **12 caracteres** de
-  `KEYR1` sí es real y confirmado (el DF pide `AAMMDDCDI11xx`, 13
-  caracteres, que no caben).
+  contrario sin base real. Probado después con el programa (`_R_
+  DEVOLUCIONES_CREA` en DES): sin exit de cliente, `FKK_RLS_HDR_PREPARE`
+  cae al formato estándar de SAP `RL`+fecha+secuencial (`RL2026082103`).
+  El límite de **12 caracteres** de `KEYR1` sí es real y confirmado (el DF
+  pide `AAMMDDCDI11xx`, 13 caracteres, que no caben).
+
+### Nomenclatura real del lote: `ZFKR2_POOL` (soft-exit)
+
+`FKK_RLS_HDR_PREPARE` (código fuente, ver más abajo) solo usa la
+nomenclatura del proyecto si existe un programa de exit con un nombre
+**fijo, hardcodeado en el propio código estándar de SAP** (no es
+customizing, confirmado buscando `PROG_NAME` en todos los includes de
+`SAPLFKR2` con `Ctrl+F` → "en todos los includes"):
+
+```abap
+DATA:
+* Program for Soft-Exits
+  PROG_NAME      LIKE D010SINF-PROG VALUE 'ZFKR2_POOL'.
+```
+
+Y en `FKK_RLS_HDR_PREPARE`:
+
+```abap
+PERFORM ('GENERATE_RLS_KEY') IN PROGRAM (PROG_NAME) IF FOUND
+                             CHANGING C_DFKKRK-KEYR1.
+IF C_DFKKRK-KEYR1 IS INITIAL.
+  PERFORM SAMPLE_SP_GENERATE_RLS_KEY CHANGING C_DFKKRK-KEYR1.  " RL+fecha+secuencial
+ENDIF.
+```
+
+`ZFKR2_POOL` no existía en ningún sistema (confirmado). Se ha creado
+(`../src/ZFKR2_POOL.abap`, a dar de alta en `SE38` como **Pool de
+subrutinas**, nombre exacto `ZFKR2_POOL`) con una `FORM GENERATE_RLS_KEY`
+que construye `AAMMDDCDI11x` (secuencial de 1 dígito por el límite de 12
+caracteres de `KEYR1` — ver arriba) buscando el primer valor libre del día
+(`SELECT SINGLE` contra `DFKKRK`, sin `@`, ver `CLAUDE.md`), y si se
+agotan los 10 posibles (0-9), deja `C_KEYR1` en blanco para que
+`FKK_RLS_HDR_PREPARE` caiga al generador estándar de SAP en vez de
+fallar. En cuanto se active en un sistema, tanto nuestro programa como la
+creación manual desde `FP09` usan la nomenclatura del proyecto
+automáticamente — no hace falta tocar `ZFI_R_DEVOLUCIONES_CREA_CLS`.
+
+**Pendiente confirmar con el funcional**: el secuencial de 1 dígito (no 2
+como pide el DF literalmente) es un límite técnico del campo, no una
+decisión de diseño — hay que validar que sea aceptable (máx. 10
+lotes/día).
 - **Clase de documento**: ya viene `DV` por defecto — coincide con el DF.
 - **Clave de reconciliación**: se autorrellena igual que el nº de lote.
 - Campos de cabecera vistos: Sociedad, División, Clase de documento, Clave
