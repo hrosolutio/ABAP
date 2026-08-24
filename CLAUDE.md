@@ -94,6 +94,15 @@ dividir.
 estilo, es sintaxis: poner `CHANGING` antes que `TABLES` (u otro orden
 distinto al de arriba) da error de sintaxis al activar.
 
+## Usar `TYPE`, no `LIKE`/`STRUCTURE`, para referenciar tipos del Diccionario
+
+Al declarar una variable con el tipo de un campo/tabla/estructura del
+Diccionario ABAP, usar siempre `TYPE` (`DATA: lv_x TYPE dfkkrk-keyr1.`), no
+`LIKE` (`DATA: lv_x LIKE dfkkrk-keyr1.`) ni `STRUCTURE`. `LIKE` es sintaxis
+antigua (pre-Diccionario ABAP unificado) y está desaconsejada en código
+nuevo. Esto no aplica al operador SQL `LIKE` (`WHERE campo LIKE
+lv_pattern.`), que es una cosa totalmente distinta y no hay que tocarlo.
+
 ## Si GitHub falla
 
 Si la web de GitHub da error (incidencia de su lado, no del repo — se

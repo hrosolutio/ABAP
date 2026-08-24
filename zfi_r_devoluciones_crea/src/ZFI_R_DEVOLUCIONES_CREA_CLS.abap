@@ -444,7 +444,7 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
     " de fallar.
     DATA: lv_prefix    TYPE c LENGTH 11,
           lv_pattern   TYPE c LENGTH 12,
-          lv_max_keyr1 LIKE dfkkrk-keyr1,
+          lv_max_keyr1 TYPE dfkkrk-keyr1,
           lv_next_seq  TYPE i,
           lv_seq_n     TYPE n LENGTH 1.
 
