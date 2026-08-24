@@ -22,13 +22,28 @@
 * C_KEYR1 en blanco para que FKK_RLS_HDR_PREPARE caiga a su generador
 * estandar (RL+fecha+secuencial) en vez de fallar - ver
 * ../docs/DF_resumen.md para el detalle completo.
+*
+* PROG_NAME es global para TODO el grupo de funcion FKR2, asi que esta
+* rutina se dispara para cualquier lote que se cree en el sistema (FP09
+* a mano, u otro desarrollo Z), no solo desde CDI_11. Para no aplicar
+* esta nomenclatura fuera de nuestro proceso, solo actua si
+* ZFI_R_DEVOLUCIONES_CREA_CLS ha dejado la marca en memoria ABAP
+* co_memid_own_process ('ZFI_RLS_CDI11') justo antes de llamar a
+* FKK_RLS_HDR_PREPARE (y la borra justo despues) - si no esta la marca,
+* se sale sin tocar C_KEYR1 y SAP genera el KEYR1 estandar como siempre.
 
 FORM generate_rls_key CHANGING c_keyr1 LIKE dfkkrk-keyr1.
 
-  DATA: lv_prefix    TYPE c LENGTH 11,
-        lv_seq       TYPE n LENGTH 1,
-        lv_candidate LIKE dfkkrk-keyr1,
-        lv_found     LIKE dfkkrk-keyr1.
+  DATA: lv_own_process TYPE flag,
+        lv_prefix      TYPE c LENGTH 11,
+        lv_seq         TYPE n LENGTH 1,
+        lv_candidate   LIKE dfkkrk-keyr1,
+        lv_found       LIKE dfkkrk-keyr1.
+
+  IMPORT own_process = lv_own_process FROM MEMORY ID 'ZFI_RLS_CDI11'.
+  IF sy-subrc <> 0 OR lv_own_process <> abap_true.
+    RETURN.
+  ENDIF.
 
   CONCATENATE sy-datum+2(6) 'CDI11' INTO lv_prefix.
 

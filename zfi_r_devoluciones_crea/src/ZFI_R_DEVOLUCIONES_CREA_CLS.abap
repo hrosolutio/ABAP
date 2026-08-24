@@ -54,7 +54,14 @@ CLASS lcl_devoluciones_crea DEFINITION.
       co_const_motivo    TYPE zfi_de_constant_id    VALUE 'MOTIVO',
       co_const_cta_comp  TYPE zfi_de_constant_id    VALUE 'CTA_COMPENSACION',
       co_const_ruta_log  TYPE zfi_de_constant_id    VALUE 'RUTA_LOGICA',
-      co_const_moneda    TYPE zfi_de_constant_id    VALUE 'MONEDA'.
+      co_const_moneda    TYPE zfi_de_constant_id    VALUE 'MONEDA',
+
+      " Marca en memoria ABAP para ZFKR2_POOL=>GENERATE_RLS_KEY (soft-exit
+      " global de FKK_RLS_HDR_PREPARE) - solo con esta marca puesta genera
+      " la nomenclatura AAMMDDCDI11x; sin ella (cualquier otro uso de
+      " FP09/FKK_RLS_HDR_PREPARE en el sistema) no toca el KEYR1. Ver
+      " ZFKR2_POOL.abap.
+      co_memid_own_process TYPE string VALUE 'ZFI_RLS_CDI11'.
 
     TYPES:
       BEGIN OF ty_s_item,
@@ -443,6 +450,14 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
     ls_dfkkrk-waers = gv_moneda.
     ls_dfkkrk-blart = `DV`.
 
+    " Marcamos que el siguiente FKK_RLS_HDR_PREPARE es nuestro, para que
+    " ZFKR2_POOL=>GENERATE_RLS_KEY (soft-exit global del grupo de funcion
+    " FKR2) solo aplique la nomenclatura AAMMDDCDI11x aqui y no en
+    " cualquier otro sitio del sistema que cree lotes (FP09 a mano, otros
+    " desarrollos Z). La borramos justo despues de la llamada, pase lo
+    " que pase.
+    EXPORT own_process = abap_true TO MEMORY ID co_memid_own_process.
+
     CALL FUNCTION 'FKK_RLS_HDR_PREPARE'
       CHANGING
         c_dfkkrk         = ls_dfkkrk
@@ -452,6 +467,9 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
         locked            = 3
         failure           = 4
         OTHERS            = 5.
+
+    FREE MEMORY ID co_memid_own_process.
+
     IF sy-subrc <> 0.
       ev_error = |FKK_RLS_HDR_PREPARE: error { sy-subrc }|.
       RETURN.

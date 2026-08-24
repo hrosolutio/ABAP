@@ -98,6 +98,19 @@ automáticamente — no hace falta tocar `ZFI_R_DEVOLUCIONES_CREA_CLS`.
 como pide el DF literalmente) es un límite técnico del campo, no una
 decisión de diseño — hay que validar que sea aceptable (máx. 10
 lotes/día).
+
+**Acotado a nuestro proceso vía memoria ABAP**: como `PROG_NAME` es global
+para todo el grupo de función `FKR2`, sin ningún control `GENERATE_RLS_KEY`
+se dispararía para cualquier lote creado en el sistema (`FP09` a mano por
+otro motivo, otro desarrollo Z). `create_lot` (`ZFI_R_DEVOLUCIONES_CREA_CLS`)
+deja una marca (`EXPORT own_process = abap_true TO MEMORY ID
+'ZFI_RLS_CDI11'`) justo antes de llamar a `FKK_RLS_HDR_PREPARE` y la borra
+(`FREE MEMORY ID`) justo después, pase lo que pase. `GENERATE_RLS_KEY`
+(`ZFKR2_POOL`) hace `IMPORT own_process = ... FROM MEMORY ID
+'ZFI_RLS_CDI11'` al principio: si no está la marca, `RETURN` inmediato sin
+tocar `C_KEYR1` — cualquier otro uso de `FP09`/`FKK_RLS_HDR_PREPARE` en el
+sistema sigue con el generador estándar de SAP, sin efectos colaterales.
+
 - **Clase de documento**: ya viene `DV` por defecto — coincide con el DF.
 - **Clave de reconciliación**: se autorrellena igual que el nº de lote.
 - Campos de cabecera vistos: Sociedad, División, Clase de documento, Clave

@@ -45,9 +45,18 @@ hardcodeado en el código estándar de SAP, no es customizing) con una
 
 Se ha creado ese programa: **`src/ZFKR2_POOL.abap`** — dar de alta en
 `SE38` como **Pool de subrutinas** (no `REPORT`), nombre exacto
-`ZFKR2_POOL`, y activar. En cuanto exista, tanto `ZFI_R_DEVOLUCIONES_CREA`
-como la creación manual desde `FP09` usarán la nomenclatura del proyecto
-automáticamente, sin más cambios.
+`ZFKR2_POOL`, y activar.
+
+**Ojo, `PROG_NAME` es global para todo el grupo de función `FKR2`**: sin
+más control, `GENERATE_RLS_KEY` se dispararía para cualquier lote que se
+cree en el sistema (`FP09` a mano por cualquier otro motivo, u otro
+desarrollo Z), no solo desde `CDI_11`. Por eso `create_lot` deja una marca
+en memoria ABAP (`EXPORT ... TO MEMORY ID 'ZFI_RLS_CDI11'`) justo antes de
+llamar a `FKK_RLS_HDR_PREPARE` y la borra justo después — `GENERATE_RLS_KEY`
+solo aplica la nomenclatura `AAMMDDCDI11x` si esa marca está puesta; si no
+(cualquier otro uso de `FP09`/`FKK_RLS_HDR_PREPARE`), no toca `KEYR1` y SAP
+sigue generando su formato estándar como hasta ahora, sin efectos
+colaterales para el resto del sistema.
 
 **Ojo con el límite de 12 caracteres** de `DFKKRK-KEYR1`: el DF pide
 `AAMMDDCDI11xx` (13 caracteres, secuencial de 2 dígitos), pero no caben —
