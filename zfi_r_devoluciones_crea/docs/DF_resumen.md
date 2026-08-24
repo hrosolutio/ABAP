@@ -58,58 +58,53 @@ y status tratar"):
   El límite de **12 caracteres** de `KEYR1` sí es real y confirmado (el DF
   pide `AAMMDDCDI11xx`, 13 caracteres, que no caben).
 
-### Nomenclatura real del lote: `ZFKR2_POOL` (soft-exit)
+### Nomenclatura real del lote: se calcula en la propia clase, sin exit
 
-`FKK_RLS_HDR_PREPARE` (código fuente, ver más abajo) solo usa la
-nomenclatura del proyecto si existe un programa de exit con un nombre
-**fijo, hardcodeado en el propio código estándar de SAP** (no es
-customizing, confirmado buscando `PROG_NAME` en todos los includes de
-`SAPLFKR2` con `Ctrl+F` → "en todos los includes"):
+`FKK_RLS_HDR_PREPARE` (código fuente, ver más abajo) solo genera un
+`KEYR1` cuando el campo llega vacío — si ya viene relleno, se limita a
+comprobar que no exista:
 
 ```abap
-DATA:
-* Program for Soft-Exits
-  PROG_NAME      LIKE D010SINF-PROG VALUE 'ZFKR2_POOL'.
-```
-
-Y en `FKK_RLS_HDR_PREPARE`:
-
-```abap
-PERFORM ('GENERATE_RLS_KEY') IN PROGRAM (PROG_NAME) IF FOUND
-                             CHANGING C_DFKKRK-KEYR1.
 IF C_DFKKRK-KEYR1 IS INITIAL.
-  PERFORM SAMPLE_SP_GENERATE_RLS_KEY CHANGING C_DFKKRK-KEYR1.  " RL+fecha+secuencial
+  PERFORM ('GENERATE_RLS_KEY') IN PROGRAM (PROG_NAME) IF FOUND
+                               CHANGING C_DFKKRK-KEYR1.
+  IF C_DFKKRK-KEYR1 IS INITIAL.
+    PERFORM SAMPLE_SP_GENERATE_RLS_KEY CHANGING C_DFKKRK-KEYR1.  " RL+fecha+secuencial
+  ENDIF.
+ELSE.
+  SELECT SINGLE KEYR1 FROM DFKKRK ... WHERE KEYR1 = C_DFKKRK-KEYR1.
+  IF SY-SUBRC = 0. MESSAGE E403 RAISING LOT_EXISTS. ENDIF.
+  " ... y comprobación en DFKKRK_ARCKEY (archivados)
 ENDIF.
 ```
 
-`ZFKR2_POOL` no existía en ningún sistema (confirmado). Se ha creado
-(`../src/ZFKR2_POOL.abap`, a dar de alta en `SE38` como **Pool de
-subrutinas**, nombre exacto `ZFKR2_POOL`) con una `FORM GENERATE_RLS_KEY`
-que construye `AAMMDDCDI11x` (secuencial de 1 dígito por el límite de 12
-caracteres de `KEYR1` — ver arriba) buscando el primer valor libre del día
-(`SELECT SINGLE` contra `DFKKRK`, sin `@`, ver `CLAUDE.md`), y si se
-agotan los 10 posibles (0-9), deja `C_KEYR1` en blanco para que
-`FKK_RLS_HDR_PREPARE` caiga al generador estándar de SAP en vez de
-fallar. En cuanto se active en un sistema, tanto nuestro programa como la
-creación manual desde `FP09` usan la nomenclatura del proyecto
-automáticamente — no hace falta tocar `ZFI_R_DEVOLUCIONES_CREA_CLS`.
+`PROG_NAME` está hardcodeado en el propio código estándar de SAP como
+`'ZFKR2_POOL'` (confirmado buscando la variable en todos los includes de
+`SAPLFKR2` con `Ctrl+F` → "en todos los includes") — se valoró crear ese
+programa de "soft-exit" para que generase `AAMMDDCDI11x` automáticamente,
+pero se descartó: `PROG_NAME` es **global para todo el grupo de función
+`FKR2`**, así que ese exit se dispararía para cualquier lote creado en el
+sistema (`FP09` a mano por otro motivo, otro desarrollo Z), no solo desde
+`CDI_11` — y aunque se puede acotar con una marca en memoria ABAP, es más
+riesgo e indirección de la que hace falta para algo que solo necesita nuestro
+programa.
+
+En su lugar, `create_lot` calcula el `KEYR1` **él mismo** (método
+`generate_keyr1`, `ZFI_R_DEVOLUCIONES_CREA_CLS`) y se lo pasa ya relleno a
+`FKK_RLS_HDR_PREPARE`, tomando el camino del `ELSE` de arriba — el mismo
+que se sigue cuando se teclea a mano en `FP09`. Construye
+`AAMMDDCDI11x` (secuencial de 1 dígito por el límite de 12 caracteres de
+`KEYR1` — ver arriba) con un único `SELECT MAX( KEYR1 )` contra `DFKKRK`
+filtrando por el prefijo del día (`LIKE`, sin `@`, ver `CLAUDE.md`) en vez
+de comprobar candidato a candidato; si se agotan los 10 posibles (0-9),
+devuelve vacío y deja que `FKK_RLS_HDR_PREPARE` caiga al generador
+estándar de SAP en vez de fallar. Queda todo contenido en la clase, sin
+tocar nada compartido con el resto del sistema.
 
 **Pendiente confirmar con el funcional**: el secuencial de 1 dígito (no 2
 como pide el DF literalmente) es un límite técnico del campo, no una
 decisión de diseño — hay que validar que sea aceptable (máx. 10
 lotes/día).
-
-**Acotado a nuestro proceso vía memoria ABAP**: como `PROG_NAME` es global
-para todo el grupo de función `FKR2`, sin ningún control `GENERATE_RLS_KEY`
-se dispararía para cualquier lote creado en el sistema (`FP09` a mano por
-otro motivo, otro desarrollo Z). `create_lot` (`ZFI_R_DEVOLUCIONES_CREA_CLS`)
-deja una marca (`EXPORT own_process = abap_true TO MEMORY ID
-'ZFI_RLS_CDI11'`) justo antes de llamar a `FKK_RLS_HDR_PREPARE` y la borra
-(`FREE MEMORY ID`) justo después, pase lo que pase. `GENERATE_RLS_KEY`
-(`ZFKR2_POOL`) hace `IMPORT own_process = ... FROM MEMORY ID
-'ZFI_RLS_CDI11'` al principio: si no está la marca, `RETURN` inmediato sin
-tocar `C_KEYR1` — cualquier otro uso de `FP09`/`FKK_RLS_HDR_PREPARE` en el
-sistema sigue con el generador estándar de SAP, sin efectos colaterales.
 
 - **Clase de documento**: ya viene `DV` por defecto — coincide con el DF.
 - **Clave de reconciliación**: se autorrellena igual que el nº de lote.

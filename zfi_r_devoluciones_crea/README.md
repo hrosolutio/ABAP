@@ -28,42 +28,37 @@ confirmadas en `DFKKRP`/`DFKKRK` por `SE16N` (sin huecos ni duplicados de
 `POSRA`, incluido el corte donde `FKK_RLS_ITEM_PREPARE` capa a `MAX_LINES`
 — ver `docs/DF_resumen.md`).
 
-**Pendiente**: dar de alta `ZFKR2_POOL` (ver más abajo) para que el nº de
-lote siga la nomenclatura `AAMMDDCDI11x` del DF, y probar el modo **Server**
-(bloqueado hasta que exista una ruta lógica de fichero real — ver
-`RUTA_LOGICA` en `ZFI_T_CONSTANTS` más abajo).
+**Pendiente**: confirmar con el funcional el secuencial de 1 dígito para
+el nº de lote (ver más abajo), y probar el modo **Server** (bloqueado
+hasta que exista una ruta lógica de fichero real — ver `RUTA_LOGICA` en
+`ZFI_T_CONSTANTS` más abajo).
 
-## Nomenclatura del lote (`ZFKR2_POOL`)
+## Nomenclatura del lote
 
-El DF exige que el lote se llame `AAMMDDCDI11xx`. Sin nada más, SAP genera
-el `KEYR1` con su propio formato por defecto (`RL` + fecha + secuencial,
-p.ej. `RL2026082103` — visto en la prueba de DES), porque
-`FKK_RLS_HDR_PREPARE` solo usa la nomenclatura del proyecto si existe un
-programa de "soft-exit" llamado **exactamente `ZFKR2_POOL`** (nombre
-hardcodeado en el código estándar de SAP, no es customizing) con una
-`FORM GENERATE_RLS_KEY`.
+El DF exige que el lote se llame `AAMMDDCDI11xx`. Sin hacer nada, SAP
+genera el `KEYR1` con su propio formato por defecto (`RL` + fecha +
+secuencial, p.ej. `RL2026082103` — visto en la prueba de DES) porque
+`FKK_RLS_HDR_PREPARE` solo genera un `KEYR1` cuando el campo llega vacío.
 
-Se ha creado ese programa: **`src/ZFKR2_POOL.abap`** — dar de alta en
-`SE38` como **Pool de subrutinas** (no `REPORT`), nombre exacto
-`ZFKR2_POOL`, y activar.
-
-**Ojo, `PROG_NAME` es global para todo el grupo de función `FKR2`**: sin
-más control, `GENERATE_RLS_KEY` se dispararía para cualquier lote que se
-cree en el sistema (`FP09` a mano por cualquier otro motivo, u otro
-desarrollo Z), no solo desde `CDI_11`. Por eso `create_lot` deja una marca
-en memoria ABAP (`EXPORT ... TO MEMORY ID 'ZFI_RLS_CDI11'`) justo antes de
-llamar a `FKK_RLS_HDR_PREPARE` y la borra justo después — `GENERATE_RLS_KEY`
-solo aplica la nomenclatura `AAMMDDCDI11x` si esa marca está puesta; si no
-(cualquier otro uso de `FP09`/`FKK_RLS_HDR_PREPARE`), no toca `KEYR1` y SAP
-sigue generando su formato estándar como hasta ahora, sin efectos
-colaterales para el resto del sistema.
+En vez de engancharnos al "soft-exit" del grupo de función `FKR2`
+(`PROG_NAME`/`ZFKR2_POOL`, un mecanismo global para todo el sistema — se
+valoró y se descartó por innecesariamente invasivo para algo que solo
+necesita nuestro programa), `create_lot` calcula el `KEYR1` **él mismo**
+(método `generate_keyr1`) y se lo pasa ya relleno a
+`FKK_RLS_HDR_PREPARE` — exactamente igual que si se tecleara a mano en
+`FP09`: si `KEYR1` no viene vacío, el FM no genera nada, solo comprueba
+que no exista ya. Queda todo contenido en nuestra propia clase, sin tocar
+nada compartido con el resto del sistema.
 
 **Ojo con el límite de 12 caracteres** de `DFKKRK-KEYR1`: el DF pide
 `AAMMDDCDI11xx` (13 caracteres, secuencial de 2 dígitos), pero no caben —
 la implementación usa `AAMMDDCDI11x` (secuencial de 1 dígito, máximo 10
-lotes/día). Si se agotan los 10 valores de un día, cae al generador
-estándar de SAP en vez de fallar. **Confirmar con el funcional que esta
-desviación del DF (secuencial de 1 dígito, no 2) es aceptable.**
+lotes/día — `generate_keyr1` calcula el siguiente con un `SELECT MAX(
+KEYR1 )` sobre `DFKKRK` filtrando por el prefijo del día). Si se agotan
+los 10 valores de un día, `generate_keyr1` devuelve vacío y
+`FKK_RLS_HDR_PREPARE` cae a su generador estándar en vez de fallar.
+**Confirmar con el funcional que esta desviación del DF (secuencial de 1
+dígito, no 2) es aceptable.**
 
 ## Contenido del repositorio
 
@@ -73,7 +68,6 @@ src/
   ZFI_R_DEVOLUCIONES_CREA_TOP.abap    Include TOP
   ZFI_R_DEVOLUCIONES_CREA_EVE.abap    Include EVE (pantalla de selección)
   ZFI_R_DEVOLUCIONES_CREA_CLS.abap    Include CLS (clase lcl_devoluciones_crea) — sobre FKK_RLS_HDR_PREPARE/_SAVE + FKK_RLS_ITEM_PREPARE/_SAVE_MASS
-  ZFKR2_POOL.abap                     Pool de subrutinas (soft-exit de FKR2, nombre fijo) — nomenclatura AAMMDDCDI11x del lote
 docs/
   DF_resumen.md                        Resumen del Diseño Funcional + historial completo de la depuración de FP09
 ```
@@ -95,11 +89,8 @@ docs/
 5. **Primera prueba: modo Upload**, con un `_DEV` de prueba (el que ya
    generó `zfi_r_ecofi_split`). **Ojo: no es una simulación** — crea el
    lote de verdad en el sistema donde se ejecute. El programa escribe en
-   pantalla el nº de lote creado y el nº de posiciones, o el error, si lo
-   hay. El formato del nº de lote lo decide el número de rango configurado
-   en cada sistema (en DES ha salido `RL2026082103`, no `AAMMDDCDI11x` como
-   en la prueba manual de Integración — es customizing, no afecta a que el
-   lote sea válido).
+   pantalla el nº de lote creado (`AAMMDDCDI11x`, ver "Nomenclatura del
+   lote" más abajo) y el nº de posiciones, o el error, si lo hay.
 6. Solo cuando el paso 5 confirme que funciona bien end-to-end, probar el
    modo **Server** (escanea la carpeta de `ZFICA_COBROS_ECOFI` — ver
    "Pendiente" en `docs/DF_resumen.md`, esa ruta lógica todavía no existe
@@ -141,8 +132,7 @@ en `ZFI_T_CONSTANTS`, sin tocar ni reactivar código.
 
 Ver `docs/DF_resumen.md` para el detalle completo. Resumen:
 
-- Dar de alta `ZFKR2_POOL` (pool de subrutinas) para la nomenclatura de
-  lote del DF, y confirmar con el funcional el secuencial de 1 dígito
+- Confirmar con el funcional el secuencial de 1 dígito del nº de lote
   (límite técnico de `KEYR1`, ver más arriba).
 - Dar de alta las filas de `ZFI_T_CONSTANTS` en Integración (en DES ya
   están, probadas con éxito).

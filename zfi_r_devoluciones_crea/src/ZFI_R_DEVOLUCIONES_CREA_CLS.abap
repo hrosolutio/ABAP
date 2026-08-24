@@ -54,14 +54,7 @@ CLASS lcl_devoluciones_crea DEFINITION.
       co_const_motivo    TYPE zfi_de_constant_id    VALUE 'MOTIVO',
       co_const_cta_comp  TYPE zfi_de_constant_id    VALUE 'CTA_COMPENSACION',
       co_const_ruta_log  TYPE zfi_de_constant_id    VALUE 'RUTA_LOGICA',
-      co_const_moneda    TYPE zfi_de_constant_id    VALUE 'MONEDA',
-
-      " Marca en memoria ABAP para ZFKR2_POOL=>GENERATE_RLS_KEY (soft-exit
-      " global de FKK_RLS_HDR_PREPARE) - solo con esta marca puesta genera
-      " la nomenclatura AAMMDDCDI11x; sin ella (cualquier otro uso de
-      " FP09/FKK_RLS_HDR_PREPARE en el sistema) no toca el KEYR1. Ver
-      " ZFKR2_POOL.abap.
-      co_memid_own_process TYPE string VALUE 'ZFI_RLS_CDI11'.
+      co_const_moneda    TYPE zfi_de_constant_id    VALUE 'MONEDA'.
 
     TYPES:
       BEGIN OF ty_s_item,
@@ -120,6 +113,8 @@ CLASS lcl_devoluciones_crea DEFINITION.
       cent_to_str IMPORTING iv_cent          TYPE i
                              iv_negative      TYPE abap_bool DEFAULT abap_false
                   RETURNING VALUE(rv_result) TYPE string,
+
+      generate_keyr1 RETURNING VALUE(rv_keyr1) TYPE dfkkrk-keyr1,
 
       create_lot IMPORTING it_items TYPE ty_t_item
                  EXPORTING ev_keyr1 TYPE dfkkrk-keyr1
@@ -438,6 +433,39 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
 
   ENDMETHOD.
 
+  METHOD generate_keyr1.
+
+    " Nomenclatura del DF (CDI_11, RU_02): AAMMDDCDI11xx (13 caracteres,
+    " secuencial de 2 digitos). DFKKRK-KEYR1 solo tiene 12 caracteres -
+    " limite tecnico confirmado, no elegido por nosotros - asi que el
+    " secuencial se queda en 1 solo digito (AAMMDDCDI11x, 0-9, maximo 10
+    " lotes/dia). Si se agotan los 10 valores del dia, se deja RV_KEYR1 en
+    " blanco para que FKK_RLS_HDR_PREPARE genere su KEYR1 estandar en vez
+    " de fallar.
+    DATA: lv_prefix    TYPE c LENGTH 11,
+          lv_pattern   TYPE c LENGTH 12,
+          lv_max_keyr1 LIKE dfkkrk-keyr1,
+          lv_next_seq  TYPE i,
+          lv_seq_n     TYPE n LENGTH 1.
+
+    CONCATENATE sy-datum+2(6) 'CDI11' INTO lv_prefix.
+    CONCATENATE lv_prefix '_' INTO lv_pattern.
+
+    SELECT MAX( keyr1 ) FROM dfkkrk INTO lv_max_keyr1 WHERE keyr1 LIKE lv_pattern.
+
+    IF lv_max_keyr1 IS INITIAL.
+      lv_next_seq = 0.
+    ELSE.
+      lv_next_seq = lv_max_keyr1+11(1) + 1.
+    ENDIF.
+
+    CHECK lv_next_seq <= 9.
+
+    lv_seq_n = lv_next_seq.
+    CONCATENATE lv_prefix lv_seq_n INTO rv_keyr1.
+
+  ENDMETHOD.
+
   METHOD create_lot.
 
     CLEAR: ev_keyr1, ev_ok, ev_error.
@@ -449,14 +477,7 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
     ls_dfkkrk-rlsko = gv_cta_comp.
     ls_dfkkrk-waers = gv_moneda.
     ls_dfkkrk-blart = `DV`.
-
-    " Marcamos que el siguiente FKK_RLS_HDR_PREPARE es nuestro, para que
-    " ZFKR2_POOL=>GENERATE_RLS_KEY (soft-exit global del grupo de funcion
-    " FKR2) solo aplique la nomenclatura AAMMDDCDI11x aqui y no en
-    " cualquier otro sitio del sistema que cree lotes (FP09 a mano, otros
-    " desarrollos Z). La borramos justo despues de la llamada, pase lo
-    " que pase.
-    EXPORT own_process = abap_true TO MEMORY ID co_memid_own_process.
+    ls_dfkkrk-keyr1 = generate_keyr1( ).
 
     CALL FUNCTION 'FKK_RLS_HDR_PREPARE'
       CHANGING
@@ -467,9 +488,6 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
         locked            = 3
         failure           = 4
         OTHERS            = 5.
-
-    FREE MEMORY ID co_memid_own_process.
-
     IF sy-subrc <> 0.
       ev_error = |FKK_RLS_HDR_PREPARE: error { sy-subrc }|.
       RETURN.
