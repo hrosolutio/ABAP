@@ -572,10 +572,10 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
       CALL FUNCTION 'FKK_RLS_ITEM_VALIDATE'
         EXPORTING
           i_dfkkrk  = ls_dfkkrk
-        CHANGING
-          c_dfkkrp  = <fs_dfkkrp_val>
         TABLES
           t_dfkkrp3 = lt_dfkkrp3_dummy
+        CHANGING
+          c_dfkkrp  = <fs_dfkkrp_val>
         EXCEPTIONS
           not_valid = 1
           OTHERS    = 2.
