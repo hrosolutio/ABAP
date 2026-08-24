@@ -106,6 +106,12 @@ como pide el DF literalmente) es un límite técnico del campo, no una
 decisión de diseño — hay que validar que sea aceptable (máx. 10
 lotes/día).
 
+**Probado con éxito** (DES, modo Upload, mismo `_DEV` de 72 líneas):
+`generate_keyr1` propuso `260824CDI110` (primer lote del día con esta
+nomenclatura), `FKK_RLS_HDR_PREPARE` lo aceptó tal cual (no generó nada,
+solo comprobó que no existiera) y el lote se creó con las 72 posiciones
+correctas.
+
 - **Clase de documento**: ya viene `DV` por defecto — coincide con el DF.
 - **Clave de reconciliación**: se autorrellena igual que el nº de lote.
 - Campos de cabecera vistos: Sociedad, División, Clase de documento, Clave

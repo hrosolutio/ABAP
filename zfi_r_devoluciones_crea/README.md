@@ -23,10 +23,13 @@ posiciones reales del `_DEV`): lote `260819CDI110` creado con éxito
 ("Se han grabado los datos"), confirmado en `DFKKRP` por `SE16N`.
 
 **Probado el programa completo** (DES, modo Upload, `_DEV` real de 72
-líneas): lote `RL2026082103` creado con éxito, las 72 posiciones
-confirmadas en `DFKKRP`/`DFKKRK` por `SE16N` (sin huecos ni duplicados de
-`POSRA`, incluido el corte donde `FKK_RLS_ITEM_PREPARE` capa a `MAX_LINES`
-— ver `docs/DF_resumen.md`).
+líneas): primera vuelta con lote `RL2026082103` (antes de calcular
+`KEYR1` en la propia clase — ver "Nomenclatura del lote" más abajo), 72
+posiciones confirmadas en `DFKKRP`/`DFKKRK` por `SE16N` (sin huecos ni
+duplicados de `POSRA`, incluido el corte donde `FKK_RLS_ITEM_PREPARE` capa
+a `MAX_LINES` — ver `docs/DF_resumen.md`). Repetido después con la
+nomenclatura ya del DF: lote `260824CDI110` (`AAMMDDCDI11x`, primer
+secuencial del día), también con éxito y 72 posiciones correctas.
 
 **Pendiente**: confirmar con el funcional el secuencial de 1 dígito para
 el nº de lote (ver más abajo), y probar el modo **Server** (bloqueado
