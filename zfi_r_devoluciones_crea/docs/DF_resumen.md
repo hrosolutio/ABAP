@@ -349,6 +349,59 @@ actualiza `ls_dfkkrk-anzpo` con las posiciones ya conseguidas y se pide
 solo lo que falta, hasta llegar al total de líneas del `_DEV`. Implementado
 como bucle `DO` en `create_lot` (`ZFI_R_DEVOLUCIONES_CREA_CLS`).
 
+### Depurando RU_03: el lote se crea pero no se puede cerrar (falta `OPBEL`)
+
+Al empezar a depurar el cierre/contabilización del lote (RU_03,
+`ZFI_R_DEVOLUCIONES2`) con un lote ya creado por este programa
+(`260824CDI110`, 72 posiciones), `FP09` → "Cerrar" dio error:
+
+```
+No existen entradas para la remesa 260824CDI110
+Nº mensaje: >2549
+Diagnóstico: El cierre de una remesa de devoluciones sólo tiene sentido
+si esta remesa también contiene entradas. Éste no es el caso.
+```
+
+`SELT1`='B'/`SELW1`=nº documento (lo único que rellena `create_lot`) es
+solo un **criterio de búsqueda**, no el documento resuelto — `OPBEL`
+("Doc.pago p.devoluciones") se queda vacío. Comprobado con `SE16N`: las
+72 posiciones tienen `OPBEL` vacío; eso es lo que hace que ninguna cuente
+como "entrada" para poder cerrar.
+
+Depurando en `FP09` (`Tratar` → `Posiciones nuevas`, con una posición
+nueva añadida a mano) con un **breakpoint de módulo de función** en
+`FKK_RLS_ITEM_VALIDATE` (`SE37` → módulo de función → Set breakpoint, más
+fiable que adivinar el momento exacto con `/h`): la llamada se dispara al
+teclear la posición nueva (antes de Grabar), y confirma:
+
+- `C_DFKKRP` **antes**: `OPBEL` vacío, `SELT1`='B', `SELW1`=nº documento
+  tecleado.
+- `C_DFKKRP` **después**: `OPBEL` = el mismo nº de documento (resuelto).
+  `BANKL`/`BANKK`/`BANKN`/`IBAN` siguen vacíos (no hacen falta, ya lo
+  sabíamos).
+- `T_DFKKRP3` entra y sale **vacía** — no es lo que hace falta rellenar
+  (no escribe nada en BD tampoco, seguro llamarla antes de persistir
+  nada).
+- Excepción `NOT_VALID` si el documento no existe/no es válido (probado
+  con un nº de documento inventado).
+
+**Fix aplicado a `create_lot`**: se añade un bucle llamando a
+`FKK_RLS_ITEM_VALIDATE` para cada posición (`i_dfkkrk` = cabecera,
+`c_dfkkrp` = la posición, `t_dfkkrp3` sin usar) **antes** de
+`FKK_RLS_HDR_SAVE`/`FKK_RLS_ITEM_SAVE_MASS` — como ningún FM hasta ese
+punto escribe en BD, si una posición da `NOT_VALID` se aborta todo el
+lote sin haber tocado la base de datos, sin dejar nada a medias. Mismo
+criterio de todo-o-nada que ya usan `ZFI_R_DEVOLUCIONES_CREA`/
+`ZFI_R_DEVOLUCIONES` a nivel de fichero completo (ninguno de los 3
+desarrollos tiene granularidad de error por línea).
+
+**Pendiente**: repetir la prueba completa (crear lote con el fix →
+`FP09` → Cerrar → Contabilizar) para confirmar que con `OPBEL` resuelto
+ya se puede cerrar, y seguir depurando qué FMs reales usa "Cerrar"/
+"Contabilizar" para RU_03 (`ZFI_R_DEVOLUCIONES2`) — muy probablemente
+`FKK_RLS_CLOSE`/`FKK_RLS_POST_LOT` del mismo grupo de función, no
+`RFKKKA00` (ver `../zfi_r_devoluciones2/docs/DF_resumen.md`).
+
 ### Configuración vía `ZFI_T_CONSTANTS` (sin hardcode)
 
 `BUKRS`/`RLGRD`/`RLSKO` (sociedad, motivo, cta. compensación) no van como

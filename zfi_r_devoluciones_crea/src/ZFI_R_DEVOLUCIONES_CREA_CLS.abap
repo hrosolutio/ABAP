@@ -5,18 +5,21 @@
 * fichero _DEV (salida de ZFI_R_ECOFI_SPLIT / RU_01), via transaccion FP09.
 *
 * FP09 es una transaccion de dialogo (LCL_RLOT, clase local del pool de
-* funciones FKR2DLG, no invocable desde fuera). Depurando su boton Grabar
-* se localizo la API publica real del grupo de funcion FKR2 ("RLS" =
-* Ruecklaeuferstapel = lote de devoluciones):
-*   FKK_RLS_HDR_PREPARE  -> prepara la cabecera (calcula KEYR1, el nº de
-*                           lote AAMMDDCDI11x)
-*   FKK_RLS_HDR_SAVE     -> graba la cabecera
-*   FKK_RLS_ITEM_PREPARE -> pide N posiciones plantilla (KEYR1/POSRA ya
-*                           calculados)
+* funciones FKR2DLG, no invocable desde fuera). Depurando sus botones
+* Grabar y "Posiciones nuevas" se localizo la API publica real del grupo
+* de funcion FKR2 ("RLS" = Ruecklaeuferstapel = lote de devoluciones):
+*   FKK_RLS_HDR_PREPARE   -> prepara la cabecera (calcula KEYR1, el nº de
+*                            lote AAMMDDCDI11x)
+*   FKK_RLS_ITEM_PREPARE  -> pide N posiciones plantilla (KEYR1/POSRA ya
+*                            calculados)
+*   FKK_RLS_ITEM_VALIDATE -> resuelve SELT1/SELW1 contra el documento de
+*                            pago real y rellena OPBEL en la posicion
+*   FKK_RLS_HDR_SAVE       -> graba la cabecera
 *   FKK_RLS_ITEM_SAVE_MASS -> graba todas las posiciones de una vez
 *
 * Probado con exito en Integracion (lote 260819CDI110, 3 posiciones
-* reales del _DEV de zfi_r_ecofi_split) - ver docs/DF_resumen.md para el
+* reales del _DEV de zfi_r_ecofi_split) y en DES con el programa completo
+* (lote 260824CDI110, 72 posiciones) - ver docs/DF_resumen.md para el
 * detalle completo de la depuracion y los campos confirmados.
 *
 * Campos minimos necesarios (confirmado con la prueba real, ver DF):
@@ -24,9 +27,12 @@
 *   Posicion (DFKKRP), por linea del _DEV: BETRR (importe, EN NEGATIVO -
 *   confirmado con el error real >4703 al meterlo en positivo), SELT1 = 'B',
 *   SELW1 = nº de documento SAP. El banco/IBAN del deudor (BANKL/BANKK/
-*   BANKN/IBAN) y OPBEL se quedan vacios y el lote se graba igual - no
-*   hacen falta para crear el lote (a diferencia del enfoque descartado
-*   con RFKKKA00/multicash, que si los necesitaba).
+*   BANKN/IBAN) se quedan vacios y el lote se graba igual - no hacen falta
+*   para crear el lote. OPBEL SI hace falta resuelto (via
+*   FKK_RLS_ITEM_VALIDATE) para que la posicion cuente como "entrada" al
+*   cerrar el lote en RU_03 (ZFI_R_DEVOLUCIONES2) - confirmado con el
+*   error real >2549 ("No existen entradas para la remesa") al intentar
+*   cerrar un lote creado sin este paso.
 CLASS lcl_devoluciones_crea DEFINITION.
   PUBLIC SECTION.
 
@@ -493,20 +499,12 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
       RETURN.
     ENDIF.
 
-    CALL FUNCTION 'FKK_RLS_HDR_SAVE'
-      CHANGING
-        c_dfkkrk         = ls_dfkkrk
-      EXCEPTIONS
-        error_message    = 1
-        lot_locked       = 2
-        no_authorization = 3
-        update_error     = 4
-        not_valid        = 5
-        OTHERS           = 6.
-    IF sy-subrc <> 0.
-      ev_error = |FKK_RLS_HDR_SAVE: error { sy-subrc }|.
-      RETURN.
-    ENDIF.
+    " FKK_RLS_HDR_SAVE se llama mas abajo, DESPUES de validar todas las
+    " posiciones (FKK_RLS_ITEM_VALIDATE) - ni HDR_PREPARE ni ITEM_PREPARE
+    " ni ITEM_VALIDATE escriben en BD (confirmado depurando FP09: la
+    " tabla T_DFKKRP3 entra y sale vacia de ITEM_VALIDATE), asi que si una
+    " posicion no es valida se puede abortar aqui sin haber tocado la BD
+    " y sin dejar ningun lote a medias.
 
     " FKK_RLS_ITEM_PREPARE capa I_LINE_COUNT a una variable interna del
     " grupo de funcion (MAX_LINES, visto en su codigo fuente via SE37) -
@@ -557,6 +555,50 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
       <fs_dfkkrp>-selt1 = `B`.
       <fs_dfkkrp>-selw1 = ls_item-docnum.
     ENDLOOP.
+
+    " FKK_RLS_ITEM_VALIDATE resuelve SELT1/SELW1 contra el documento de
+    " pago real y rellena OPBEL en la propia posicion (confirmado
+    " depurando FP09: sin este paso, DFKKRP-OPBEL se queda vacio y el
+    " lote se graba pero FP09 lo rechaza al cerrar - "No existen entradas
+    " para la remesa", mensaje >2549 - porque una posicion sin OPBEL no
+    " cuenta como "entrada"). Si un documento no es valido (NOT_VALID),
+    " se aborta todo el lote sin haber tocado la BD todavia (mismo
+    " criterio de todo-o-nada que ya usan ZFI_R_DEVOLUCIONES_CREA y
+    " ZFI_R_DEVOLUCIONES a nivel de fichero).
+    LOOP AT lt_dfkkrp ASSIGNING FIELD-SYMBOL(<fs_dfkkrp_val>).
+      DATA: lt_dfkkrp3_dummy TYPE STANDARD TABLE OF dfkkrp3.
+      CLEAR lt_dfkkrp3_dummy.
+
+      CALL FUNCTION 'FKK_RLS_ITEM_VALIDATE'
+        EXPORTING
+          i_dfkkrk  = ls_dfkkrk
+        CHANGING
+          c_dfkkrp  = <fs_dfkkrp_val>
+        TABLES
+          t_dfkkrp3 = lt_dfkkrp3_dummy
+        EXCEPTIONS
+          not_valid = 1
+          OTHERS    = 2.
+      IF sy-subrc <> 0.
+        ev_error = |FKK_RLS_ITEM_VALIDATE: documento { <fs_dfkkrp_val>-selw1 } no válido (error { sy-subrc })|.
+        RETURN.
+      ENDIF.
+    ENDLOOP.
+
+    CALL FUNCTION 'FKK_RLS_HDR_SAVE'
+      CHANGING
+        c_dfkkrk         = ls_dfkkrk
+      EXCEPTIONS
+        error_message    = 1
+        lot_locked       = 2
+        no_authorization = 3
+        update_error     = 4
+        not_valid        = 5
+        OTHERS           = 6.
+    IF sy-subrc <> 0.
+      ev_error = |FKK_RLS_HDR_SAVE: error { sy-subrc }|.
+      RETURN.
+    ENDIF.
 
     DATA: lt_dfkkrp_del TYPE STANDARD TABLE OF dfkkrp,
           lt_dfkkrp3    TYPE STANDARD TABLE OF dfkkrp3.

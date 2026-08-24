@@ -31,10 +31,19 @@ a `MAX_LINES` — ver `docs/DF_resumen.md`). Repetido después con la
 nomenclatura ya del DF: lote `260824CDI110` (`AAMMDDCDI11x`, primer
 secuencial del día), también con éxito y 72 posiciones correctas.
 
+**Corrección importante (encontrada depurando RU_03)**: el lote se
+grababa pero no se podía cerrar/contabilizar (`FP09` → "Cerrar" daba
+"No existen entradas para la remesa", mensaje `>2549`) porque faltaba
+resolver cada posición contra su documento de pago real
+(`FKK_RLS_ITEM_VALIDATE`, que rellena `OPBEL`) — sin eso, `DFKKRP` tiene
+las posiciones pero ninguna cuenta como "entrada". Añadido a `create_lot`
+(ver "Resolución de posiciones (`OPBEL`)" más abajo).
+
 **Pendiente**: confirmar con el funcional el secuencial de 1 dígito para
-el nº de lote (ver más abajo), y probar el modo **Server** (bloqueado
-hasta que exista una ruta lógica de fichero real — ver `RUTA_LOGICA` en
-`ZFI_T_CONSTANTS` más abajo).
+el nº de lote (ver más abajo), volver a probar el ciclo completo
+crear→cerrar→contabilizar con el fix de `FKK_RLS_ITEM_VALIDATE`, y probar
+el modo **Server** (bloqueado hasta que exista una ruta lógica de fichero
+real — ver `RUTA_LOGICA` en `ZFI_T_CONSTANTS` más abajo).
 
 ## Nomenclatura del lote
 
@@ -62,6 +71,27 @@ los 10 valores de un día, `generate_keyr1` devuelve vacío y
 `FKK_RLS_HDR_PREPARE` cae a su generador estándar en vez de fallar.
 **Confirmar con el funcional que esta desviación del DF (secuencial de 1
 dígito, no 2) es aceptable.**
+
+## Resolución de posiciones (`OPBEL`)
+
+`SELT1`='B'/`SELW1`=nº de documento (lo que rellenaba `create_lot` hasta
+ahora) es solo un **criterio de búsqueda**, no el documento resuelto. Para
+que la posición cuente como "entrada" real del lote (necesario para poder
+cerrarlo/contabilizarlo en RU_03), hay que llamar a
+`FKK_RLS_ITEM_VALIDATE` por cada posición — resuelve la búsqueda y rellena
+`OPBEL` (confirmado depurando `FP09`: sin este paso, `DFKKRP-OPBEL` se
+queda vacío y `FP09` → "Cerrar" da el error `>2549`, "No existen entradas
+para la remesa").
+
+`create_lot` llama a `FKK_RLS_ITEM_VALIDATE` para todas las posiciones
+**antes** de `FKK_RLS_HDR_SAVE`/`FKK_RLS_ITEM_SAVE_MASS` (ni
+`HDR_PREPARE` ni `ITEM_PREPARE` ni `ITEM_VALIDATE` escriben en BD —
+confirmado depurando `FP09`, la tabla `T_DFKKRP3` entra y sale vacía de
+`ITEM_VALIDATE`). Si un documento no es válido (excepción `NOT_VALID`,
+p.ej. no existe), se **aborta todo el lote** sin haber tocado la base de
+datos — mismo criterio de todo-o-nada que ya usan
+`ZFI_R_DEVOLUCIONES_CREA`/`ZFI_R_DEVOLUCIONES` a nivel de fichero
+completo (no hay granularidad por línea en ninguno de los 3 desarrollos).
 
 ## Contenido del repositorio
 
