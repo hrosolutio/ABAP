@@ -1,0 +1,11 @@
+# Tarea 3 — Sobrescribir la sección "parameters" del módulo <service>-srv
+# generado por `cds add mta` en el mta.yaml raíz del proyecto.
+# Sustituye el bloque "parameters:" existente de ese módulo por este, tal
+# cual (literal, según el enunciado):
+
+    parameters:
+      instances: 1
+      buildpack: nodejs_buildpack
+      app-name: ${space}-c_cpe_submission-srv
+      routes:
+        - route: ${org}-cpe-submission.${default-domain}

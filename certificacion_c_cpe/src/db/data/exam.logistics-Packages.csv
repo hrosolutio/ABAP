@@ -1,0 +1,4 @@
+ID,contents,weight,parent_ID
+P1,Package 1,10,AA-123
+P2,Package 2,5.5,AA-123
+P3,Package 3,100,BB-456
