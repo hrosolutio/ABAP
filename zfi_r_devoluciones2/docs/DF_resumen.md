@@ -3,13 +3,23 @@
 **Documento origen:** CS_CDI_11_Procedimiento_Gestion_de_extornos (27/07/2026, con
 comentarios de EVA).
 
-**Programa base:** copia literal de `ZFI_R_DEVOLUCIONES` (COB-INT-006, autor Jose
-Ternero), que hoy gestiona devoluciones bancarias SEPA recibidas en XML. Se parte de
-esta copia (sin modificar aún) siguiendo la sugerencia de EVA en RU_03: en vez de
-exponer un servicio RFC nuevo, reutilizar el motor estándar que ya crea, cierra y
-contabiliza lotes de devolución (`RFKKKA00`, vía `SUBMIT ... WITH p_xcre/p_xcls/p_xbu`),
-adaptado para que la entrada sea el fichero de extornos (`_DEV`) derivado del fichero
-bancario de transferencias, en vez de un XML de devolución SEPA.
+**Programa base (histórico, ver corrección más abajo):** copia literal de
+`ZFI_R_DEVOLUCIONES` (COB-INT-006, autor Jose Ternero), que hoy gestiona
+devoluciones bancarias SEPA recibidas en XML. Se partió de esta copia (sin
+modificar) siguiendo la sugerencia de EVA en RU_03: en vez de exponer un
+servicio RFC nuevo, reutilizar el motor estándar que ya crea, cierra y
+contabiliza lotes de devolución (`RFKKKA00`, vía `SUBMIT ... WITH
+p_xcre/p_xcls/p_xbu`).
+
+> **Corrección (tras depurar RU_02 y probar RU_03 en `FP09`):** igual que
+> pasó con RU_02 (el DF decía "FP09/RFKKA00" como si fueran equivalentes, y
+> no lo son), el cierre/contabilización real **tampoco usa `RFKKKA00`** —
+> `FP09` → "Cerrar"/"Contabilizar" llaman directamente a `FKK_RLS_CLOSE`/
+> `FKK_RLS_POST_LOT` del grupo de función `FKR2` (el mismo que usa
+> `ZFI_R_DEVOLUCIONES_CREA` para RU_02), confirmado con pruebas reales — ver
+> "Cadena real confirmada" más abajo. **La copia de `ZFI_R_DEVOLUCIONES`
+> deja de ser el punto de partida**; este programa habrá que reescribirlo
+> sobre `FKK_RLS_*`, igual que se hizo con `ZFI_R_DEVOLUCIONES_CREA`.
 
 ## Objeto
 
@@ -25,70 +35,144 @@ no uno solo.
   (`_DEV`), detectando extorno por concepto de 24 dígitos.
   → Desarrollo 1: [`zfi_r_ecofi_split/`](../zfi_r_ecofi_split/README.md). *(Fuera de
   alcance de este programa.)*
-- **RU_02 — Creación del lote de devoluciones** en SAP (FP09/RFKKKA00) a partir del
-  fichero `_DEV`, con nomenclatura `AAMMDDCDI11xx`, sociedad `1239`, clase `DV`,
+- **RU_02 — Creación del lote de devoluciones** en SAP (`FP09`, vía
+  `FKK_RLS_*` — no `RFKKKA00`, ver corrección arriba) a partir del fichero
+  `_DEV`, con nomenclatura `AAMMDDCDI11xx`, sociedad `1239`, clase `DV`,
   motivo `Z01`, cta. compensación `4305500150`, una posición por línea del fichero.
-  → Desarrollo 2: programa aparte, pendiente de empezar. *(Fuera de alcance de
+  → Desarrollo 2: `zfi_r_devoluciones_crea/`, ya reescrito y probado con
+  éxito. *(Fuera de alcance de
   este programa.)*
 - **RU_03 — Cierre y contabilización** del lote de devoluciones ya creado.
   Comentario de EVA: no crear servicio nuevo, adaptar `ZFI_R_DEVOLUCIONES`.
   → Desarrollo 3: **este programa** (`ZFI_R_DEVOLUCIONES2`).
 
+## Cadena real confirmada (grupo de función `FKR2`, no `RFKKKA00`)
+
+Confirmado depurando `FP09` en DES sobre lotes reales creados por
+`ZFI_R_DEVOLUCIONES_CREA` (mismo método que RU_02: breakpoint de módulo de
+función puesto antes de pulsar el botón, para no depender de acertar el
+momento exacto con `/h`). Ver `../zfi_r_devoluciones_crea/docs/DF_resumen.md`
+para el contexto completo de RU_02 (nomenclatura de lote, `ANZPO`, etc. —
+todo relevante aquí también porque este programa opera sobre esos mismos
+lotes).
+
+### Cerrar → `FKK_RLS_CLOSE`
+
+```abap
+CALL FUNCTION 'FKK_RLS_CLOSE'
+     EXPORTING
+          I_KEYR1          = rfkr1-keyr1
+     EXCEPTIONS
+          NOT_FOUND        = 1   " Schlüssel spezifiert unbekannten Stapel
+          NO_AUTHORIZATION = 2   " keine Berechtigung für Schließen
+          NOT_VALID        = 3   " Schließen nicht möglich, ungültige Daten
+          OTHERS           = 4.
+```
+
+Firma completa: `IMPORTING I_KEYR1 LIKE DFKKRK-KEYR1, I_XDIALOG TYPE CHAR1
+DEFAULT SPACE, I_XCOMMIT TYPE XFELD DEFAULT 'X'` (comitea solo, no hace
+falta `COMMIT WORK` aparte), `CHANGING C_DFKKRK LIKE DFKKRK` (opcional, no
+hace falta pasarlo). **Probado con éxito real**: lote `260825CDI111`,
+`sy-subrc = 0`, `FP09` mostró después "Ya no se pueden modificar
+devoluciones" (cerrado).
+
+### Contabilizar → `FKK_RLS_POST_LOT`
+
+```abap
+CALL FUNCTION 'FKK_RLS_POST_LOT'
+     EXPORTING
+          I_KEYR1              = ...
+*         I_XFULL_TRACE        = '?'    (default)
+*         I_XSIMU               = SPACE  (default - posteo real, no simulación)
+*         I_XWRITE              = 'X'    (default)
+*         I_REWORK              = SPACE  (default)
+*         I_CALL_FROM_RTP       = SPACE  (default)
+*         I_CLOSE               = SPACE  (default - el lote ya debe estar cerrado)
+*     TABLES
+*         IT_DFKKRP_REWORK      (opcional)
+     EXCEPTIONS
+          NOT_VALID             = 1   " RLS kann nicht validiert werden
+          INVALID_KEY           = 2   " Zum Schlüssel gibt es keinen Stapel
+          LOCK_FAILURE          = 3   " Sperren des Stapel war fehlerhaft
+          NO_DATA               = 4   " keine Items im Stapel
+          POSTINGS_INCOMPLETE   = 5   " Buchungen waren nicht vollständig
+          OTHERS                = 6.
+```
+
+La llamada real en `FP09` solo pasa `I_KEYR1`, todo lo demás a los valores
+por defecto de arriba. **Probado en DES**: `sy-subrc = 6` (`OTHERS`) sobre
+el lote `260825CDI110` — no es un fallo del FM, es que la mayoría de los
+72 documentos del `_DEV` de prueba **no existen de verdad en DES**
+("El documento 491000011392 no existe. Corrija la entrada", mensaje `>0`
+número `91`, uno por cada línea, contador `FKK RLS ASSIGN OPBEL`). Los 3
+primeros de la lista son justo los mismos documentos que sí existían y
+funcionaron en Integración al principio de la depuración de RU_02 —
+confirma que es una limitación de datos de DES, no un problema de código.
+Pendiente probar una contabilización real con éxito (en Integración, o
+con documentos que sí existan en DES).
+
+`FKK_RLS_POST_LOT` no devuelve el detalle de qué documentos fallaron por
+parámetro (no hay `TABLES` de mensajes en la firma) — el desglose que se
+ve en pantalla en `FP09` sale de algún sitio aparte (probablemente log de
+aplicación, quizá vía métodos como `GET_ERR_ITEMS_TABLE`/`GET_LASTERROR`
+de `LCL_RLOT`, sin confirmar). **Decisión de gestión de errores**: no
+merece la pena perseguir el detalle — igual que el resto del código de
+este proyecto (`ev_error` genérico con el nombre de la FM y `sy-subrc`),
+si `FKK_RLS_POST_LOT` no devuelve `0` se marca `ERROR` sin más detalle;
+quien necesite ver qué documento en concreto falló puede entrar a `FP09`
+con el nº de lote.
+
 ## Fuera de alcance (de este programa)
 
 - **RU_01**: cubierto por `zfi_r_ecofi_split/`.
-- **RU_02**: creación del lote — programa aparte (aún sin empezar). Este programa
-  (`ZFI_R_DEVOLUCIONES2`) solo debe encargarse de **cerrar y contabilizar** un lote
-  que ya existe; hay que revisar si el `convert_multicash`/`submit_rfkkka00`
-  heredados de `ZFI_R_DEVOLUCIONES` (que crean el lote desde cero) tienen sentido
-  aquí o si este programa debe simplificarse para operar solo sobre un lote/`runid`
-  ya creado por el desarrollo 2 (ver punto 2 de "Diferencias pendientes").
+- **RU_02**: creación del lote — cubierto por `zfi_r_devoluciones_crea/`
+  (`ZFI_R_DEVOLUCIONES_CREA`), ya reescrito sobre `FKK_RLS_*` y probado con
+  éxito en DES (crea el lote, `AAMMDDCDI11x`). Este programa
+  (`ZFI_R_DEVOLUCIONES2`) solo se encarga de **cerrar y contabilizar** un
+  lote que ya existe — no crea nada.
 
-## Diferencias pendientes de adaptar respecto a `ZFI_R_DEVOLUCIONES`
+## Plan de reescritura (sobre `FKK_RLS_*`, no sobre la copia de `ZFI_R_DEVOLUCIONES`)
 
-Esta copia es **idéntica en lógica** al programa original (solo se han renombrado
-el report, los includes y la clase: `lcl_devoluciones` → `lcl_devoluciones2`). Para que
-funcione con el fichero de extornos hace falta decidir/adaptar, como mínimo:
+La copia literal de `ZFI_R_DEVOLUCIONES` (XML SEPA + `convert_multicash` +
+`submit_rfkkka00`) **ya no es el punto de partida** — todo ese motor
+(`RFKKKA00`, `AUSZUG`/`UMSATZ`) pertenece al enfoque descartado, igual que
+pasó con RU_02. Con la cadena real confirmada arriba, el programa se puede
+simplificar mucho respecto al original:
 
-1. **Formato de entrada**: el original espera un XML SEPA `pain.002` (devolución
-   bancaria real) y usa `get_importe` (método `SMUM_XML_PARSE`) para leerlo. El
-   fichero `_DEV` de extornos es texto plano (líneas del fichero ECOFI con el
-   concepto ya recortado al número de documento PG, según propone EVA en RU_01),
-   no XML. Hace falta un método de lectura nuevo para este formato.
-2. **Conversión a multicash (`convert_multicash`) y creación del lote**: el
-   original convierte el XML a los ficheros `AUSZUG`/`UMSATZ` (formato multicash
-   que espera `RFKKKA00`) mediante `SUBMIT rfkksepa_dd_rjct`, y con esos ficheros
-   **crea** el lote (`SUBMIT rfkkka00 ... WITH p_xcre = gv_crear`). Ahora que RU_02
-   (crear el lote) es un desarrollo aparte, este paso probablemente **sobra en
-   `ZFI_R_DEVOLUCIONES2`**: si el desarrollo 2 ya deja el lote creado, este
-   programa solo necesitaría el tramo de `submit_rfkkka00` con `p_xcls`/`p_xbu`
-   (cerrar/contabilizar) apuntando al lote/`runid` ya existente, sin volver a
-   generar `AUSZUG`/`UMSATZ` ni volver a crear nada. **Pendiente de confirmar**:
-   ¿`RFKKKA00` permite cerrar/contabilizar un lote ya creado solo con
-   `p_rundat`/`p_runid` (sin volver a pasarle `p_auszf`/`p_umsf`), o siempre
-   necesita los ficheros de entrada aunque el lote ya exista? Necesito
-   verificarlo en SE38 (F1 en los parámetros de `RFKKKA00`) o depurando una
-   ejecución real de cierre/contabilización de un lote de devolución existente.
-3. **Nomenclatura del lote**: el DF pide `AAMMDDCDI11xx`; el original construye
-   `lv_runid` a partir de `file_id` (`co_key = 'Z_ID'`). Falta confirmar si
-   `RFKKKA00`/`p_runid` permite fijar directamente esa nomenclatura o si el nombre
-   de lote (`DFKKZK-KEYZ1`) lo asigna el propio motor estándar a partir de otro
-   criterio.
-4. **Sociedad/cuenta/motivo fijos**: `get_importe` calcula sociedad, banco y motivo
-   leyendo el XML y la tabla `ZFI_T_COBRO_CONF`. El DF de extornos ya fija estos
-   valores (sociedad `1239`, motivo `Z01`, cta. `4305500150`); falta decidir si se
-   mantiene la consulta a `ZFI_T_COBRO_CONF` (dado de alta con estos valores para
-   extornos) o se simplifica a constantes, y si aplica un `tipo_cobro` propio
-   distinto de `DEV` (p.ej. `EXT`) para no interferir con la configuración de
-   devoluciones bancarias reales.
-5. **Traza en `ZFI_T_FILE_LOG`**: el original ya registra cada fichero procesado
-   aquí (comentario de EVA en RU_02 pedía justo esto), así que se mantiene tal
-   cual; falta decidir el valor de `co_dev`/proceso a usar para no mezclar los
-   logs de extornos con los de devoluciones bancarias reales.
-6. **Ruta lógica (`co_logical_path`)**: el original usa
-   `ZFICA_COBROS_DEVOLUCIONES`. Falta confirmar si los ficheros `_DEV` de
-   extornos se dejan en esa misma ruta lógica o en una nueva.
-7. **Alta del objeto en el sistema de transporte** correspondiente al proyecto.
+1. **Qué lote cerrar/contabilizar**: no hay `_DEV` que leer aquí — RU_02
+   (`ZFI_R_DEVOLUCIONES_CREA`) ya deja trazado el `KEYR1` del lote creado en
+   `ZFI_T_FILE_LOG` (campo `file_name_header`, reutilizado por no haber uno
+   dedicado — ver `zfi_r_devoluciones_crea/src/ZFI_R_DEVOLUCIONES_CREA_CLS.abap`).
+   Este programa debería recorrer los registros de `ZFI_T_FILE_LOG` con
+   lote creado (`status = 'PROCESADO'`) y pendientes de cerrar/contabilizar,
+   no procesar ficheros.
+2. **Cerrar**: `CALL FUNCTION 'FKK_RLS_CLOSE' EXPORTING i_keyr1 = ...` — ver
+   firma y prueba real más arriba.
+3. **Contabilizar**: `CALL FUNCTION 'FKK_RLS_POST_LOT' EXPORTING i_keyr1 =
+   ...` — ver firma y prueba real más arriba. Si falla (`sy-subrc <> 0`),
+   marcar error genérico (ver "Decisión de gestión de errores" más arriba)
+   — no reintentar ni corregir nada automáticamente, es un flujo de
+   corrección manual esperado por el propio SAP.
+4. **Nomenclatura del lote**: ya resuelta en RU_02 (`AAMMDDCDI11x`,
+   `generate_keyr1` en `ZFI_R_DEVOLUCIONES_CREA_CLS`) — este programa no
+   genera ningún `KEYR1` nuevo, solo opera sobre los ya creados.
+5. **Sociedad/cuenta/motivo**: no aplica aquí — ya fijados al crear el lote
+   en RU_02 (vía `ZFI_T_CONSTANTS`). Cerrar/contabilizar no necesita estos
+   datos, solo el `KEYR1`.
+6. **Traza en `ZFI_T_FILE_LOG`**: se mantiene, pero como **actualización**
+   del mismo registro que dejó RU_02 (nuevo status, p.ej. `CONTABILIZADO`),
+   no como alta de un fichero nuevo — este programa no procesa ficheros
+   directamente.
+7. **Sin ruta lógica de fichero**: al no leer ningún `_DEV`, no aplica
+   `co_logical_path` aquí — el "modo Server" no tiene sentido para este
+   desarrollo (no hay ficheros de entrada, solo lotes SAP pendientes).
+8. **Alta del objeto en el sistema de transporte** correspondiente al
+   proyecto.
+
+**Pendiente**: reescribir `ZFI_R_DEVOLUCIONES2_CLS` desde cero sobre este
+plan (todavía sigue siendo la copia literal sin adaptar de
+`ZFI_R_DEVOLUCIONES`) — no se ha tocado código de este desarrollo todavía,
+solo se ha confirmado la cadena de FMs real por depuración.
 
 ## Premisas / Dependencias
 
