@@ -38,11 +38,13 @@ grababa pero no se podía cerrar/contabilizar (`FP09` → "Cerrar" daba
 `DFKKRP` sí tuviera las 72 posiciones reales — no por `OPBEL` sin
 resolver, como se pensó en un primer momento (ver "Validación de
 posiciones y `ANZPO`" más abajo para el detalle completo, incluida la
-hipótesis descartada).
+hipótesis descartada). **Confirmado ya arreglado**: lote `260825CDI110`
+creado y **cerrado con éxito** en `FP09` (`Status`: "Ya no se pueden
+modificar devoluciones").
 
 **Pendiente**: confirmar con el funcional el secuencial de 1 dígito para
-el nº de lote (ver más abajo), volver a probar el ciclo completo
-crear→cerrar→contabilizar con el fix de `ANZPO` (todavía no probado), y
+el nº de lote (ver más abajo), probar **"Contabilizar"** sobre un lote
+cerrado (siguiente paso de RU_03), y
 probar el modo **Server** (bloqueado hasta que exista una ruta lógica de
 fichero real — ver `RUTA_LOGICA` en `ZFI_T_CONSTANTS` más abajo).
 

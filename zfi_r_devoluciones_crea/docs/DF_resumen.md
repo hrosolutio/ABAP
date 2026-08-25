@@ -486,12 +486,17 @@ posiciones — justo después de `FKK_RLS_ITEM_SAVE_MASS`, antes del
 `COMMIT WORK` final. Usa la propia API pública de SAP en vez de tocar la
 tabla a mano.
 
-**Pendiente**: probar el ciclo completo con este fix (crear lote →
-confirmar `ANZPO` correcto por `SE16N` → `FP09` → Cerrar →
-Contabilizar) — todavía no probado. Si funciona, seguir depurando qué FMs
-reales usa "Cerrar"/"Contabilizar" para RU_03 (`ZFI_R_DEVOLUCIONES2`) —
-muy probablemente `FKK_RLS_CLOSE`/`FKK_RLS_POST_LOT` del mismo grupo de
-función, no `RFKKKA00` (ver `../zfi_r_devoluciones2/docs/DF_resumen.md`).
+**Confirmado con prueba real**: lote `260825CDI110` (DES, modo Upload,
+`_DEV` de 72 líneas) creado con `ANZPO` correcto, y **cerrado con éxito**
+en `FP09` (`Status`: "Ya no se pueden modificar devoluciones") — sin el
+error `>2549`. RU_02 (`ZFI_R_DEVOLUCIONES_CREA`) queda validado
+end-to-end incluyendo el cierre.
+
+**Pendiente**: probar "Contabilizar" sobre un lote ya cerrado, y seguir
+depurando qué FMs reales usa "Cerrar"/"Contabilizar" para RU_03
+(`ZFI_R_DEVOLUCIONES2`) — muy probablemente `FKK_RLS_CLOSE`/
+`FKK_RLS_POST_LOT` del mismo grupo de función, no `RFKKKA00` (ver
+`../zfi_r_devoluciones2/docs/DF_resumen.md`).
 
 ### Configuración vía `ZFI_T_CONSTANTS` (sin hardcode)
 
