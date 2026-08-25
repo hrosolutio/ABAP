@@ -1,58 +1,59 @@
 # ZFI_R_DEVOLUCIONES2 — Cierre y contabilización del lote de devolución de extornos (CDI_11)
 
-**Estado: copia base sin adaptar.** Es una copia literal de `ZFI_R_DEVOLUCIONES`
-(solo renombrado: report, includes y clase `lcl_devoluciones` → `lcl_devoluciones2`),
-punto de partida para el desarrollo 3 de 3 del proyecto CDI_11 (gestión de
-extornos): **"Servicio para cerrar y contabilizar lotes de devoluciones"**,
-siguiendo la sugerencia de EVA en RU_03 de reutilizar el motor de
-`ZFI_R_DEVOLUCIONES` (vía `RFKKKA00`) en vez de crear un servicio RFC nuevo.
+**Estado: cadena real de FMs confirmada por depuración, código pendiente de reescribir.**
+El código fuente sigue siendo la copia literal de `ZFI_R_DEVOLUCIONES` (solo
+renombrado: report, includes y clase `lcl_devoluciones` → `lcl_devoluciones2`),
+pero **ya no es el punto de partida** — igual que pasó con el desarrollo 2
+(`zfi_r_devoluciones_crea/`), la sugerencia original de EVA de reutilizar el
+motor `RFKKKA00` de `ZFI_R_DEVOLUCIONES` resultó ser una lectura incorrecta
+del DF. Depurando `FP09` sobre lotes reales creados por
+`ZFI_R_DEVOLUCIONES_CREA`, se confirmó que "Cerrar"/"Contabilizar" llaman
+directamente a `FKK_RLS_CLOSE`/`FKK_RLS_POST_LOT` (grupo de función `FKR2`,
+el mismo que usa el desarrollo 2) — ver `docs/DF_resumen.md` para las firmas
+exactas y las pruebas reales.
 
 Es uno de los 3 desarrollos del proyecto CDI_11:
 1. **División del fichero ECOFI** en transferencias/extornos → [`zfi_r_ecofi_split/`](../zfi_r_ecofi_split/README.md)
-2. **Creación del lote de devoluciones** → programa aparte, pendiente de empezar.
+2. **Creación del lote de devoluciones** → [`zfi_r_devoluciones_crea/`](../zfi_r_devoluciones_crea/README.md), ya reescrito y probado con éxito.
 3. **Cierre y contabilización del lote** → este programa (`ZFI_R_DEVOLUCIONES2`).
 
-Ver `docs/DF_resumen.md` para el detalle de qué falta adaptar (formato de
-entrada, generación de `AUSZUG`/`UMSATZ`, nomenclatura de lote, etc.) antes de
-que este programa funcione con el fichero de extornos.
+Ver `docs/DF_resumen.md` para el detalle completo: la cadena real de FMs
+confirmada, y el plan de reescritura (todavía sin implementar).
 
 ## Contenido del repositorio
 
 ```
 src/
-  ZFI_R_DEVOLUCIONES2.abap        Programa principal (REPORT)
+  ZFI_R_DEVOLUCIONES2.abap        Programa principal (REPORT) - todavía copia sin adaptar
   ZFI_R_DEVOLUCIONES2_TOP.abap    Include TOP (tipos y datos globales)
   ZFI_R_DEVOLUCIONES2_EVE.abap    Include EVE (pantalla de selección)
-  ZFI_R_DEVOLUCIONES2_CLS.abap    Include CLS (clase lcl_devoluciones2)
+  ZFI_R_DEVOLUCIONES2_CLS.abap    Include CLS (clase lcl_devoluciones2) - todavía copia sin adaptar
 docs/
-  DF_resumen.md               Resumen del Diseño Funcional (trazabilidad)
+  DF_resumen.md               Resumen del Diseño Funcional + cadena real de FMs (FKK_RLS_CLOSE/FKK_RLS_POST_LOT)
 ```
 
-## Instalación en SAP (SE38/SE80)
+## Plan (resumen — ver `docs/DF_resumen.md` para el detalle)
 
-1. Crear el programa **`ZFI_R_DEVOLUCIONES2`** (tipo *Report ejecutable*), atributos
-   equivalentes a `ZFI_R_DEVOLUCIONES`.
-2. Crear los includes **`ZFI_R_DEVOLUCIONES2_TOP`**, **`ZFI_R_DEVOLUCIONES2_EVE`**,
-   **`ZFI_R_DEVOLUCIONES2_CLS`** con el contenido de `src/`, e incluirlos en el
-   programa principal en ese orden (como hace `ZFI_R_DEVOLUCIONES`).
-3. Copiar los **elementos de texto** (`TEXT-001`, `TEXT-002`, `TEXT-003`) del
-   programa original — no forman parte del código fuente ABAP, hay que copiarlos
-   aparte desde Goto → Elementos de texto en SE38.
-4. Activar. En este punto el programa es funcionalmente idéntico al original
-   (espera XML de devolución SEPA); **no procesará todavía el fichero de
-   extornos** hasta aplicar las adaptaciones de `docs/DF_resumen.md`.
+Este programa **no crea ningún lote** — opera sobre lotes que ya existen
+(creados por `zfi_r_devoluciones_crea/`, con el `KEYR1` trazado en
+`ZFI_T_FILE_LOG`). Por cada lote pendiente:
 
-## Pendiente / a definir con el cliente
+1. `CALL FUNCTION 'FKK_RLS_CLOSE' EXPORTING i_keyr1 = ...` (cerrar).
+2. `CALL FUNCTION 'FKK_RLS_POST_LOT' EXPORTING i_keyr1 = ...` (contabilizar).
+3. Si alguna de las dos falla (`sy-subrc <> 0`), marcar el registro de
+   `ZFI_T_FILE_LOG` correspondiente como error (sin desglose por documento
+   — quien lo necesite entra a `FP09` con el nº de lote) y seguir con el
+   siguiente lote, sin reintentar ni corregir nada automáticamente.
 
-- Fichero de ejemplo `AUSZUG`/`UMSATZ` generado hoy por `ZFI_R_DEVOLUCIONES`,
-  para fijar el layout exacto que espera `RFKKKA00` y poder generarlo desde el
-  fichero `_DEV` de extornos (que no es XML SEPA).
-- Formato final acordado del fichero `_DEV` (RU_01): si el concepto se sustituye
-  por el nº de documento PG (propuesta de EVA) o se mantiene la línea completa.
-- Nomenclatura de lote `AAMMDDCDI11xx`: cómo se traslada a `RFKKKA00`/`p_runid`.
-- Sociedad/motivo/cuenta fijos del DF vs. consulta a `ZFI_T_COBRO_CONF` (y si
-  aplica un `tipo_cobro` propio para extornos, distinto de `DEV`).
-- Traza en `ZFI_T_FILE_LOG`: proceso/`co_dev` a usar para extornos.
-- Ruta lógica de fichero (`co_logical_path`): reutilizar
-  `ZFICA_COBROS_DEVOLUCIONES` o crear una nueva para extornos.
+No hace falta leer ningún `_DEV`, generar `AUSZUG`/`UMSATZ`, ni fijar
+sociedad/motivo/cuenta (ya se fijaron al crear el lote) — todo eso
+pertenece al motor `RFKKKA00`/`ZFI_R_DEVOLUCIONES` descartado.
+
+## Pendiente
+
+- Reescribir `ZFI_R_DEVOLUCIONES2_CLS` desde cero sobre este plan — sigue
+  siendo la copia literal sin adaptar de `ZFI_R_DEVOLUCIONES`.
+- Probar una contabilización real con éxito (en DES la mayoría de
+  documentos del `_DEV` de prueba no existen — ver `docs/DF_resumen.md`;
+  probar en Integración o con documentos reales de DES).
 - Alta del objeto en el sistema de transporte correspondiente al proyecto.
