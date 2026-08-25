@@ -159,20 +159,62 @@ simplificar mucho respecto al original:
 5. **Sociedad/cuenta/motivo**: no aplica aquí — ya fijados al crear el lote
    en RU_02 (vía `ZFI_T_CONSTANTS`). Cerrar/contabilizar no necesita estos
    datos, solo el `KEYR1`.
-6. **Traza en `ZFI_T_FILE_LOG`**: se mantiene, pero como **actualización**
-   del mismo registro que dejó RU_02 (nuevo status, p.ej. `CONTABILIZADO`),
-   no como alta de un fichero nuevo — este programa no procesa ficheros
-   directamente.
+6. **Traza en `ZFI_T_FILE_LOG`**: se usa para **localizar** los lotes
+   pendientes (`SELECT` por `BUSINESS_DESC = 'EXT'` — mismo valor que usa
+   `ZFI_R_DEVOLUCIONES_CREA` — y `STATUS = 'PROCESADO'`), pero **no** para
+   marcar si ya se cerró/contabilizó: el dominio de `STATUS`
+   (`PENDIENTE`/`MULTICASH`/`PROCESADO`/`ERROR`/`DUPLICADO`, fijo, sin
+   valores libres) no tiene ningún estado para eso. La fuente de verdad
+   es **`DFKKRK-STARS`** (ver sección siguiente) — se comprueba en cada
+   ejecución, sin depender de actualizar `ZFI_T_FILE_LOG`.
 7. **Sin ruta lógica de fichero**: al no leer ningún `_DEV`, no aplica
    `co_logical_path` aquí — el "modo Server" no tiene sentido para este
    desarrollo (no hay ficheros de entrada, solo lotes SAP pendientes).
 8. **Alta del objeto en el sistema de transporte** correspondiente al
    proyecto.
 
-**Pendiente**: reescribir `ZFI_R_DEVOLUCIONES2_CLS` desde cero sobre este
-plan (todavía sigue siendo la copia literal sin adaptar de
-`ZFI_R_DEVOLUCIONES`) — no se ha tocado código de este desarrollo todavía,
-solo se ha confirmado la cadena de FMs real por depuración.
+### `DFKKRK-STARS`: la fuente de verdad del estado del lote
+
+`ZFI_T_FILE_LOG-STATUS` no distingue "lote cerrado" de "lote
+contabilizado" (dominio fijo, ver punto 6). En su lugar se usa
+`DFKKRK-STARS` (estado real del lote en FI-CA), con ayuda de búsqueda
+confirmada por `SE16N`:
+
+| `STARS` | Significado | Acción |
+|---|---|---|
+| (blanco) | Aún se pueden añadir devoluciones (abierto) | `FKK_RLS_CLOSE` |
+| `1` | Ya no se pueden modificar devoluciones (cerrado) | `FKK_RLS_POST_LOT` |
+| `2` | Contabilizaciones planificadas | no se toca |
+| `3` | Contabilizaciones incompletas | no se toca |
+| `4` | Contabilizaciones realizadas: se requiere trabajo de repaso | no se toca |
+| `5` | Contabilizaciones realizadas | no se toca (ya está hecho) |
+| `6` | Creación automática cancelada | no se toca |
+| `9` | Lote archivado | no se toca |
+
+Confirmado con datos reales: `260825CDI110` (se intentó contabilizar y
+falló para casi todos los documentos, DES) quedó con `STARS = 3`
+("incompletas" — encaja). `260825CDI111` (solo se cerró, nunca se
+contabilizó) quedó con `STARS = 1`.
+
+**Implementado** en `ZFI_R_DEVOLUCIONES2_CLS` (`lcl_devoluciones2`):
+método `execute` hace un único `SELECT` a `ZFI_T_FILE_LOG` (mismo patrón
+que `get_constants` en `ZFI_R_DEVOLUCIONES_CREA_CLS` — sin `SELECT
+SINGLE` en bucle), y `process_lot` decide la acción según `STARS` con la
+tabla de arriba. Sin gestión de errores por detalle (ver antes) — `WRITE`
+del `KEYR1` + el error genérico de la FM que falle. Parámetro `P_SIMU`
+(pantalla de selección) para solo mostrar el `STARS` de cada lote
+pendiente sin tocar nada.
+
+**Pendiente de probar** — dos cosas antes de poder hacerlo:
+1. Confirmar que `BUSINESS_DESC` es el campo real donde
+   `zfi_cl_update_file_log` guarda `iv_process` (deducción de los campos
+   de la tabla, no confirmada con un registro real).
+2. Ahora mismo no hay ningún registro en `ZFI_T_FILE_LOG` para este
+   proceso: las pruebas de `ZFI_R_DEVOLUCIONES_CREA` se han hecho en modo
+   **Upload**, que a propósito no deja traza ahí (solo el modo Server, que
+   sigue bloqueado por la ruta lógica `ZFICA_COBROS_ECOFI`). Para probar,
+   insertar una fila a mano en `ZFI_T_FILE_LOG` apuntando a un lote real
+   ya creado (p.ej. `260825CDI111`, `STARS = 1`).
 
 ## Premisas / Dependencias
 
