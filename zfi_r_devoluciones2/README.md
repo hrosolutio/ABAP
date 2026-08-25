@@ -34,9 +34,11 @@ modo que deja traza en `ZFI_T_FILE_LOG` con el `KEYR1` del lote en
    en pantalla para revisión manual — **sin reintento ni corrección
    automática**.
 
-Parámetro de selección único: **`P_SIMU`** (checkbox) — si se marca, el
-programa solo escribe el `STARS` actual de cada lote pendiente, sin cerrar
-ni contabilizar nada de verdad.
+Parámetros de selección: **`S_KEYR1`** (opcional — en blanco procesa todos
+los lotes pendientes, uso normal automático; relleno, solo esos, útil para
+pruebas o reprocesar un lote concreto) y **`P_SIMU`** (checkbox — si se
+marca, el programa solo escribe el `STARS` actual de cada lote pendiente,
+sin cerrar ni contabilizar nada de verdad).
 
 ## Contenido del repositorio
 

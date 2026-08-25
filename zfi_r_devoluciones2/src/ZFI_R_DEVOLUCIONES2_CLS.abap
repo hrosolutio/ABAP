@@ -5,7 +5,9 @@
 * extornos ya creados por RU_02 (ZFI_R_DEVOLUCIONES_CREA). Este programa
 * no lee ningun fichero - localiza los lotes pendientes via
 * ZFI_T_FILE_LOG (BUSINESS_DESC = co_process, STATUS = 'PROCESADO', el
-* mismo registro que deja RU_02 con el KEYR1 en FILE_NAME_HEADER).
+* mismo registro que deja RU_02 con el KEYR1 en FILE_NAME_HEADER),
+* opcionalmente acotado a S_KEYR1 (pantalla de seleccion) - en blanco,
+* procesa todos los pendientes (uso normal automatico).
 *
 * Cadena real (localizada depurando FP09 con breakpoints de modulo de
 * funcion sobre lotes reales, ver docs/DF_resumen.md) - no RFKKKA00:
@@ -34,14 +36,18 @@ CLASS lcl_devoluciones2 DEFINITION.
       co_stars_closed TYPE dfkkrk-stars       VALUE '1',
       co_stars_posted TYPE dfkkrk-stars       VALUE '5'.
 
+    TYPES: ty_r_keyr1 TYPE RANGE OF zfi_t_file_log-file_name_header.
+
     METHODS:
-      constructor IMPORTING iv_simu TYPE abap_bool DEFAULT abap_false,
+      constructor IMPORTING ir_keyr1 TYPE ty_r_keyr1
+                            iv_simu  TYPE abap_bool DEFAULT abap_false,
 
       execute.
 
   PRIVATE SECTION.
 
-    DATA: gv_simu TYPE abap_bool.
+    DATA: gr_keyr1 TYPE ty_r_keyr1,
+          gv_simu  TYPE abap_bool.
 
     METHODS:
       process_lot IMPORTING iv_keyr1 TYPE dfkkrk-keyr1.
@@ -51,16 +57,24 @@ ENDCLASS.
 CLASS lcl_devoluciones2 IMPLEMENTATION.
 
   METHOD constructor.
-    gv_simu = iv_simu.
+    gr_keyr1 = ir_keyr1.
+    gv_simu  = iv_simu.
   ENDMETHOD.
 
   METHOD execute.
 
     DATA: lt_file_log TYPE STANDARD TABLE OF zfi_t_file_log.
 
-    SELECT * FROM zfi_t_file_log INTO TABLE lt_file_log
-      WHERE business_desc = co_process
-        AND status        = co_st_procesado.
+    IF gr_keyr1 IS INITIAL.
+      SELECT * FROM zfi_t_file_log INTO TABLE lt_file_log
+        WHERE business_desc = co_process
+          AND status        = co_st_procesado.
+    ELSE.
+      SELECT * FROM zfi_t_file_log INTO TABLE lt_file_log
+        WHERE business_desc     = co_process
+          AND status            = co_st_procesado
+          AND file_name_header IN gr_keyr1.
+    ENDIF.
 
     IF lt_file_log IS INITIAL.
       WRITE: / 'No hay lotes pendientes de cerrar/contabilizar.'.

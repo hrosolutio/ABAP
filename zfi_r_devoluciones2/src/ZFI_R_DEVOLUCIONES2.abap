@@ -29,4 +29,5 @@ INCLUDE zfi_r_devoluciones2_cls.
 
 START-OF-SELECTION.
 
-  NEW lcl_devoluciones2( iv_simu = p_simu )->execute( ).
+  NEW lcl_devoluciones2( ir_keyr1 = s_keyr1[]
+                         iv_simu  = p_simu )->execute( ).
