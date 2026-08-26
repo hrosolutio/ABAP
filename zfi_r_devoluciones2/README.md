@@ -42,6 +42,21 @@ tratar) y **`P_SIMU`** (checkbox — si se marca, el programa solo escribe
 el `STARS` actual de cada lote indicado, sin cerrar ni contabilizar nada
 de verdad).
 
+## Mensajes (`ZFI_MC_001`)
+
+Igual que `ZFI_R_DEVOLUCIONES`/`ZFI_R_DEVOLUCIONES_CREA`, los mensajes van
+por `zxx_cl_msg_logs` con la clase `ZFI_MC_001` (dados de alta en `SE91`),
+no `WRITE` con texto suelto:
+
+| Nº | Tipo | Texto |
+|---|---|---|
+| `178` | E | Ningún lote indicado existe en DFKKRK |
+| `179` | I | Lote &1: STARS=&2 (simulación, no se toca nada) |
+| `180` | E | Lote &1: error en &2 (&3) |
+| `181` | S | Lote &1: cerrado y contabilizado |
+| `182` | S | Lote &1: ya estaba contabilizado, nada que hacer |
+| `183` | I | Lote &1: STARS=&2, revisar a mano en FP09 |
+
 ## Contenido del repositorio
 
 ```
