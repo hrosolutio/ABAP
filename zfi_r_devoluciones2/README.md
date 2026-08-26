@@ -1,6 +1,6 @@
 # ZFI_R_DEVOLUCIONES2 — Cierre y contabilización del lote de devolución de extornos (CDI_11)
 
-**Estado: reescrito sobre `FKK_RLS_CLOSE`/`FKK_RLS_POST_LOT`, pendiente de probar.**
+**Estado: reescrito sobre `FKK_RLS_CLOSE`/`FKK_RLS_POST_LOT`, circuito probado en DES.**
 Ya no es la copia de `ZFI_R_DEVOLUCIONES` — igual que pasó con el desarrollo 2
 (`zfi_r_devoluciones_crea/`), la sugerencia original de EVA de reutilizar el
 motor `RFKKKA00` resultó ser una lectura incorrecta del DF. Depurando `FP09`
@@ -54,9 +54,11 @@ docs/
   DF_resumen.md                   Resumen del Diseño Funcional + cadena real de FMs confirmada por depuración
 ```
 
-## Pendiente de probar
+## Pendiente
 
-- Activar los 4 ficheros en SE38 y probar con `S_KEYR1 = 260825CDI111`
-  (lote real ya cerrado, `STARS = 1`) — primero con `P_SIMU` marcado, luego
-  sin marcar para contabilizarlo de verdad.
+- Probar una contabilización real con éxito — requiere un lote cuyos
+  documentos existan de verdad (Integración, o documentos reales de DES).
+  En DES, con el lote de prueba `260825CDI111`, el circuito completo
+  funciona bien pero `FKK_RLS_POST_LOT` falla (`NOT_VALID`) porque los
+  documentos del `_DEV` de prueba no existen — ver `docs/DF_resumen.md`.
 - Alta del objeto en el sistema de transporte correspondiente al proyecto.

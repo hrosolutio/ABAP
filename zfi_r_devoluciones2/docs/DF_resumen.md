@@ -200,9 +200,20 @@ la tabla de arriba. Sin gestión de errores por detalle (ver antes) —
 `P_SIMU` (pantalla de selección) para solo mostrar el `STARS` de cada
 lote indicado sin tocar nada.
 
-**Pendiente de probar**: activar los 4 ficheros en SE38 y ejecutar con
-`S_KEYR1 = 260825CDI111` (lote real ya cerrado, `STARS = 1`) — primero
-con `P_SIMU` marcado, luego sin marcar para contabilizarlo de verdad.
+**Probado en DES** (`S_KEYR1 = 260825CDI111`, lote real ya cerrado):
+- Con `P_SIMU`: `260825CDI111 -> STARS actual: 1 (simulación, no se toca
+  nada)` — correcto, localiza el lote y lee `STARS` sin tocar nada.
+- Sin `P_SIMU`: no vuelve a cerrar (ya estaba `STARS=1`), llama a
+  `FKK_RLS_POST_LOT`, y salta la excepción `NOT_VALID` (`sy-subrc = 1`,
+  distinta del `OTHERS` visto antes con `260825CDI110`, pero misma causa
+  raíz: la mayoría de los 72 documentos del `_DEV` de prueba no existen en
+  DES). El circuito completo del programa (localizar por `S_KEYR1`, leer
+  `STARS`, decidir la acción, llamar al FM correcto, reportar el error)
+  queda validado.
+
+**Pendiente**: una contabilización real con éxito requiere un lote cuyos
+documentos existan de verdad — probar en Integración, o con documentos
+reales de DES.
 
 ## Premisas / Dependencias
 
