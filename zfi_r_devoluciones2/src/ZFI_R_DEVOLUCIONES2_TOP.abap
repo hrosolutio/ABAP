@@ -2,4 +2,4 @@
 *& Include          ZFI_R_DEVOLUCIONES2_TOP
 *&---------------------------------------------------------------------*
 
-TABLES zfi_t_file_log.
+TABLES dfkkrk.

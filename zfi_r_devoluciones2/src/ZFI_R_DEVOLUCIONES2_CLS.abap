@@ -36,7 +36,7 @@ CLASS lcl_devoluciones2 DEFINITION.
       co_stars_closed TYPE dfkkrk-stars       VALUE '1',
       co_stars_posted TYPE dfkkrk-stars       VALUE '5'.
 
-    TYPES: ty_r_keyr1 TYPE RANGE OF zfi_t_file_log-file_name_header.
+    TYPES: ty_r_keyr1 TYPE RANGE OF dfkkrk-keyr1.
 
     METHODS:
       constructor IMPORTING ir_keyr1 TYPE ty_r_keyr1
