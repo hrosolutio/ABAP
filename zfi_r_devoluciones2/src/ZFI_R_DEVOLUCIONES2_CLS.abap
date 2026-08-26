@@ -82,7 +82,7 @@ CLASS lcl_devoluciones2 IMPLEMENTATION.
     ENDIF.
 
     LOOP AT lt_file_log INTO DATA(ls_file_log).
-      process_lot( ls_file_log-file_name_header ).
+      process_lot( CONV #( ls_file_log-file_name_header ) ).
     ENDLOOP.
 
   ENDMETHOD.
