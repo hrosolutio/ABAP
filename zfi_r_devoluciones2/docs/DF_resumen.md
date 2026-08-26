@@ -139,13 +139,12 @@ La copia literal de `ZFI_R_DEVOLUCIONES` (XML SEPA + `convert_multicash` +
 pasó con RU_02. Con la cadena real confirmada arriba, el programa se puede
 simplificar mucho respecto al original:
 
-1. **Qué lote cerrar/contabilizar**: no hay `_DEV` que leer aquí — RU_02
-   (`ZFI_R_DEVOLUCIONES_CREA`) ya deja trazado el `KEYR1` del lote creado en
-   `ZFI_T_FILE_LOG` (campo `file_name_header`, reutilizado por no haber uno
-   dedicado — ver `zfi_r_devoluciones_crea/src/ZFI_R_DEVOLUCIONES_CREA_CLS.abap`).
-   Este programa debería recorrer los registros de `ZFI_T_FILE_LOG` con
-   lote creado (`status = 'PROCESADO'`) y pendientes de cerrar/contabilizar,
-   no procesar ficheros.
+1. **Qué lote cerrar/contabilizar**: el DF no define ningún mecanismo
+   automático para esto — se indica **a mano** en la pantalla de
+   selección (`S_KEYR1`, obligatorio), igual que se haría entrando a
+   `FP09` con el nº de lote. (Una primera versión buscaba lotes pendientes
+   automáticamente vía `ZFI_T_FILE_LOG` — fue una invención sin base en el
+   DF, descartada tras revisarlo.)
 2. **Cerrar**: `CALL FUNCTION 'FKK_RLS_CLOSE' EXPORTING i_keyr1 = ...` — ver
    firma y prueba real más arriba.
 3. **Contabilizar**: `CALL FUNCTION 'FKK_RLS_POST_LOT' EXPORTING i_keyr1 =
@@ -159,14 +158,12 @@ simplificar mucho respecto al original:
 5. **Sociedad/cuenta/motivo**: no aplica aquí — ya fijados al crear el lote
    en RU_02 (vía `ZFI_T_CONSTANTS`). Cerrar/contabilizar no necesita estos
    datos, solo el `KEYR1`.
-6. **Traza en `ZFI_T_FILE_LOG`**: se usa para **localizar** los lotes
-   pendientes (`SELECT` por `BUSINESS_DESC = 'EXT'` — mismo valor que usa
-   `ZFI_R_DEVOLUCIONES_CREA` — y `STATUS = 'PROCESADO'`), pero **no** para
-   marcar si ya se cerró/contabilizó: el dominio de `STATUS`
-   (`PENDIENTE`/`MULTICASH`/`PROCESADO`/`ERROR`/`DUPLICADO`, fijo, sin
-   valores libres) no tiene ningún estado para eso. La fuente de verdad
-   es **`DFKKRK-STARS`** (ver sección siguiente) — se comprueba en cada
-   ejecución, sin depender de actualizar `ZFI_T_FILE_LOG`.
+6. **Sin `ZFI_T_FILE_LOG`**: esa tabla es un registro de **ficheros
+   procesados** (`ZFI_DE_FILE_NAME`, `ZFI_DE_STATUS_FILE`...) — este
+   programa no procesa ningún fichero, así que no tiene sentido usarla
+   aquí (ni para localizar lotes ni para nada). El estado del lote se
+   consulta directamente en **`DFKKRK-STARS`** (ver sección siguiente),
+   la fuente de verdad real en FI-CA.
 7. **Sin ruta lógica de fichero**: al no leer ningún `_DEV`, no aplica
    `co_logical_path` aquí — el "modo Server" no tiene sentido para este
    desarrollo (no hay ficheros de entrada, solo lotes SAP pendientes).
@@ -175,10 +172,8 @@ simplificar mucho respecto al original:
 
 ### `DFKKRK-STARS`: la fuente de verdad del estado del lote
 
-`ZFI_T_FILE_LOG-STATUS` no distingue "lote cerrado" de "lote
-contabilizado" (dominio fijo, ver punto 6). En su lugar se usa
-`DFKKRK-STARS` (estado real del lote en FI-CA), con ayuda de búsqueda
-confirmada por `SE16N`:
+Estado real del lote en FI-CA, con ayuda de búsqueda confirmada por
+`SE16N`:
 
 | `STARS` | Significado | Acción |
 |---|---|---|
@@ -197,29 +192,24 @@ falló para casi todos los documentos, DES) quedó con `STARS = 3`
 contabilizó) quedó con `STARS = 1`.
 
 **Implementado** en `ZFI_R_DEVOLUCIONES2_CLS` (`lcl_devoluciones2`):
-método `execute` hace un único `SELECT` a `ZFI_T_FILE_LOG` (mismo patrón
-que `get_constants` en `ZFI_R_DEVOLUCIONES_CREA_CLS` — sin `SELECT
-SINGLE` en bucle), y `process_lot` decide la acción según `STARS` con la
-tabla de arriba. Sin gestión de errores por detalle (ver antes) — `WRITE`
-del `KEYR1` + el error genérico de la FM que falle. Parámetro `P_SIMU`
-(pantalla de selección) para solo mostrar el `STARS` de cada lote
-pendiente sin tocar nada.
+`execute` resuelve `S_KEYR1` (obligatorio en pantalla) contra `DFKKRK`
+(`SELECT keyr1 ... WHERE keyr1 IN gr_keyr1`, para quedarse solo con los
+que existen de verdad) y `process_lot` decide la acción según `STARS` con
+la tabla de arriba. Sin gestión de errores por detalle (ver antes) —
+`WRITE` del `KEYR1` + el error genérico de la FM que falle. Parámetro
+`P_SIMU` (pantalla de selección) para solo mostrar el `STARS` de cada
+lote indicado sin tocar nada.
 
-**Pendiente de probar** — dos cosas antes de poder hacerlo:
-1. Confirmar que `BUSINESS_DESC` es el campo real donde
-   `zfi_cl_update_file_log` guarda `iv_process` (deducción de los campos
-   de la tabla, no confirmada con un registro real).
-2. Ahora mismo no hay ningún registro en `ZFI_T_FILE_LOG` para este
-   proceso: las pruebas de `ZFI_R_DEVOLUCIONES_CREA` se han hecho en modo
-   **Upload**, que a propósito no deja traza ahí (solo el modo Server, que
-   sigue bloqueado por la ruta lógica `ZFICA_COBROS_ECOFI`). Para probar,
-   insertar una fila a mano en `ZFI_T_FILE_LOG` apuntando a un lote real
-   ya creado (p.ej. `260825CDI111`, `STARS = 1`).
+**Pendiente de probar**: activar los 4 ficheros en SE38 y ejecutar con
+`S_KEYR1 = 260825CDI111` (lote real ya cerrado, `STARS = 1`) — primero
+con `P_SIMU` marcado, luego sin marcar para contabilizarlo de verdad.
 
 ## Premisas / Dependencias
 
-- Depende de que exista el fichero `_DEV` (RU_01), con el formato de línea que se
-  acuerde (concepto reducido al nº de documento PG, según propone EVA).
-- `ZFI_T_FILE_LOG`, `ZFI_T_COBRO_CONF`, `zfi_cl_update_file_log`,
-  `zxx_cl_msg_logs`, `zxx_cl_file_utils`, `zxx_cl_generic_on_memory` se reutilizan
-  tal cual del programa original (mismas clases/tablas ya existentes en el sistema).
+- Depende de que exista un lote de devoluciones ya creado en `DFKKRK`
+  (RU_02, `ZFI_R_DEVOLUCIONES_CREA`) — este programa no crea nada, solo
+  cierra/contabiliza el `KEYR1` que se le indique en `S_KEYR1`.
+- No depende de ningún fichero, tabla de trazabilidad (`ZFI_T_FILE_LOG`)
+  ni clase reutilizada de `ZFI_R_DEVOLUCIONES` — todo ese motor
+  (`RFKKKA00`, multicash, `ZFI_T_COBRO_CONF`) pertenece al enfoque
+  descartado.

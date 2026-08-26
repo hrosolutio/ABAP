@@ -2,12 +2,12 @@
 *& Include          ZFI_R_DEVOLUCIONES2_CLS
 *&---------------------------------------------------------------------*
 * RU_03 (CDI_11): cierre y contabilizacion de lotes de devolucion de
-* extornos ya creados por RU_02 (ZFI_R_DEVOLUCIONES_CREA). Este programa
-* no lee ningun fichero - localiza los lotes pendientes via
-* ZFI_T_FILE_LOG (BUSINESS_DESC = co_process, STATUS = 'PROCESADO', el
-* mismo registro que deja RU_02 con el KEYR1 en FILE_NAME_HEADER),
-* opcionalmente acotado a S_KEYR1 (pantalla de seleccion) - en blanco,
-* procesa todos los pendientes (uso normal automatico).
+* extornos ya creados por RU_02 (ZFI_R_DEVOLUCIONES_CREA). El DF no dice
+* nada de un mecanismo automatico para saber que lotes hay pendientes -
+* el lote (o lotes) a tratar se indica a mano en la pantalla de seleccion
+* (S_KEYR1), igual que en FP09. Este programa no lee ningun fichero ni
+* consulta ZFI_T_FILE_LOG (una version anterior lo hacia, era una
+* invencion sin base en el DF, descartada).
 *
 * Cadena real (localizada depurando FP09 con breakpoints de modulo de
 * funcion sobre lotes reales, ver docs/DF_resumen.md) - no RFKKKA00:
@@ -15,9 +15,7 @@
 *   FKK_RLS_POST_LOT -> contabiliza el lote (solo con KEYR1)
 *
 * DFKKRK-STARS es el estado real del lote y la fuente de verdad para
-* decidir que hacer con cada uno - ZFI_T_FILE_LOG-STATUS no sirve para
-* esto porque su dominio (PENDIENTE/MULTICASH/PROCESADO/ERROR/DUPLICADO)
-* no distingue "lote cerrado" de "lote contabilizado":
+* decidir que hacer con cada uno:
 *   (blanco) = abierto             -> hay que cerrar
 *   1        = cerrado, sin contab.-> hay que contabilizar
 *   5        = contabilizado       -> nada que hacer
@@ -28,13 +26,8 @@ CLASS lcl_devoluciones2 DEFINITION.
   PUBLIC SECTION.
 
     CONSTANTS:
-      " Mismo valor que co_dev en ZFI_R_DEVOLUCIONES_CREA_CLS - localiza
-      " los mismos registros que dejo alli, no las devoluciones bancarias
-      " reales (que usan otro proceso).
-      co_process      TYPE string            VALUE 'EXT',
-      co_st_procesado TYPE zfi_de_status_file VALUE 'PROCESADO',
-      co_stars_closed TYPE dfkkrk-stars       VALUE '1',
-      co_stars_posted TYPE dfkkrk-stars       VALUE '5'.
+      co_stars_closed TYPE dfkkrk-stars VALUE '1',
+      co_stars_posted TYPE dfkkrk-stars VALUE '5'.
 
     TYPES: ty_r_keyr1 TYPE RANGE OF dfkkrk-keyr1.
 
@@ -63,26 +56,17 @@ CLASS lcl_devoluciones2 IMPLEMENTATION.
 
   METHOD execute.
 
-    DATA: lt_file_log TYPE STANDARD TABLE OF zfi_t_file_log.
+    DATA: lt_keyr1 TYPE STANDARD TABLE OF dfkkrk-keyr1.
 
-    IF gr_keyr1 IS INITIAL.
-      SELECT * FROM zfi_t_file_log INTO TABLE lt_file_log
-        WHERE business_desc = co_process
-          AND status        = co_st_procesado.
-    ELSE.
-      SELECT * FROM zfi_t_file_log INTO TABLE lt_file_log
-        WHERE business_desc     = co_process
-          AND status            = co_st_procesado
-          AND file_name_header IN gr_keyr1.
-    ENDIF.
+    SELECT keyr1 FROM dfkkrk INTO TABLE lt_keyr1 WHERE keyr1 IN gr_keyr1.
 
-    IF lt_file_log IS INITIAL.
-      WRITE: / 'No hay lotes pendientes de cerrar/contabilizar.'.
+    IF lt_keyr1 IS INITIAL.
+      WRITE: / 'Ningún lote indicado existe en DFKKRK.'.
       RETURN.
     ENDIF.
 
-    LOOP AT lt_file_log INTO DATA(ls_file_log).
-      process_lot( CONV #( ls_file_log-file_name_header ) ).
+    LOOP AT lt_keyr1 INTO DATA(lv_keyr1_loop).
+      process_lot( lv_keyr1_loop ).
     ENDLOOP.
 
   ENDMETHOD.
@@ -93,10 +77,6 @@ CLASS lcl_devoluciones2 IMPLEMENTATION.
     DATA: lv_stars TYPE dfkkrk-stars.
 
     SELECT SINGLE stars FROM dfkkrk INTO lv_stars WHERE keyr1 = lv_keyr1.
-    IF sy-subrc <> 0.
-      WRITE: / lv_keyr1, '-> no encontrado en DFKKRK'.
-      RETURN.
-    ENDIF.
 
     IF gv_simu = abap_true.
       WRITE: / lv_keyr1, '-> STARS actual:', lv_stars, '(simulación, no se toca nada)'.

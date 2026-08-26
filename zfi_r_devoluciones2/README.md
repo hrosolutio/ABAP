@@ -16,15 +16,18 @@ Es uno de los 3 desarrollos del proyecto CDI_11:
 
 ## Cómo funciona
 
-Este programa **no lee ningún fichero** ni crea nada — opera sobre lotes que
-ya existen (creados por `zfi_r_devoluciones_crea/` en modo **Server**, único
-modo que deja traza en `ZFI_T_FILE_LOG` con el `KEYR1` del lote en
-`FILE_NAME_HEADER`). Por cada registro pendiente
-(`BUSINESS_DESC = 'EXT'`, `STATUS = 'PROCESADO'`):
+El DF no define ningún mecanismo automático para que este programa se
+entere de qué lotes hay pendientes de cerrar/contabilizar — el lote (o
+lotes) a tratar se indica **a mano** en la pantalla de selección
+(`S_KEYR1`, obligatorio), igual que se haría entrando a `FP09` con el nº
+de lote. Este programa no lee ningún fichero ni consulta
+`ZFI_T_FILE_LOG` (una versión anterior lo hacía — descubrimiento
+automático vía esa tabla — pero era una invención sin base en el DF,
+descartada).
 
-1. Lee `DFKKRK-STARS` del lote (estado real en FI-CA — es la fuente de
-   verdad, no `ZFI_T_FILE_LOG-STATUS`, cuyo dominio fijo no distingue
-   "cerrado" de "contabilizado").
+Por cada `KEYR1` indicado que exista realmente en `DFKKRK`:
+
+1. Lee `DFKKRK-STARS` del lote (estado real en FI-CA).
 2. Si está abierto (`STARS` en blanco) → `FKK_RLS_CLOSE`.
 3. Si está cerrado sin contabilizar (`STARS = 1`, incluido justo después
    de cerrarlo en el paso anterior) → `FKK_RLS_POST_LOT`.
@@ -34,19 +37,18 @@ modo que deja traza en `ZFI_T_FILE_LOG` con el `KEYR1` del lote en
    en pantalla para revisión manual — **sin reintento ni corrección
    automática**.
 
-Parámetros de selección: **`S_KEYR1`** (opcional — en blanco procesa todos
-los lotes pendientes, uso normal automático; relleno, solo esos, útil para
-pruebas o reprocesar un lote concreto) y **`P_SIMU`** (checkbox — si se
-marca, el programa solo escribe el `STARS` actual de cada lote pendiente,
-sin cerrar ni contabilizar nada de verdad).
+Parámetros de selección: **`S_KEYR1`** (obligatorio — nº de lote(s) a
+tratar) y **`P_SIMU`** (checkbox — si se marca, el programa solo escribe
+el `STARS` actual de cada lote indicado, sin cerrar ni contabilizar nada
+de verdad).
 
 ## Contenido del repositorio
 
 ```
 src/
   ZFI_R_DEVOLUCIONES2.abap        Programa principal (REPORT)
-  ZFI_R_DEVOLUCIONES2_TOP.abap    Include TOP (vacío)
-  ZFI_R_DEVOLUCIONES2_EVE.abap    Include EVE (solo P_SIMU)
+  ZFI_R_DEVOLUCIONES2_TOP.abap    Include TOP (TABLES dfkkrk, para S_KEYR1)
+  ZFI_R_DEVOLUCIONES2_EVE.abap    Include EVE (S_KEYR1 + P_SIMU)
   ZFI_R_DEVOLUCIONES2_CLS.abap    Include CLS (clase lcl_devoluciones2) — sobre FKK_RLS_CLOSE/FKK_RLS_POST_LOT
 docs/
   DF_resumen.md                   Resumen del Diseño Funcional + cadena real de FMs confirmada por depuración
@@ -54,16 +56,7 @@ docs/
 
 ## Pendiente de probar
 
-- **Confirmar el campo `BUSINESS_DESC`** de `ZFI_T_FILE_LOG`: se asume que
-  ahí es donde `zfi_cl_update_file_log` guarda el `iv_process` (`'EXT'`)
-  que le pasa `ZFI_R_DEVOLUCIONES_CREA` — deducción razonable de los
-  campos de la tabla, pero no confirmada con un registro real todavía.
-- **No hay ningún registro de prueba disponible ahora mismo**: todas las
-  pruebas de `ZFI_R_DEVOLUCIONES_CREA` se han hecho en modo **Upload**,
-  que no deja traza en `ZFI_T_FILE_LOG` (a propósito, documentado así). Solo
-  el modo **Server** (bloqueado por la ruta lógica `ZFICA_COBROS_ECOFI`,
-  que no existe en ningún sistema) deja el `KEYR1` trazado. Para probar
-  este programa ahora, hay que insertar una fila de prueba a mano en
-  `ZFI_T_FILE_LOG` apuntando a un lote real ya creado (p.ej. `260825CDI111`,
-  cerrado pero sin contabilizar — `STARS = 1`).
+- Activar los 4 ficheros en SE38 y probar con `S_KEYR1 = 260825CDI111`
+  (lote real ya cerrado, `STARS = 1`) — primero con `P_SIMU` marcado, luego
+  sin marcar para contabilizarlo de verdad.
 - Alta del objeto en el sistema de transporte correspondiente al proyecto.
