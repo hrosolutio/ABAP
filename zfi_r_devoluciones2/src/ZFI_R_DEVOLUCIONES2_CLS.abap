@@ -125,7 +125,7 @@ CLASS lcl_devoluciones2 IMPLEMENTATION.
           iv_msg_number = '180'
           iv_param_v1   = CONV #( lv_keyr1 )
           iv_param_v2   = `FKK_RLS_CLOSE`
-          iv_param_v3   = CONV #( sy-subrc ) ).
+          iv_param_v3   = |{ sy-subrc }| ).
         RETURN.
       ENDIF.
 
@@ -152,7 +152,7 @@ CLASS lcl_devoluciones2 IMPLEMENTATION.
           iv_msg_number = '180'
           iv_param_v1   = CONV #( lv_keyr1 )
           iv_param_v2   = `FKK_RLS_POST_LOT`
-          iv_param_v3   = CONV #( sy-subrc ) ).
+          iv_param_v3   = |{ sy-subrc }| ).
         RETURN.
       ENDIF.
 

@@ -87,6 +87,17 @@ antes uno de los operandos a un tipo con decimales (`CONV p( ... )` con
 `DECIMALS` explícitos, o un campo `TYPE p DECIMALS n` de verdad) antes de
 dividir.
 
+## Parámetro numérico (`sy-subrc`, etc.) pasado a un mensaje: usar string template, no `CONV #()`
+
+Al pasar un valor numérico (`sy-subrc`, cualquier `TYPE i`/`TYPE n`) como
+parámetro de un mensaje (`iv_param_v1`/`MESSAGE ... WITH ...`, o cualquier
+método que reciba texto para sustituir `&1`/`&2`...), envolverlo con
+`CONV #( sy-subrc )` deja el valor **justificado a la derecha** dentro del
+campo del parámetro (relleno de espacios por delante, típicamente `CHAR50`
+en las clases de log reutilizadas) — el mensaje sale con un hueco enorme
+antes del número. Usar un string template (`|{ sy-subrc }|`) en su lugar:
+da el valor limpio, justificado a la izquierda, sin relleno.
+
 ## Orden fijo de los parámetros en `CALL FUNCTION`
 
 `CALL FUNCTION` exige las secciones en este orden exacto: `EXPORTING` →
