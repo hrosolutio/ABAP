@@ -80,6 +80,37 @@ el correo de Diego), con la opción de reimprimir.
   aquí se asume que no hace falta al filtrar directamente por `OPBEL`
   — no verificado.
 
+## Datos de prueba: no disponibles en el sistema de integración
+
+Comprobado (28/07-03/08/2026): en el sistema de integración usado para
+esta investigación, **no hay documentos de factura de IS-U cargados**:
+
+- Tabla `ERDK` (cabecera de factura): vacía.
+- `ISU_S_EITERDK_SELECT_ALL` probado directamente en SE37 contra la
+  tabla `EITERDK` (confirmada como tabla real por el propio mensaje de
+  error del sistema, `E9 014` "Error de lectura en tabla EITERDK"):
+  - Con `X_INVOICED = 'X'` (combinación válida): excepción `NOT_FOUND`,
+    0 filas.
+  - Con `X_SIMULATED = 'X'` (combinación válida): mismo resultado,
+    0 filas.
+  - Con los tres flags de estado (`X_SIMULATED`/`X_INVOICED`/
+    `X_TOBRELEASD`) vacíos a la vez: error interno de combinación de
+    parámetros no válida en `ISU_DB_EITERDK_SELECT` — confirma que al
+    menos uno de los tres es obligatorio, no es un fallo del intento
+    anterior.
+
+**Conclusión**: este entorno sí tiene datos reales de pagos (`DFKKOP`
+con 893.618 registros), pero no de facturación IS-U. No se ha podido
+probar `ZFI_FM_INVOICE_REPRINT` de principio a fin por falta de un
+`OPBEL` real contra el que probar, no por ningún fallo detectado en la
+cadena en sí.
+
+**Pendiente**: confirmar con quien administra el sistema si hay otro
+entorno/cliente con datos de prueba de facturación, o generar un
+documento real ejecutando antes `SAP_ATC_0051` (EA00) sobre un
+contrato de prueba — esto último no es de solo lectura, requiere
+autorización antes de hacerlo.
+
 ## Estimación de esfuerzo (para referencia interna)
 
 Calibrado sobre el desarrollo de `ZFI_FM_PAYMENT_LOT_CLARIFY2` (~5 días
