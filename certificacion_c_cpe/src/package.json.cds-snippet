@@ -1,0 +1,16 @@
+// Añade esta sección "cds" a la raíz de tu package.json (generado por
+// `cds add hana` / `cds add mta`) para que "auth: none" del enunciado
+// funcione realmente en producción sin necesitar XSUAA. "none" en sí NO
+// es un valor reconocido por @sap/cds — el valor correcto es "dummy".
+// El override específico de "[production]" es necesario porque CAP usa
+// "jwt" por defecto en el perfil de producción si no se sobreescribe.
+{
+  "cds": {
+    "requires": {
+      "auth": "dummy",
+      "[production]": {
+        "auth": "dummy"
+      }
+    }
+  }
+}

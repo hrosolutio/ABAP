@@ -4,12 +4,11 @@ Guía paso a paso para resolver el examen basado en sistema (*C_CPE, Course Vers
 **SAP Business Application Studio (BAS)**, usando el framework **CAP Node.js**. Plantillas de
 código de referencia en [`src/`](src/).
 
-> ⚠️ **A diferencia de C_ABAPD y C_CPI**, el PDF de instrucciones de este examen **no incluye**
-> la cláusula que autoriza explícitamente el uso de recursos externos / SAP Joule durante la
-> evaluación. Antes de pedir ayuda en tiempo real el día del examen real, hay que comprobar si
-> esa autorización aparece en otra sección (overview page, FAQs) — si no aparece, el enfoque
-> debe ser distinto al de los otros dos exámenes (repaso previo sí, respuestas en directo no,
-> salvo confirmación explícita).
+> **Intento real del 30.08.2026: APROBADO** ✅ — registro completo con todas las incidencias
+> encontradas y su solución en [`docs/intento_2026-08-30.md`](docs/intento_2026-08-30.md).
+> Confirmado también que la versión real del examen **sí incluye** la cláusula de SAP Joule /
+> recursos abiertos (la copia de estudio inicial no la tenía, pero era una versión distinta del
+> PDF — verificar siempre la copia real del día del examen, por si acaso).
 
 ## Escenario
 
@@ -149,3 +148,20 @@ cf app <space>-c_cpe_submission-srv
 ```
 Confirma que el módulo `-srv` aparece en estado **`started`** y que la ruta configurada
 (`${org}-cpe-submission.${default-domain}`) responde. Con eso, ya puedes confirmar el examen.
+
+## Lecciones del intento real (resumen — detalle completo en `docs/`)
+
+- **`"auth": "none"` no existe como valor real en `@sap/cds`** — usa **`"auth": "dummy"`**, y
+  sobrescríbelo también bajo `"[production]"` en `package.json` (ver
+  [`src/package.json.cds-snippet`](src/package.json.cds-snippet)), o la app crashea en bucle en
+  Cloud Foundry con `Didn't find auth implementation for { kind: 'none' }` (o `'jwt'` si ni
+  siquiera se sobrescribe el perfil de producción).
+- **HANA devuelve los campos `Decimal` como string** (SQLite los devuelve como `number`) — usa
+  siempre `Number(pkg.weight || 0)` al sumar, o en producción obtienes concatenación de texto en
+  vez de una suma. Este bug **no se detecta en local**, solo probando contra el endpoint ya
+  desplegado.
+- **Crea los archivos con `touch` desde la terminal, no con "New File" del explorador gráfico**
+  — evita el bug de espacio inicial en el nombre que ya nos costó tiempo en la práctica.
+- **El API Endpoint de Cloud Foundry puede no ser el genérico de la región** (ej.
+  `eu10-005` en vez de `eu10`) — verifícalo en Cockpit → Resumen → "Entorno Cloud Foundry" antes
+  de hacer `cf login`, si `cf orgs` devuelve vacío estando ya autenticado.

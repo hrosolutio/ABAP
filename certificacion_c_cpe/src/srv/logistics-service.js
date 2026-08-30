@@ -17,8 +17,11 @@ module.exports = cds.service.impl(async function () {
         packages = await SELECT.from(Packages).where({ parent_ID: shipment.ID });
       }
 
+      // HANA returns Decimal fields as strings (unlike SQLite, which returns
+      // numbers) — force numeric conversion or this silently becomes string
+      // concatenation in production.
       const totalWeight = (packages || []).reduce(
-        (sum, pkg) => sum + (pkg.weight || 0),
+        (sum, pkg) => sum + Number(pkg.weight || 0),
         0
       );
 
