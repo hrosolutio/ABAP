@@ -36,33 +36,35 @@ en modo servidor):
   `co_logical_path` con `ZFICA_COBROS_ECOFI` hardcodeado e inventado, sin
   existir en ningún sistema; mismo fix que ya se aplicó en
   `ZFI_R_DEVOLUCIONES_CREA`), escribe `_TRF`/`_DEV` en una carpeta de
-  **salida** distinta, y mueve cada original a la subcarpeta
-  `procesados/` (dentro de la carpeta de entrada) tras dividirlo, para no
-  reprocesarlo en la siguiente ejecución. No usa `ZFI_T_FILE_LOG` ni el
-  campo `S_FILEID` que tiene `ZFI_R_DEVOLUCIONES`: a diferencia de las
-  devoluciones, el fichero ECOFI es el primer eslabón de la cadena y no
-  está registrado en ningún sitio todavía, así que este programa escanea
-  la carpeta directamente. **Aún no hay job ni disparo automático** — hay
-  que lanzarlo a mano en SE38 — ver "Pendiente / a definir con el cliente"
-  en `docs/DF_resumen.md`.
+  **salida** distinta, y mueve cada original a una carpeta de
+  **procesados** — también distinta, ya no una subcarpeta de la de
+  entrada como antes — tras dividirlo, para no reprocesarlo en la
+  siguiente ejecución. No usa `ZFI_T_FILE_LOG` ni el campo `S_FILEID` que
+  tiene `ZFI_R_DEVOLUCIONES`: a diferencia de las devoluciones, el
+  fichero ECOFI es el primer eslabón de la cadena y no está registrado en
+  ningún sitio todavía, así que este programa escanea la carpeta
+  directamente. **Aún no hay job ni disparo automático** — hay que
+  lanzarlo a mano en SE38 — ver "Pendiente / a definir con el cliente" en
+  `docs/DF_resumen.md`.
 
 ## Configuración (`ZFI_T_CONSTANTS`)
 
-El modo Server necesita **dos** rutas lógicas distintas (el modo Upload no
-necesita ninguna): la carpeta donde se **recoge** el ECOFI (entrada) no
-tiene por qué ser la misma donde se **dejan** `_TRF`/`_DEV` (salida) — de
-hecho la de salida tiene que ser la carpeta que `ZFI_R_DEVOLUCIONES_CREA`
-escanea buscando `_DEV`.
+El modo Server necesita **tres** rutas lógicas distintas, todas variables
+(el modo Upload no necesita ninguna): la carpeta donde se **recoge** el
+ECOFI (entrada), la carpeta donde se **dejan** `_TRF`/`_DEV` (salida) y la
+carpeta donde se **mueve** el original ya dividido (procesados) no tienen
+por qué coincidir — de hecho la de salida tiene que ser la carpeta que
+`ZFI_R_DEVOLUCIONES_CREA` escanea buscando `_DEV`.
 
-**Entrada** — fila propia de este desarrollo:
+**Entrada** y **procesados** — filas propias de este desarrollo:
 
-| Campo | Valor |
-|---|---|
-| `APPLICATION_ID` | `FICA` |
-| `PROCESS_ID` | `ECOFI_SPLIT` |
-| `SUB_PROCESS_ID` | (en blanco) |
-| `CONSTANT_ID` | `RUTA_LOGICA` |
-| `ACTIVE` | `X` |
+| Campo | Entrada | Procesados |
+|---|---|---|
+| `APPLICATION_ID` | `FICA` | `FICA` |
+| `PROCESS_ID` | `ECOFI_SPLIT` | `ECOFI_SPLIT` |
+| `SUB_PROCESS_ID` | (en blanco) | (en blanco) |
+| `CONSTANT_ID` | `RUTA_LOGICA` | `RUTA_LOG_PROC` |
+| `ACTIVE` | `X` | `X` |
 
 **Salida** — **no tiene fila propia**: el programa lee directamente la
 fila de `ZFI_R_DEVOLUCIONES_CREA` (`PROCESS_ID='DEVOL_CREA'`, mismo
@@ -94,12 +96,13 @@ docs/
    p.ej. "Modo de ejecución"). Textos de selección sugeridos para los
    parámetros: `P_SERVER` = "Servidor de aplicaciones", `P_UPLOAD` = "Carga
    local (PC)", `P_PATH` = "Ruta del fichero".
-4. Solo para modo **Server**: crear en transacción **`FILE`** la ruta
-   lógica de **entrada**, apuntando a la ruta física del servidor donde
-   llegan los ficheros ECOFI (p.ej. la misma ruta AL11
+4. Solo para modo **Server**: crear en transacción **`FILE`** las rutas
+   lógicas de **entrada** y de **procesados**, apuntando cada una a su
+   carpeta física en el servidor (la de entrada, p.ej. la misma ruta AL11
    `/interfaces/cobros/transf_N43/in` que menciona el comentario de EVA en
-   el DF), crear dentro de esa carpeta la subcarpeta **`procesados/`**, y
-   dar de alta su fila `RUTA_LOGICA` en `ZFI_T_CONSTANTS` (ver
+   el DF; la de procesados, una carpeta distinta — ya no hace falta que
+   sea subcarpeta de la de entrada), y dar de alta sus dos filas
+   (`RUTA_LOGICA` y `RUTA_LOG_PROC`) en `ZFI_T_CONSTANTS` (ver
    "Configuración" más abajo). La ruta lógica de **salida** ya tiene que
    existir de antes — es la misma que usa `ZFI_R_DEVOLUCIONES_CREA` (su
    propia fila `RUTA_LOGICA`, `PROCESS_ID='DEVOL_CREA'`) — no hay que
@@ -111,8 +114,7 @@ docs/
    - Modo **Server**: no hace falta indicar nada más — procesa todos los
      ficheros que haya en la carpeta de entrada, deja `_TRF`/`_DEV` en la
      carpeta de salida (la de `ZFI_R_DEVOLUCIONES_CREA`), y mueve cada
-     original a `procesados/` (dentro de la carpeta de entrada) al
-     terminar.
+     original a la carpeta de procesados al terminar.
 6. El programa genera, por cada fichero procesado, dos ficheros nuevos:
    `<nombre>_TRF.txt` y `<nombre>_DEV.txt`, y muestra en pantalla el recuento
    de líneas totales/transferencias/extornos.

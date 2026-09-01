@@ -83,25 +83,28 @@ Analizados `YFRECAU_1239_260402.140017.txt` (378 líneas) y
   radio button `p_server`, sin pedir ruta (a diferencia del upload): escanea
   automáticamente **todos** los ficheros de la carpeta de **entrada**
   (`EPS2_GET_DIRECTORY_LISTING` + `OPEN DATASET`), deja `_TRF`/`_DEV` en una
-  carpeta de **salida** distinta, y mueve cada original a `procesados/`
-  (dentro de la carpeta de entrada) tras dividirlo (`ZXX_CL_FILE_UTILS=>
+  carpeta de **salida** distinta, y mueve cada original a una carpeta de
+  **procesados** — también distinta — tras dividirlo (`ZXX_CL_FILE_UTILS=>
   MOVE_SERVER_FILE`, la misma utilidad que ya usa `ZFI_R_DEVOLUCIONES`), para
-  no reprocesarlo. Ambas rutas se leen de `ZFI_T_CONSTANTS` (ya no hay ninguna
-  ruta lógica hardcodeada en el código — la constante `co_logical_path` con
-  `ZFICA_COBROS_ECOFI` inventada sin existir en ningún sistema, primer
-  intento de este punto, fue corregida): la de entrada tiene fila propia
-  (`APPLICATION_ID='FICA'`, `PROCESS_ID='ECOFI_SPLIT'`,
-  `CONSTANT_ID='RUTA_LOGICA'`); la de salida **no tiene fila propia**, se lee
-  directamente de la fila de `ZFI_R_DEVOLUCIONES_CREA`
-  (`PROCESS_ID='DEVOL_CREA'`, mismo `CONSTANT_ID`), que es quien escanea esa
-  misma carpeta buscando los `_DEV` — una única fuente de verdad para la
-  carpeta compartida, ver `README.md`. **Sin probar aún dentro de SAP** y sin
-  disparo automático: hoy hay que ejecutarlo a mano en SE38. Falta:
-  - Crear la ruta lógica de entrada (transacción `FILE`) apuntando a la ruta
-    física real donde llegan los ficheros ECOFI (¿la misma AL11
+  no reprocesarlo. Las 3 rutas se leen de `ZFI_T_CONSTANTS`, todo variable
+  (ya no hay ninguna ruta lógica hardcodeada en el código — la constante
+  `co_logical_path` con `ZFICA_COBROS_ECOFI` inventada sin existir en ningún
+  sistema, primer intento de este punto, fue corregida): entrada y
+  procesados tienen fila propia (`APPLICATION_ID='FICA'`,
+  `PROCESS_ID='ECOFI_SPLIT'`, `CONSTANT_ID='RUTA_LOGICA'` y
+  `'RUTA_LOG_PROC'` respectivamente); la de salida **no tiene fila propia**,
+  se lee directamente de la fila de `ZFI_R_DEVOLUCIONES_CREA`
+  (`PROCESS_ID='DEVOL_CREA'`, `CONSTANT_ID='RUTA_LOGICA'`), que es quien
+  escanea esa misma carpeta buscando los `_DEV` — una única fuente de verdad
+  para la carpeta compartida, ver `README.md`. **Sin probar aún dentro de
+  SAP** y sin disparo automático: hoy hay que ejecutarlo a mano en SE38.
+  Falta:
+  - Crear las rutas lógicas de entrada y de procesados (transacción `FILE`)
+    apuntando a sus rutas físicas reales (la de entrada, ¿la misma AL11
     `/interfaces/cobros/transf_N43/in` que menciona el comentario de EVA, o
-    una carpeta de staging distinta?) y dar de alta su fila en
-    `ZFI_T_CONSTANTS`.
+    una carpeta de staging distinta?; la de procesados, cualquier otra
+    carpeta — ya no tiene que ser subcarpeta de la de entrada) y dar de alta
+    sus filas en `ZFI_T_CONSTANTS`.
   - Decidir cómo se dispara en producción: job propio programado, o
     integrado en el job que hoy crea el lote de transferencias.
 - Si la moneda puede ser distinta de `EUR` en algún caso (el programa localiza
