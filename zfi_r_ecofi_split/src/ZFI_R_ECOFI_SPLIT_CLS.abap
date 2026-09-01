@@ -35,20 +35,22 @@
 * ningun sitio todavia (a diferencia de ZFI_R_DEVOLUCIONES, que ya recibe
 * los ficheros pre-registrados por un paso anterior).
 *
-* Son 3 rutas logicas distintas, todas variables (nada hardcodeado):
-*   - ENTRADA:    fila propia en ZFI_T_CONSTANTS (PROCESS_ID=ECOFI_SPLIT,
-*                 CONSTANT_ID=RUTA_LOGICA).
-*   - SALIDA (_TRF/_DEV): no tiene fila propia - se lee directamente la
-*                 fila de ZFI_R_DEVOLUCIONES_CREA (PROCESS_ID=
-*                 DEVOL_CREA, mismo CONSTANT_ID=RUTA_LOGICA), que es quien
-*                 luego escanea esa carpeta buscando los _DEV - asi hay
-*                 una unica fuente de verdad para esa carpeta compartida,
-*                 sin nada que mantener sincronizado a mano entre dos
-*                 filas distintas.
-*   - PROCESADOS: fila propia en ZFI_T_CONSTANTS (PROCESS_ID=ECOFI_SPLIT,
-*                 CONSTANT_ID=RUTA_LOG_PROC) - carpeta distinta de las
-*                 otras dos (ya no es una subcarpeta "procesados/" de la
-*                 de entrada, como en una version anterior).
+* Son 3 rutas logicas distintas, todas variables (nada hardcodeado), pero
+* las 3 filas de ZFI_T_CONSTANTS viven bajo el MISMO PROCESS_ID=DEVOL_CREA
+* que ya usa ZFI_R_DEVOLUCIONES_CREA - decision deliberada para no dar de
+* alta un PROCESS_ID propio (ECOFI_SPLIT) en ZFI_T_PROCESS, ya que los dos
+* programas son en la practica el mismo eslabon logico del proceso CDI_11
+* (division + creacion del lote de devoluciones):
+*   - SALIDA (_TRF/_DEV) = ENTRADA de ZFI_R_DEVOLUCIONES_CREA:
+*                 CONSTANT_ID=RUTA_LOGICA - la misma fila que ya usa
+*                 ZFI_R_DEVOLUCIONES_CREA para saber donde buscar los
+*                 _DEV, sin duplicar el valor en ningun sitio.
+*   - ENTRADA (ECOFI de este programa): CONSTANT_ID=RUTA_LOG_ECOFI, fila
+*                 nueva, mismo PROCESS_ID.
+*   - PROCESADOS: CONSTANT_ID=RUTA_LOG_PROC, fila nueva, mismo PROCESS_ID
+*                 - carpeta distinta de las otras dos (ya no es una
+*                 subcarpeta "procesados/" de la de entrada, como en una
+*                 version anterior).
 *
 * Este modo Server es el unico afectado por las 3 rutas - el modo Upload
 * (local) no cambia: sigue subiendo/descargando por GUI en la misma
@@ -62,15 +64,15 @@ CLASS lcl_ecofi_split DEFINITION.
       co_eur_tag        TYPE string    VALUE 'EUR',
 
       " Claves en ZFI_T_CONSTANTS de las 3 rutas logicas del modo Server -
-      " leidas en GET_CONSTANTS, no hace falta para el modo Upload.
-      co_application_id  TYPE zfi_de_application_id VALUE 'FICA',
-      co_process_id      TYPE zfi_de_process_id     VALUE 'ECOFI_SPLIT',
-      " Ruta de salida (_TRF/_DEV): la fila de ZFI_R_DEVOLUCIONES_CREA, no
-      " una propia - ver comentario al principio del include.
-      co_process_id_out  TYPE zfi_de_process_id     VALUE 'DEVOL_CREA',
-      co_sub_process_id  TYPE zfi_de_sub_process_id VALUE space,
-      co_const_ruta_log  TYPE zfi_de_constant_id    VALUE 'RUTA_LOGICA',
-      co_const_ruta_proc TYPE zfi_de_constant_id    VALUE 'RUTA_LOG_PROC'.
+      " leidas en GET_CONSTANTS, no hace falta para el modo Upload. Mismo
+      " PROCESS_ID que ZFI_R_DEVOLUCIONES_CREA (ver comentario al
+      " principio del include) - no se crea uno propio para ECOFI_SPLIT.
+      co_application_id   TYPE zfi_de_application_id VALUE 'FICA',
+      co_process_id       TYPE zfi_de_process_id     VALUE 'DEVOL_CREA',
+      co_sub_process_id   TYPE zfi_de_sub_process_id VALUE space,
+      co_const_ruta_ecofi TYPE zfi_de_constant_id    VALUE 'RUTA_LOG_ECOFI',
+      co_const_ruta_log   TYPE zfi_de_constant_id    VALUE 'RUTA_LOGICA',
+      co_const_ruta_proc  TYPE zfi_de_constant_id    VALUE 'RUTA_LOG_PROC'.
 
     METHODS:
       constructor IMPORTING iv_path   TYPE string
@@ -171,29 +173,31 @@ CLASS lcl_ecofi_split IMPLEMENTATION.
 
     DATA: lt_constants TYPE TABLE OF zfi_t_constants.
 
-    " 3 filas distintas: entrada y procesados son propias de este
-    " PROCESS_ID (ECOFI_SPLIT), la de salida es la de ZFI_R_DEVOLUCIONES_
-    " CREA (DEVOL_CREA) - ver comentario al principio del include.
+    " Las 3 filas viven bajo el mismo PROCESS_ID (DEVOL_CREA) - se
+    " distinguen solo por CONSTANT_ID. Ver comentario al principio del
+    " include.
     SELECT * FROM zfi_t_constants INTO TABLE lt_constants
       WHERE application_id = co_application_id
+        AND process_id     = co_process_id
         AND sub_process_id = co_sub_process_id
         AND active         = abap_true
-        AND ( ( process_id = co_process_id     AND constant_id = co_const_ruta_log )
-           OR ( process_id = co_process_id     AND constant_id = co_const_ruta_proc )
-           OR ( process_id = co_process_id_out AND constant_id = co_const_ruta_log ) ).
+        AND ( constant_id = co_const_ruta_ecofi
+           OR constant_id = co_const_ruta_log
+           OR constant_id = co_const_ruta_proc ).
 
     LOOP AT lt_constants INTO DATA(ls_constant).
-      IF ls_constant-process_id = co_process_id AND ls_constant-constant_id = co_const_ruta_log.
-        gv_logical_path_in = ls_constant-constant_value.
-      ELSEIF ls_constant-process_id = co_process_id AND ls_constant-constant_id = co_const_ruta_proc.
-        gv_logical_path_proc = ls_constant-constant_value.
-      ELSEIF ls_constant-process_id = co_process_id_out AND ls_constant-constant_id = co_const_ruta_log.
-        gv_logical_path_out = ls_constant-constant_value.
-      ENDIF.
+      CASE ls_constant-constant_id.
+        WHEN co_const_ruta_ecofi.
+          gv_logical_path_in = ls_constant-constant_value.
+        WHEN co_const_ruta_log.
+          gv_logical_path_out = ls_constant-constant_value.
+        WHEN co_const_ruta_proc.
+          gv_logical_path_proc = ls_constant-constant_value.
+      ENDCASE.
     ENDLOOP.
 
     IF gv_logical_path_in IS INITIAL OR gv_logical_path_out IS INITIAL OR gv_logical_path_proc IS INITIAL.
-      WRITE: / 'Faltan constantes de ruta lógica en ZFI_T_CONSTANTS para', co_application_id, co_process_id, co_process_id_out.
+      WRITE: / 'Faltan constantes de ruta lógica en ZFI_T_CONSTANTS para', co_application_id, co_process_id.
       RETURN.
     ENDIF.
 

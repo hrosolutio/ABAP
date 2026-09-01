@@ -56,19 +56,30 @@ carpeta donde se **mueve** el original ya dividido (procesados) no tienen
 por qué coincidir — de hecho la de salida tiene que ser la carpeta que
 `ZFI_R_DEVOLUCIONES_CREA` escanea buscando `_DEV`.
 
-**Entrada** y **procesados** — filas propias de este desarrollo:
+**Decisión**: las 3 filas viven bajo el **mismo `PROCESS_ID='DEVOL_CREA'`**
+que ya usa `ZFI_R_DEVOLUCIONES_CREA` — deliberadamente no se da de alta un
+`PROCESS_ID` propio (`ECOFI_SPLIT`) para no tener que registrar una fila
+nueva en `ZFI_T_PROCESS`; los dos programas se tratan como el mismo
+eslabón lógico del proceso `CDI_11`. Se distinguen solo por `CONSTANT_ID`:
+
+| `CONSTANT_ID` | Carpeta | ¿Fila nueva? |
+|---|---|---|
+| `RUTA_LOG_ECOFI` | Entrada (donde llega el ECOFI) | Sí |
+| `RUTA_LOGICA` | Salida (`_TRF`/`_DEV`) | **No** — ya existe, es la misma fila que `ZFI_R_DEVOLUCIONES_CREA` usa como su propia entrada |
+| `RUTA_LOG_PROC` | Procesados (donde se archiva el original) | Sí |
+
+Las dos filas nuevas:
 
 | Campo | Entrada | Procesados |
 |---|---|---|
 | `APPLICATION_ID` | `FICA` | `FICA` |
-| `PROCESS_ID` | `ECOFI_SPLIT` | `ECOFI_SPLIT` |
+| `PROCESS_ID` | `DEVOL_CREA` | `DEVOL_CREA` |
 | `SUB_PROCESS_ID` | (en blanco) | (en blanco) |
-| `CONSTANT_ID` | `RUTA_LOGICA` | `RUTA_LOG_PROC` |
+| `CONSTANT_ID` | `RUTA_LOG_ECOFI` | `RUTA_LOG_PROC` |
 | `ACTIVE` | `X` | `X` |
 
-**Salida** — **no tiene fila propia**: el programa lee directamente la
-fila de `ZFI_R_DEVOLUCIONES_CREA` (`PROCESS_ID='DEVOL_CREA'`, mismo
-`CONSTANT_ID='RUTA_LOGICA'`, ya documentada en su propio README). Así hay
+La fila de salida (`RUTA_LOGICA`) no se toca — sigue siendo la misma que
+ya usa `ZFI_R_DEVOLUCIONES_CREA`, documentada en su propio README. Así hay
 una única fuente de verdad para esa carpeta compartida — no hay dos
 valores que mantener sincronizados a mano, y por tanto no hay riesgo de
 que se desincronicen.
@@ -101,12 +112,12 @@ docs/
    carpeta física en el servidor (la de entrada, p.ej. la misma ruta AL11
    `/interfaces/cobros/transf_N43/in` que menciona el comentario de EVA en
    el DF; la de procesados, una carpeta distinta — ya no hace falta que
-   sea subcarpeta de la de entrada), y dar de alta sus dos filas
-   (`RUTA_LOGICA` y `RUTA_LOG_PROC`) en `ZFI_T_CONSTANTS` (ver
+   sea subcarpeta de la de entrada), y dar de alta sus dos filas nuevas
+   (`RUTA_LOG_ECOFI` y `RUTA_LOG_PROC`, ambas con `PROCESS_ID='DEVOL_CREA'`
+   — no hace falta un `PROCESS_ID` propio) en `ZFI_T_CONSTANTS` (ver
    "Configuración" más abajo). La ruta lógica de **salida** ya tiene que
-   existir de antes — es la misma que usa `ZFI_R_DEVOLUCIONES_CREA` (su
-   propia fila `RUTA_LOGICA`, `PROCESS_ID='DEVOL_CREA'`) — no hay que
-   crear nada nuevo para ella aquí.
+   existir de antes — es la misma fila `RUTA_LOGICA` que ya usa
+   `ZFI_R_DEVOLUCIONES_CREA` — no hay que crear nada nuevo para ella aquí.
 5. Activar y ejecutar (F8).
    - Modo **Upload**: en `P_PATH`, seleccionar (F4) un fichero ECOFI real en
      tu PC (p.ej. uno de los dos ficheros de prueba). Los ficheros de salida

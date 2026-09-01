@@ -89,16 +89,19 @@ Analizados `YFRECAU_1239_260402.140017.txt` (378 líneas) y
   no reprocesarlo. Las 3 rutas se leen de `ZFI_T_CONSTANTS`, todo variable
   (ya no hay ninguna ruta lógica hardcodeada en el código — la constante
   `co_logical_path` con `ZFICA_COBROS_ECOFI` inventada sin existir en ningún
-  sistema, primer intento de este punto, fue corregida): entrada y
-  procesados tienen fila propia (`APPLICATION_ID='FICA'`,
-  `PROCESS_ID='ECOFI_SPLIT'`, `CONSTANT_ID='RUTA_LOGICA'` y
-  `'RUTA_LOG_PROC'` respectivamente); la de salida **no tiene fila propia**,
-  se lee directamente de la fila de `ZFI_R_DEVOLUCIONES_CREA`
-  (`PROCESS_ID='DEVOL_CREA'`, `CONSTANT_ID='RUTA_LOGICA'`), que es quien
-  escanea esa misma carpeta buscando los `_DEV` — una única fuente de verdad
-  para la carpeta compartida, ver `README.md`. **Sin probar aún dentro de
-  SAP** y sin disparo automático: hoy hay que ejecutarlo a mano en SE38.
-  Falta:
+  sistema, primer intento de este punto, fue corregida). Decisión: las 3
+  filas viven bajo el **mismo `PROCESS_ID='DEVOL_CREA'`** que ya usa
+  `ZFI_R_DEVOLUCIONES_CREA` — deliberadamente no se da de alta un
+  `PROCESS_ID` propio (`ECOFI_SPLIT`) en `ZFI_T_PROCESS`, tratando los dos
+  programas como el mismo eslabón lógico del proceso. Se distinguen solo
+  por `CONSTANT_ID`: entrada tiene fila nueva (`CONSTANT_ID='RUTA_LOG_ECOFI'`)
+  y procesados también (`CONSTANT_ID='RUTA_LOG_PROC'`); la de salida **no
+  tiene fila propia**, se lee directamente de la fila que ya usa
+  `ZFI_R_DEVOLUCIONES_CREA` (`CONSTANT_ID='RUTA_LOGICA'`, mismo
+  `PROCESS_ID='DEVOL_CREA'`), que es quien escanea esa misma carpeta
+  buscando los `_DEV` — una única fuente de verdad para la carpeta
+  compartida, ver `README.md`. **Sin probar aún dentro de SAP** y sin
+  disparo automático: hoy hay que ejecutarlo a mano en SE38. Falta:
   - Crear las rutas lógicas de entrada y de procesados (transacción `FILE`)
     apuntando a sus rutas físicas reales (la de entrada, ¿la misma AL11
     `/interfaces/cobros/transf_N43/in` que menciona el comentario de EVA, o
