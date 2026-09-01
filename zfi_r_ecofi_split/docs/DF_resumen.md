@@ -81,21 +81,29 @@ Analizados `YFRECAU_1239_260402.140017.txt` (378 líneas) y
   desarrollo 2 (creación del lote) o si es indiferente.
 - **Modo de ejecución en producción**: el programa ya tiene modo servidor —
   radio button `p_server`, sin pedir ruta (a diferencia del upload): escanea
-  automáticamente **todos** los ficheros de la carpeta de la ruta lógica
-  `ZFICA_COBROS_ECOFI` (`EPS2_GET_DIRECTORY_LISTING` + `OPEN DATASET`) y mueve
-  cada original a `procesados/` tras dividirlo (`ZXX_CL_FILE_UTILS=>
+  automáticamente **todos** los ficheros de la carpeta de **entrada**
+  (`EPS2_GET_DIRECTORY_LISTING` + `OPEN DATASET`), deja `_TRF`/`_DEV` en una
+  carpeta de **salida** distinta, y mueve cada original a `procesados/`
+  (dentro de la carpeta de entrada) tras dividirlo (`ZXX_CL_FILE_UTILS=>
   MOVE_SERVER_FILE`, la misma utilidad que ya usa `ZFI_R_DEVOLUCIONES`), para
-  no reprocesarlo. **Sin probar aún dentro de SAP** y sin disparo automático:
-  hoy hay que ejecutarlo a mano en SE38. Falta:
-  - Crear la ruta lógica `ZFICA_COBROS_ECOFI` (transacción `FILE`) apuntando
-    a la ruta física real (¿la misma AL11
+  no reprocesarlo. Ambas rutas se leen de `ZFI_T_CONSTANTS` (ya no hay ninguna
+  ruta lógica hardcodeada en el código — la constante `co_logical_path` con
+  `ZFICA_COBROS_ECOFI` inventada sin existir en ningún sistema, primer
+  intento de este punto, fue corregida): la de entrada tiene fila propia
+  (`APPLICATION_ID='FICA'`, `PROCESS_ID='ECOFI_SPLIT'`,
+  `CONSTANT_ID='RUTA_LOGICA'`); la de salida **no tiene fila propia**, se lee
+  directamente de la fila de `ZFI_R_DEVOLUCIONES_CREA`
+  (`PROCESS_ID='DEVOL_CREA'`, mismo `CONSTANT_ID`), que es quien escanea esa
+  misma carpeta buscando los `_DEV` — una única fuente de verdad para la
+  carpeta compartida, ver `README.md`. **Sin probar aún dentro de SAP** y sin
+  disparo automático: hoy hay que ejecutarlo a mano en SE38. Falta:
+  - Crear la ruta lógica de entrada (transacción `FILE`) apuntando a la ruta
+    física real donde llegan los ficheros ECOFI (¿la misma AL11
     `/interfaces/cobros/transf_N43/in` que menciona el comentario de EVA, o
-    una carpeta de staging distinta?).
+    una carpeta de staging distinta?) y dar de alta su fila en
+    `ZFI_T_CONSTANTS`.
   - Decidir cómo se dispara en producción: job propio programado, o
     integrado en el job que hoy crea el lote de transferencias.
-  - Qué pasa con los ficheros `_TRF`/`_DEV` generados (hoy se quedan en la
-    misma carpeta, sin moverse a ningún sitio) — si deben quedarse ahí para
-    que los recoja el siguiente paso, o moverse también.
 - Si la moneda puede ser distinta de `EUR` en algún caso (el programa localiza
   el concepto buscando la primera ocurrencia de `EUR` en la línea).
 - Alta del objeto en el sistema de transporte correspondiente al proyecto.

@@ -31,16 +31,45 @@ en modo servidor):
 - **Upload** (local): pide un fichero (`P_PATH`, con F4), lo sube/descarga vía
   GUI. Para poder probarlo desde SE38 contra un fichero en tu PC.
 - **Server**: no pide ningún fichero — **procesa automáticamente todos los
-  ficheros** que haya en la carpeta de la ruta lógica
-  `lcl_ecofi_split=>co_logical_path` (`ZFICA_COBROS_ECOFI`, a crear en SAP,
-  ver más abajo), y mueve cada original a la subcarpeta `procesados/` tras
-  dividirlo, para no reprocesarlo en la siguiente ejecución. No usa
-  `ZFI_T_FILE_LOG` ni el campo `S_FILEID` que tiene `ZFI_R_DEVOLUCIONES`: a
-  diferencia de las devoluciones, el fichero ECOFI es el primer eslabón de la
-  cadena y no está registrado en ningún sitio todavía, así que este programa
-  escanea la carpeta directamente. **Aún no hay job ni disparo automático** —
-  hay que lanzarlo a mano en SE38 — ver "Pendiente / a definir con el
-  cliente" en `docs/DF_resumen.md`.
+  ficheros** que haya en la carpeta de **entrada** (ruta lógica leída de
+  `ZFI_T_CONSTANTS`, ver "Configuración" más abajo — antes era la constante
+  `co_logical_path` con `ZFICA_COBROS_ECOFI` hardcodeado e inventado, sin
+  existir en ningún sistema; mismo fix que ya se aplicó en
+  `ZFI_R_DEVOLUCIONES_CREA`), escribe `_TRF`/`_DEV` en una carpeta de
+  **salida** distinta, y mueve cada original a la subcarpeta
+  `procesados/` (dentro de la carpeta de entrada) tras dividirlo, para no
+  reprocesarlo en la siguiente ejecución. No usa `ZFI_T_FILE_LOG` ni el
+  campo `S_FILEID` que tiene `ZFI_R_DEVOLUCIONES`: a diferencia de las
+  devoluciones, el fichero ECOFI es el primer eslabón de la cadena y no
+  está registrado en ningún sitio todavía, así que este programa escanea
+  la carpeta directamente. **Aún no hay job ni disparo automático** — hay
+  que lanzarlo a mano en SE38 — ver "Pendiente / a definir con el cliente"
+  en `docs/DF_resumen.md`.
+
+## Configuración (`ZFI_T_CONSTANTS`)
+
+El modo Server necesita **dos** rutas lógicas distintas (el modo Upload no
+necesita ninguna): la carpeta donde se **recoge** el ECOFI (entrada) no
+tiene por qué ser la misma donde se **dejan** `_TRF`/`_DEV` (salida) — de
+hecho la de salida tiene que ser la carpeta que `ZFI_R_DEVOLUCIONES_CREA`
+escanea buscando `_DEV`.
+
+**Entrada** — fila propia de este desarrollo:
+
+| Campo | Valor |
+|---|---|
+| `APPLICATION_ID` | `FICA` |
+| `PROCESS_ID` | `ECOFI_SPLIT` |
+| `SUB_PROCESS_ID` | (en blanco) |
+| `CONSTANT_ID` | `RUTA_LOGICA` |
+| `ACTIVE` | `X` |
+
+**Salida** — **no tiene fila propia**: el programa lee directamente la
+fila de `ZFI_R_DEVOLUCIONES_CREA` (`PROCESS_ID='DEVOL_CREA'`, mismo
+`CONSTANT_ID='RUTA_LOGICA'`, ya documentada en su propio README). Así hay
+una única fuente de verdad para esa carpeta compartida — no hay dos
+valores que mantener sincronizados a mano, y por tanto no hay riesgo de
+que se desincronicen.
 
 ## Contenido del repositorio
 
@@ -65,18 +94,25 @@ docs/
    p.ej. "Modo de ejecución"). Textos de selección sugeridos para los
    parámetros: `P_SERVER` = "Servidor de aplicaciones", `P_UPLOAD` = "Carga
    local (PC)", `P_PATH` = "Ruta del fichero".
-4. Solo para modo **Server**: crear en transacción **`FILE`** la ruta lógica
-   **`ZFICA_COBROS_ECOFI`** apuntando a la ruta física del servidor donde
+4. Solo para modo **Server**: crear en transacción **`FILE`** la ruta
+   lógica de **entrada**, apuntando a la ruta física del servidor donde
    llegan los ficheros ECOFI (p.ej. la misma ruta AL11
-   `/interfaces/cobros/transf_N43/in` que menciona el comentario de EVA en el
-   DF), y crear dentro de esa carpeta la subcarpeta **`procesados/`**.
+   `/interfaces/cobros/transf_N43/in` que menciona el comentario de EVA en
+   el DF), crear dentro de esa carpeta la subcarpeta **`procesados/`**, y
+   dar de alta su fila `RUTA_LOGICA` en `ZFI_T_CONSTANTS` (ver
+   "Configuración" más abajo). La ruta lógica de **salida** ya tiene que
+   existir de antes — es la misma que usa `ZFI_R_DEVOLUCIONES_CREA` (su
+   propia fila `RUTA_LOGICA`, `PROCESS_ID='DEVOL_CREA'`) — no hay que
+   crear nada nuevo para ella aquí.
 5. Activar y ejecutar (F8).
    - Modo **Upload**: en `P_PATH`, seleccionar (F4) un fichero ECOFI real en
      tu PC (p.ej. uno de los dos ficheros de prueba). Los ficheros de salida
      se descargan a la misma carpeta local.
    - Modo **Server**: no hace falta indicar nada más — procesa todos los
-     ficheros que haya en la carpeta de `ZFICA_COBROS_ECOFI` y mueve cada
-     original a `procesados/` al terminar.
+     ficheros que haya en la carpeta de entrada, deja `_TRF`/`_DEV` en la
+     carpeta de salida (la de `ZFI_R_DEVOLUCIONES_CREA`), y mueve cada
+     original a `procesados/` (dentro de la carpeta de entrada) al
+     terminar.
 6. El programa genera, por cada fichero procesado, dos ficheros nuevos:
    `<nombre>_TRF.txt` y `<nombre>_DEV.txt`, y muestra en pantalla el recuento
    de líneas totales/transferencias/extornos.
