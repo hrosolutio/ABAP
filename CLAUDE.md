@@ -46,6 +46,19 @@ falta una variable), declarar una variable intermedia con el tipo DDIC real
 `CONCATENATE lv_var '' INTO lv_string.` (que además recorta los espacios
 finales propios de un campo de longitud fija, cosa que `&&` no hace).
 
+Lo mismo aplica a **campos de tablas Z reutilizadas**, no solo a parámetros
+de clase: `ZFI_T_CONSTANTS-CONSTANT_VALUE` (tabla de configuración
+genérica usada en varios desarrollos para leer sociedad, rutas de
+servidor, moneda, etc.) tampoco es `TYPE string` — error real de
+activación: pasarlo directo a un `IMPORTING ... TYPE string` da **"no es
+compatible con el tipo"**, igual que con los parámetros de clase. Mismo
+fix: envolver con `CONV string( ... )` (aquí sí conviene indicar el tipo,
+porque el destino es fijo) o pasar por una variable intermedia +
+`CONCATENATE ... '' INTO ...` si hace falta recortar blancos de relleno.
+Una asignación simple con `=` (`lv_x = ls_row-constant_value.`) sí es
+válida sin conversión — el error solo salta al pasarlo como parámetro
+actual de un método/función.
+
 ## `FIND REGEX` (POSIX) está obsoleto
 
 Da un aviso ("el estándar POSIX está obsoleto"). Usar `FIND PCRE` en su
