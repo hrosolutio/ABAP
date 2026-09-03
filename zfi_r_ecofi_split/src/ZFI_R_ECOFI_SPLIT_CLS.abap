@@ -21,21 +21,30 @@
 * documento) o un formato mas corto como el del ejemplo del DF.
 *
 * Modo servidor: escanea TODOS los ficheros de la carpeta de ENTRADA
-* (ruta logica leida de ZFI_T_CONSTANTS, ver GET_CONSTANTS - antes era
-* la constante CO_LOGICAL_PATH = 'ZFICA_COBROS_ECOFI', inventada y sin
-* existir en ningun sistema; mismo fix que ya se aplico en
-* ZFI_R_DEVOLUCIONES_CREA), igual patron que ZFI_R_DEVOLUCIONES, que
-* resuelve sus rutas logicas con ZXX_CL_FILE_UTILS=>GET_DIRECTORY. Divide
-* cada fichero uno a uno, deja _TRF/_DEV en la carpeta de SALIDA, y mueve
-* el original a la carpeta de PROCESADOS (con
-* ZXX_CL_FILE_UTILS=>MOVE_SERVER_FILE, la misma utilidad que usa
-* ZFI_R_DEVOLUCIONES para sus subcarpetas backup/error) para no
+* (ruta fisica leida de ZFI_T_CONSTANTS, ver GET_CONSTANTS - antes era la
+* constante CO_LOGICAL_PATH = 'ZFICA_COBROS_ECOFI', inventada y sin
+* existir en ningun sistema). Divide cada fichero uno a uno, deja _TRF/
+* _DEV en la carpeta de SALIDA, y mueve el original a la carpeta de
+* PROCESADOS (con ZXX_CL_FILE_UTILS=>MOVE_SERVER_FILE, la misma utilidad
+* que usa ZFI_R_DEVOLUCIONES para sus subcarpetas backup/error) para no
 * reprocesarlo en la siguiente ejecucion. No usa ZFI_T_FILE_LOG: el
 * fichero ECOFI es el primer eslabon de la cadena, no esta registrado en
 * ningun sitio todavia (a diferencia de ZFI_R_DEVOLUCIONES, que ya recibe
 * los ficheros pre-registrados por un paso anterior).
 *
-* Son 3 rutas logicas distintas, todas variables (nada hardcodeado), pero
+* IMPORTANTE - decision sobre rutas logicas vs. fisicas: en vez de dar de
+* alta rutas logicas en transaccion FILE y resolverlas con
+* ZXX_CL_FILE_UTILS=>GET_DIRECTORY (como hace ZFI_R_DEVOLUCIONES), las 3
+* carpetas se leen de ZFI_T_CONSTANTS como RUTA FISICA DIRECTA (el valor
+* de CONSTANT_VALUE es ya la ruta del servidor, p.ej.
+* '/interfaces/cobros/transf_N43/in/'), sin pasar por FILE en absoluto.
+* Motivo: el sistema de ficheros (las carpetas fisicas) ya existe antes
+* que el programa - si algo hay que adaptar para que encajen, que sea el
+* programa, no forzar de alta entradas nuevas en FILE solo para tener una
+* capa de indireccion que ZFI_T_CONSTANTS ya proporciona (el valor cambia
+* por sistema igualmente, fila a fila, sin tocar codigo).
+*
+* Son 3 rutas fisicas distintas, todas variables (nada hardcodeado), pero
 * las 3 filas de ZFI_T_CONSTANTS viven bajo el MISMO PROCESS_ID=DEVOL_CREA
 * que ya usa ZFI_R_DEVOLUCIONES_CREA - decision deliberada para no dar de
 * alta un PROCESS_ID propio (ECOFI_SPLIT) en ZFI_T_PROCESS, ya que los dos
@@ -44,7 +53,11 @@
 *   - SALIDA (_TRF/_DEV) = ENTRADA de ZFI_R_DEVOLUCIONES_CREA:
 *                 CONSTANT_ID=RUTA_LOGICA - la misma fila que ya usa
 *                 ZFI_R_DEVOLUCIONES_CREA para saber donde buscar los
-*                 _DEV, sin duplicar el valor en ningun sitio.
+*                 _DEV, sin duplicar el valor en ningun sitio (el nombre
+*                 de la clave es historico, del diseño con ruta logica de
+*                 FILE - hoy contiene una ruta fisica igual que las otras
+*                 dos, no se ha renombrado para no romper filas ya dadas
+*                 de alta).
 *   - ENTRADA (ECOFI de este programa): CONSTANT_ID=RUTA_LOG_ECOFI, fila
 *                 nueva, mismo PROCESS_ID.
 *   - PROCESADOS: CONSTANT_ID=RUTA_LOG_PROC, fila nueva, mismo PROCESS_ID
@@ -63,7 +76,7 @@ CLASS lcl_ecofi_split DEFINITION.
       co_suffix_dev     TYPE string    VALUE '_DEV',
       co_eur_tag        TYPE string    VALUE 'EUR',
 
-      " Claves en ZFI_T_CONSTANTS de las 3 rutas logicas del modo Server -
+      " Claves en ZFI_T_CONSTANTS de las 3 rutas fisicas del modo Server -
       " leidas en GET_CONSTANTS, no hace falta para el modo Upload. Mismo
       " PROCESS_ID que ZFI_R_DEVOLUCIONES_CREA (ver comentario al
       " principio del include) - no se crea uno propio para ECOFI_SPLIT.
@@ -94,11 +107,13 @@ CLASS lcl_ecofi_split DEFINITION.
 
   PRIVATE SECTION.
 
-    DATA: gv_path              TYPE string,
-          gv_upload            TYPE c,
-          gv_logical_path_in   TYPE pathintern,
-          gv_logical_path_out  TYPE pathintern,
-          gv_logical_path_proc TYPE pathintern.
+    DATA: gv_path     TYPE string,
+          gv_upload   TYPE c,
+          " Rutas fisicas directas (no rutas logicas de FILE) - ver
+          " comentario al principio del include.
+          gv_dir_in   TYPE string,
+          gv_dir_out  TYPE string,
+          gv_dir_proc TYPE string.
 
     METHODS:
       get_constants RETURNING VALUE(rv_ok) TYPE flag,
@@ -117,8 +132,8 @@ CLASS lcl_ecofi_split DEFINITION.
       get_filename_from_path IMPORTING iv_path            TYPE string
                               RETURNING VALUE(rv_filename) TYPE string,
 
-      get_server_directory IMPORTING iv_logical_path   TYPE pathintern
-                            RETURNING VALUE(rv_directory) TYPE string,
+      normalize_dir IMPORTING iv_dir         TYPE string
+                    RETURNING VALUE(rv_dir)  TYPE string,
 
       get_server_files IMPORTING iv_directory    TYPE string
                         RETURNING VALUE(rt_files) TYPE string_table,
@@ -188,16 +203,16 @@ CLASS lcl_ecofi_split IMPLEMENTATION.
     LOOP AT lt_constants INTO DATA(ls_constant).
       CASE ls_constant-constant_id.
         WHEN co_const_ruta_ecofi.
-          gv_logical_path_in = ls_constant-constant_value.
+          gv_dir_in = normalize_dir( ls_constant-constant_value ).
         WHEN co_const_ruta_log.
-          gv_logical_path_out = ls_constant-constant_value.
+          gv_dir_out = normalize_dir( ls_constant-constant_value ).
         WHEN co_const_ruta_proc.
-          gv_logical_path_proc = ls_constant-constant_value.
+          gv_dir_proc = normalize_dir( ls_constant-constant_value ).
       ENDCASE.
     ENDLOOP.
 
-    IF gv_logical_path_in IS INITIAL OR gv_logical_path_out IS INITIAL OR gv_logical_path_proc IS INITIAL.
-      WRITE: / 'Faltan constantes de ruta lógica en ZFI_T_CONSTANTS para', co_application_id, co_process_id.
+    IF gv_dir_in IS INITIAL OR gv_dir_out IS INITIAL OR gv_dir_proc IS INITIAL.
+      WRITE: / 'Faltan constantes de ruta en ZFI_T_CONSTANTS para', co_application_id, co_process_id.
       RETURN.
     ENDIF.
 
@@ -211,16 +226,7 @@ CLASS lcl_ecofi_split IMPLEMENTATION.
       RETURN.
     ENDIF.
 
-    DATA(lv_dir_in)   = get_server_directory( gv_logical_path_in ).
-    DATA(lv_dir_out)  = get_server_directory( gv_logical_path_out ).
-    DATA(lv_dir_proc) = get_server_directory( gv_logical_path_proc ).
-
-    IF lv_dir_in IS INITIAL OR lv_dir_out IS INITIAL OR lv_dir_proc IS INITIAL.
-      MESSAGE 'No se ha podido resolver alguna ruta lógica del servidor.' TYPE 'E'.
-      RETURN.
-    ENDIF.
-
-    DATA(lt_files) = get_server_files( lv_dir_in ).
+    DATA(lt_files) = get_server_files( gv_dir_in ).
 
     IF lt_files IS INITIAL.
       MESSAGE 'No hay ficheros para procesar en el servidor.' TYPE 'I'.
@@ -229,7 +235,7 @@ CLASS lcl_ecofi_split IMPLEMENTATION.
 
     LOOP AT lt_files INTO DATA(lv_filename).
 
-      DATA(lt_lines) = read_server_file( lv_dir_in && lv_filename ).
+      DATA(lt_lines) = read_server_file( gv_dir_in && lv_filename ).
 
       IF lt_lines IS INITIAL.
         WRITE: / 'No se ha podido leer:', lv_filename.
@@ -238,16 +244,16 @@ CLASS lcl_ecofi_split IMPLEMENTATION.
 
       split_and_write_server( it_lines = lt_lines
                                iv_name  = lv_filename
-                               iv_dir   = lv_dir_out ).
+                               iv_dir   = gv_dir_out ).
 
-      " Se mueve el original a la carpeta de procesados (ruta logica
-      " propia, distinta de entrada y salida) para no reprocesarlo en la
+      " Se mueve el original a la carpeta de procesados (ruta propia,
+      " distinta de entrada y salida) para no reprocesarlo en la
       " siguiente ejecucion
       TRY.
           zxx_cl_file_utils=>move_server_file(
             EXPORTING
-              i_sourcepath = CONV #( lv_dir_in )
-              i_targetpath = CONV #( lv_dir_proc )
+              i_sourcepath = CONV #( gv_dir_in )
+              i_targetpath = CONV #( gv_dir_proc )
               i_filename   = CONV #( lv_filename ) ).
         CATCH zfi_cl_cx_file.
           WRITE: / 'No se ha podido mover a la carpeta de procesados:', lv_filename.
@@ -393,25 +399,17 @@ CLASS lcl_ecofi_split IMPLEMENTATION.
 
   ENDMETHOD.
 
-  METHOD get_server_directory.
+  METHOD normalize_dir.
 
-    " E_DIRECTORY exige TYPE RSFILLST-DIRNAME (char de longitud fija), no
-    " STRING - se usa una variable intermedia y se pasa a STRING con
-    " CONCATENATE (que, a diferencia de &&, elimina los blancos finales
-    " propios de un campo de longitud fija).
-    DATA: lv_raw_dir TYPE rsfillst-dirname.
+    " CONSTANT_VALUE es ya la ruta fisica (ver comentario al principio del
+    " include) - CONCATENATE con '' recorta blancos finales por si el
+    " campo de origen fuese de longitud fija, y se asegura la barra final
+    " para poder concatenar directamente el nombre de fichero despues.
+    CONCATENATE iv_dir '' INTO rv_dir.
 
-    TRY.
-        zxx_cl_file_utils=>get_directory(
-          EXPORTING i_logical_path = iv_logical_path
-          IMPORTING e_directory    = lv_raw_dir ).
-      CATCH zfi_cl_cx_file.
-        RETURN.
-    ENDTRY.
-
-    CONCATENATE lv_raw_dir '' INTO rv_directory.
-
-    REPLACE ALL OCCURRENCES OF '*' IN rv_directory WITH ''.
+    IF rv_dir IS NOT INITIAL AND substring( val = rv_dir off = strlen( rv_dir ) - 1 ) <> '/'.
+      rv_dir = rv_dir && '/'.
+    ENDIF.
 
   ENDMETHOD.
 

@@ -45,8 +45,10 @@ modificar devoluciones").
 **Pendiente**: confirmar con el funcional el secuencial de 1 dígito para
 el nº de lote (ver más abajo), probar **"Contabilizar"** sobre un lote
 cerrado (siguiente paso de RU_03), y
-probar el modo **Server** (bloqueado hasta que exista una ruta lógica de
-fichero real — ver `RUTA_LOGICA` en `ZFI_T_CONSTANTS` más abajo).
+probar el modo **Server** (bloqueado hasta que `RUTA_LOGICA` en
+`ZFI_T_CONSTANTS` tenga una carpeta física real del servidor — ver
+"Configuración" más abajo; ya no depende de dar de alta nada en
+transacción `FILE`).
 
 ## Nomenclatura del lote
 
@@ -144,9 +146,9 @@ docs/
    pantalla el nº de lote creado (`AAMMDDCDI11x`, ver "Nomenclatura del
    lote" más abajo) y el nº de posiciones, o el error, si lo hay.
 6. Solo cuando el paso 5 confirme que funciona bien end-to-end, probar el
-   modo **Server** (escanea la carpeta de `ZFICA_COBROS_ECOFI` — ver
-   "Pendiente" en `docs/DF_resumen.md`, esa ruta lógica todavía no existe
-   en ningún sistema).
+   modo **Server** (escanea la carpeta física indicada en `RUTA_LOGICA` —
+   ver "Pendiente" en `docs/DF_resumen.md`, la ruta física definitiva de
+   producción todavía no está decidida/creada).
 
 ## Configuración (`ZFI_T_CONSTANTS`)
 
@@ -169,16 +171,16 @@ distintos, p.ej. la cta. de compensación — ver `docs/DF_resumen.md`):
 | `SOCIEDAD` | Sociedad (`DFKKRK-BUKRS`) | `1239` |
 | `MOTIVO` | Motivo de devolución (`DFKKRK-RLGRD`) | `Z01` |
 | `CTA_COMPENSACION` | Cta. compensación devoluciones (`DFKKRK-RLSKO`) | `4305500150` (DF) — no configurada en DES, ahí usar `4305500250` (ver `docs/DF_resumen.md`) |
-| `RUTA_LOGICA` | Ruta lógica de fichero (modo Server) donde se buscan los `_DEV` | `ZFICA_COBROS_ECOFI` — **no existe en ningún sistema todavía**; para probar, poner aquí otra ruta lógica que sí exista en el sistema de prueba |
+| `RUTA_LOGICA` | Ruta **física** del servidor (modo Server) donde se buscan los `_DEV` — a pesar del nombre (histórico), NO es una ruta lógica de transacción `FILE`: es la ruta física tal cual, p.ej. `/interfaces/cobros/transf_N43/in/` | Ruta física real de producción — **aún no decidida/creada**; para probar, poner aquí cualquier carpeta física que ya exista en el sistema de prueba |
 | `MONEDA` | Moneda (`DFKKRK-WAERS`) y tag de moneda que identifica el importe dentro de la línea del `_DEV` | `EUR` |
 
 Si falta cualquiera de las 5 filas (o `ACTIVE` no es `X`), el programa
 aborta sin crear ningún lote.
 
 `RUTA_LOGICA` y `MONEDA` son, además de datos de sistema, la vía para
-**probar sin depender de que `ZFICA_COBROS_ECOFI` exista o de que el
-fichero de prueba esté en euros**: basta con cambiar el valor de esa fila
-en `ZFI_T_CONSTANTS`, sin tocar ni reactivar código.
+**probar sin depender de que la carpeta física definitiva de producción
+exista o de que el fichero de prueba esté en euros**: basta con cambiar
+el valor de esa fila en `ZFI_T_CONSTANTS`, sin tocar ni reactivar código.
 
 ## Pendiente
 
@@ -188,6 +190,6 @@ Ver `docs/DF_resumen.md` para el detalle completo. Resumen:
   (límite técnico de `KEYR1`, ver más arriba).
 - Dar de alta las filas de `ZFI_T_CONSTANTS` en Integración (en DES ya
   están, probadas con éxito).
-- La ruta lógica `ZFICA_COBROS_ECOFI` no existe en ningún sistema todavía
-  (necesaria solo para el modo Server).
+- La ruta física definitiva de producción para `RUTA_LOGICA` (modo Server)
+  todavía no está decidida/creada.
 - Alta del objeto en el sistema de transporte correspondiente al proyecto.

@@ -539,7 +539,7 @@ ver más abajo):
 | `SOCIEDAD` | `1239` | `1239` |
 | `MOTIVO` | `Z01` (confirmado válido, prueba real end-to-end en DES) | `Z01` |
 | `CTA_COMPENSACION` | `4305500250` (la que deriva banco/cuenta en DES; `4305500150` del DF no está configurada) | `4305500150` (probado con éxito, ver tabla de test más abajo) |
-| `RUTA_LOGICA` | `ZFICA_COBROS_ECOFI` (no existe todavía) o cualquier otra ruta lógica ya existente en DES, para poder probar el modo Server sin esperar a que se cree | igual |
+| `RUTA_LOGICA` | Ruta **física** real (no lógica de `FILE`, ver más abajo) — la definitiva de producción aún no está decidida/creada; para probar, cualquier carpeta física ya existente en DES | igual |
 | `MONEDA` | `EUR` | `EUR` |
 
 Además, `APPLICATION_ID`/`PROCESS_ID` no son texto libre: `PROCESS_ID`
@@ -554,12 +554,27 @@ anteriores: eran `CONSTANTS` hardcodeadas en la clase
 (`co_logical_path`/`co_eur_tag`) y, a diferencia de `co_processed_dir`/
 `co_error_dir` (que son solo nombres de subcarpeta internos, no datos de
 configuración), sí son valores que conviene poder cambiar sin tocar
-código — en concreto para poder probar el modo Server apuntando a una
-ruta lógica que ya exista (mientras `ZFICA_COBROS_ECOFI` no se cree en
-ningún sistema), o repetir la prueba con un fichero en otra moneda sin
-reactivar la clase. `MONEDA` se usa tanto para `DFKKRK-WAERS` (moneda del
-lote) como para localizar el importe dentro de la línea del `_DEV`
-(`parse_dev_lines` busca ese mismo tag en el texto).
+código — en concreto para poder probar el modo Server apuntando a
+cualquier carpeta física que ya exista (mientras la definitiva de
+producción no esté decidida/creada), o repetir la prueba con un fichero
+en otra moneda sin reactivar la clase. `MONEDA` se usa tanto para
+`DFKKRK-WAERS` (moneda del lote) como para localizar el importe dentro de
+la línea del `_DEV` (`parse_dev_lines` busca ese mismo tag en el texto).
+
+**`RUTA_LOGICA` es una ruta física directa, no una ruta lógica de
+transacción `FILE`** (a pesar del nombre, que es histórico de un primer
+diseño): `CONSTANT_VALUE` contiene la ruta del servidor tal cual, p.ej.
+`/interfaces/cobros/transf_N43/in/`, y `get_directories` la usa
+directamente (solo normaliza la barra final) en vez de resolverla con
+`ZXX_CL_FILE_UTILS=>GET_DIRECTORY`. Decisión: el sistema de ficheros
+(las carpetas físicas) ya existe antes que el programa — si algo hay
+que adaptar para que encajen es el programa, no forzar de alta rutas
+lógicas nuevas en `FILE` solo para una indirección que `ZFI_T_CONSTANTS`
+ya da (el valor cambia por sistema igualmente, fila a fila, sin tocar
+código). Esta misma fila la lee también `ZFI_R_ECOFI_SPLIT` para saber
+dónde dejar `_TRF`/`_DEV` — ver `../zfi_r_ecofi_split/README.md`. No se
+ha renombrado la clave (`RUTA_LOGICA`) para no romper filas ya dadas de
+alta.
 
 ## Enfoque descartado: `RFKKKA00`/multicash (no usar, referencia solamente)
 

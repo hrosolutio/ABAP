@@ -86,28 +86,39 @@ Analizados `YFRECAU_1239_260402.140017.txt` (378 líneas) y
   carpeta de **salida** distinta, y mueve cada original a una carpeta de
   **procesados** — también distinta — tras dividirlo (`ZXX_CL_FILE_UTILS=>
   MOVE_SERVER_FILE`, la misma utilidad que ya usa `ZFI_R_DEVOLUCIONES`), para
-  no reprocesarlo. Las 3 rutas se leen de `ZFI_T_CONSTANTS`, todo variable
-  (ya no hay ninguna ruta lógica hardcodeada en el código — la constante
-  `co_logical_path` con `ZFICA_COBROS_ECOFI` inventada sin existir en ningún
-  sistema, primer intento de este punto, fue corregida). Decisión: las 3
-  filas viven bajo el **mismo `PROCESS_ID='DEVOL_CREA'`** que ya usa
+  no reprocesarlo. Las 3 rutas se leen de `ZFI_T_CONSTANTS` como **ruta
+  física directa** (todo variable — ya no hay ninguna ruta hardcodeada en
+  el código: la constante `co_logical_path` con `ZFICA_COBROS_ECOFI`
+  inventada sin existir en ningún sistema, primer intento de este punto,
+  fue corregida). Decisión adicional: en vez de dar de alta rutas lógicas
+  en transacción `FILE` y resolverlas con
+  `ZXX_CL_FILE_UTILS=>GET_DIRECTORY` (como hacía la primera versión, igual
+  que `ZFI_R_DEVOLUCIONES`), `CONSTANT_VALUE` contiene ya la ruta física
+  del servidor tal cual (p.ej. `/interfaces/cobros/transf_N43/in/`) — el
+  sistema de ficheros ya existe antes que el programa, así que se adapta
+  el programa en vez de forzar de alta rutas lógicas nuevas solo para una
+  indirección que `ZFI_T_CONSTANTS` ya da (el valor cambia por sistema
+  igualmente, fila a fila, sin tocar código). Además, las 3 filas viven
+  bajo el **mismo `PROCESS_ID='DEVOL_CREA'`** que ya usa
   `ZFI_R_DEVOLUCIONES_CREA` — deliberadamente no se da de alta un
   `PROCESS_ID` propio (`ECOFI_SPLIT`) en `ZFI_T_PROCESS`, tratando los dos
   programas como el mismo eslabón lógico del proceso. Se distinguen solo
   por `CONSTANT_ID`: entrada tiene fila nueva (`CONSTANT_ID='RUTA_LOG_ECOFI'`)
   y procesados también (`CONSTANT_ID='RUTA_LOG_PROC'`); la de salida **no
   tiene fila propia**, se lee directamente de la fila que ya usa
-  `ZFI_R_DEVOLUCIONES_CREA` (`CONSTANT_ID='RUTA_LOGICA'`, mismo
-  `PROCESS_ID='DEVOL_CREA'`), que es quien escanea esa misma carpeta
-  buscando los `_DEV` — una única fuente de verdad para la carpeta
-  compartida, ver `README.md`. **Sin probar aún dentro de SAP** y sin
-  disparo automático: hoy hay que ejecutarlo a mano en SE38. Falta:
-  - Crear las rutas lógicas de entrada y de procesados (transacción `FILE`)
-    apuntando a sus rutas físicas reales (la de entrada, ¿la misma AL11
-    `/interfaces/cobros/transf_N43/in` que menciona el comentario de EVA, o
-    una carpeta de staging distinta?; la de procesados, cualquier otra
-    carpeta — ya no tiene que ser subcarpeta de la de entrada) y dar de alta
-    sus filas en `ZFI_T_CONSTANTS`.
+  `ZFI_R_DEVOLUCIONES_CREA` (`CONSTANT_ID='RUTA_LOGICA'` — nombre
+  histórico del diseño con ruta lógica de `FILE`, hoy contiene una ruta
+  física igual que las otras dos, sin renombrar para no romper filas ya
+  dadas de alta —, mismo `PROCESS_ID='DEVOL_CREA'`), que es quien escanea
+  esa misma carpeta buscando los `_DEV` — una única fuente de verdad para
+  la carpeta compartida, ver `README.md`. **Sin probar aún dentro de SAP**
+  y sin disparo automático: hoy hay que ejecutarlo a mano en SE38. Falta:
+  - Dar de alta en `ZFI_T_CONSTANTS` las filas de entrada y de procesados
+    con la ruta física real como `CONSTANT_VALUE` (la de entrada, ¿la
+    misma AL11 `/interfaces/cobros/transf_N43/in/` que menciona el
+    comentario de EVA, o una carpeta de staging distinta?; la de
+    procesados, cualquier otra carpeta física existente — ya no tiene que
+    ser subcarpeta de la de entrada, ni pasar por transacción `FILE`).
   - Decidir cómo se dispara en producción: job propio programado, o
     integrado en el job que hoy crea el lote de transferencias.
 - Si la moneda puede ser distinta de `EUR` en algún caso (el programa localiza

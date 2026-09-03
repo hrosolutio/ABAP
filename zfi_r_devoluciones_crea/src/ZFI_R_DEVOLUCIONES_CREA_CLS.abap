@@ -36,6 +36,18 @@
 * antes de grabar - si se queda a 0 (aunque DFKKRP tenga posiciones de
 * verdad), el cierre del lote en RU_03 (ZFI_R_DEVOLUCIONES2) falla con el
 * error real >2549 ("No existen entradas para la remesa").
+*
+* RUTA_LOGICA (modo Server): a pesar del nombre (historico, de un primer
+* diseño con ruta logica de transaccion FILE resuelta via
+* ZXX_CL_FILE_UTILS=>GET_DIRECTORY), CONSTANT_VALUE contiene hoy la RUTA
+* FISICA DIRECTA del servidor (p.ej. '/interfaces/cobros/transf_N43/in/'),
+* sin pasar por FILE en absoluto - decision compartida con
+* ZFI_R_ECOFI_SPLIT (que tambien lee esta misma fila para saber donde
+* dejar _TRF/_DEV, ver su include): el sistema de ficheros ya existe
+* antes que el programa, mejor adaptar el programa que forzar de alta
+* rutas logicas nuevas solo para una indireccion que ZFI_T_CONSTANTS ya
+* da (el valor cambia por sistema, fila a fila, sin tocar codigo). No se
+* ha renombrado la clave para no romper filas ya dadas de alta.
 CLASS lcl_devoluciones_crea DEFINITION.
   PUBLIC SECTION.
 
@@ -49,13 +61,12 @@ CLASS lcl_devoluciones_crea DEFINITION.
       co_dev           TYPE string     VALUE 'EXT',
 
       " --- Claves en ZFI_T_CONSTANTS de los valores fijos del DF (RU_02):
-      " sociedad, motivo de devolucion, cta. de compensacion, ruta logica
-      " de fichero y moneda. Se leen en GET_CONSTANTS al principio de la
-      " ejecucion (no son valores fijos en el codigo, cambian por sistema
-      " o por prueba sin tocar ni reactivar ABAP - p.ej. la cta. de
-      " compensacion es distinta en DES que en Integracion, y la ruta
-      " logica puede apuntar a otra ya existente mientras ZFICA_COBROS_
-      " ECOFI no se cree en ningun sistema, ver docs/DF_resumen.md).
+      " sociedad, motivo de devolucion, cta. de compensacion, ruta fisica
+      " del servidor (ver comentario al principio del include) y moneda.
+      " Se leen en GET_CONSTANTS al principio de la ejecucion (no son
+      " valores fijos en el codigo, cambian por sistema o por prueba sin
+      " tocar ni reactivar ABAP - p.ej. la cta. de compensacion es distinta
+      " en DES que en Integracion, ver docs/DF_resumen.md).
       co_application_id  TYPE zfi_de_application_id VALUE 'FICA',
       co_process_id      TYPE zfi_de_process_id     VALUE 'DEVOL_CREA',
       co_sub_process_id  TYPE zfi_de_sub_process_id VALUE space,
@@ -93,7 +104,9 @@ CLASS lcl_devoluciones_crea DEFINITION.
       gv_sociedad     TYPE dfkkrk-bukrs,
       gv_motivo       TYPE dfkkrk-rlgrd,
       gv_cta_comp     TYPE dfkkrk-rlsko,
-      gv_logical_path TYPE pathintern,
+      " Ruta fisica directa (no ruta logica de FILE) - ver comentario al
+      " principio del include.
+      gv_ruta_dev     TYPE string,
       " STRING (no dfkkrk-waers) para que la busqueda del tag de moneda en
       " el fichero (FIND FIRST OCCURRENCE) no arrastre blancos de relleno
       " de un tipo de longitud fija - ver CLAUDE.md.
@@ -184,14 +197,14 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
         WHEN co_const_cta_comp.
           gv_cta_comp = ls_constant-constant_value.
         WHEN co_const_ruta_log.
-          gv_logical_path = ls_constant-constant_value.
+          CONCATENATE ls_constant-constant_value '' INTO gv_ruta_dev.
         WHEN co_const_moneda.
           gv_moneda = ls_constant-constant_value.
       ENDCASE.
     ENDLOOP.
 
     IF gv_sociedad IS INITIAL OR gv_motivo IS INITIAL OR gv_cta_comp IS INITIAL
-       OR gv_logical_path IS INITIAL OR gv_moneda IS INITIAL.
+       OR gv_ruta_dev IS INITIAL OR gv_moneda IS INITIAL.
       WRITE: / 'Faltan constantes en ZFI_T_CONSTANTS para', co_application_id, co_process_id.
       RETURN.
     ENDIF.
@@ -326,18 +339,14 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
 
   METHOD get_directories.
 
-    DATA: lv_raw_dir TYPE rsfillst-dirname.
+    " GV_RUTA_DEV es ya la ruta fisica (ver comentario al principio del
+    " include) - solo hace falta asegurar la barra final para poder
+    " concatenar directamente los nombres de fichero/subcarpeta despues.
+    gv_root_path = gv_ruta_dev.
 
-    TRY.
-        zxx_cl_file_utils=>get_directory(
-          EXPORTING i_logical_path = gv_logical_path
-          IMPORTING e_directory    = lv_raw_dir ).
-      CATCH zfi_cl_cx_file.
-        RETURN.
-    ENDTRY.
-
-    CONCATENATE lv_raw_dir '' INTO gv_root_path.
-    REPLACE ALL OCCURRENCES OF '*' IN gv_root_path WITH ''.
+    IF gv_root_path IS NOT INITIAL AND substring( val = gv_root_path off = strlen( gv_root_path ) - 1 ) <> '/'.
+      gv_root_path = gv_root_path && '/'.
+    ENDIF.
 
     CONCATENATE gv_root_path co_processed_dir INTO gv_backup_path.
     CONCATENATE gv_root_path co_error_dir     INTO gv_error_path.
