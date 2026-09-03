@@ -203,11 +203,11 @@ CLASS lcl_ecofi_split IMPLEMENTATION.
     LOOP AT lt_constants INTO DATA(ls_constant).
       CASE ls_constant-constant_id.
         WHEN co_const_ruta_ecofi.
-          gv_dir_in = normalize_dir( ls_constant-constant_value ).
+          gv_dir_in = normalize_dir( CONV string( ls_constant-constant_value ) ).
         WHEN co_const_ruta_log.
-          gv_dir_out = normalize_dir( ls_constant-constant_value ).
+          gv_dir_out = normalize_dir( CONV string( ls_constant-constant_value ) ).
         WHEN co_const_ruta_proc.
-          gv_dir_proc = normalize_dir( ls_constant-constant_value ).
+          gv_dir_proc = normalize_dir( CONV string( ls_constant-constant_value ) ).
       ENDCASE.
     ENDLOOP.
 
