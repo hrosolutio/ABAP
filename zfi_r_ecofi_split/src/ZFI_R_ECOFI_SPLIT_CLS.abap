@@ -415,11 +415,15 @@ CLASS lcl_ecofi_split IMPLEMENTATION.
 
   METHOD get_server_files.
 
-    DATA: lt_dir_list TYPE TABLE OF epsfili.
+    " Interfaz real de EPS2_GET_DIRECTORY_LISTING en este sistema
+    " (confirmado en SE37 - difiere del ejemplo "de libro" con
+    " DIR_NAME/EPSFILI): el parametro de entrada es IV_DIR_NAME, y la
+    " tabla de salida es de tipo EPS2FILI, no EPSFILI.
+    DATA: lt_dir_list TYPE TABLE OF eps2fili.
 
     CALL FUNCTION 'EPS2_GET_DIRECTORY_LISTING'
       EXPORTING
-        dir_name               = iv_directory
+        iv_dir_name            = iv_directory
       TABLES
         dir_list                = lt_dir_list
       EXCEPTIONS
