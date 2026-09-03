@@ -127,6 +127,22 @@ antigua (pre-Diccionario ABAP unificado) y está desaconsejada en código
 nuevo. Esto no aplica al operador SQL `LIKE` (`WHERE campo LIKE
 lv_pattern.`), que es una cosa totalmente distinta y no hay que tocarlo.
 
+## `CALL FUNCTION` a un parámetro tipado estricto: pasar `string` directo revienta en tiempo de ejecución, no al activar
+
+Si el parámetro `EXPORTING` de un módulo de función (no una clase) está
+declarado con un tipo DDIC concreto (p.ej. `EPS2_GET_DIRECTORY_LISTING`
+con `IV_DIR_NAME TYPE EPS2FILNAM`, no genérico), pasarle directamente una
+variable `TYPE string` **activa sin error** pero **revienta en tiempo de
+ejecución** con un dump `CX_SY_DYN_CALL_ILLEGAL_TYPE` ("the function
+module interface was defined in such a way that only fields of a
+particular type can be specified...") — a diferencia de una llamada a
+método, aquí el compilador no lo detecta en el chequeo de sintaxis.
+**Regla:** igual que con las clases Z reutilizadas (ver más arriba),
+envolver el actual con `CONV <tipo>( ... )` indicando el tipo DDIC exacto
+del parámetro formal (consultar el interfaz real en `SE37`, que puede no
+coincidir con ejemplos "de libro" — mismo módulo puede tener
+parámetros/tipos distintos según el sistema/kernel).
+
 ## Si GitHub falla
 
 Si la web de GitHub da error (incidencia de su lado, no del repo — se
