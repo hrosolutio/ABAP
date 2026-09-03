@@ -363,7 +363,7 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
 
     CALL FUNCTION 'EPS2_GET_DIRECTORY_LISTING'
       EXPORTING
-        iv_dir_name            = gv_root_path
+        iv_dir_name            = CONV eps2filnam( gv_root_path )
       TABLES
         dir_list                = lt_dir_list
       EXCEPTIONS

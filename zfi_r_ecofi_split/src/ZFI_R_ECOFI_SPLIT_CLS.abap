@@ -423,7 +423,7 @@ CLASS lcl_ecofi_split IMPLEMENTATION.
 
     CALL FUNCTION 'EPS2_GET_DIRECTORY_LISTING'
       EXPORTING
-        iv_dir_name            = iv_directory
+        iv_dir_name            = CONV eps2filnam( iv_directory )
       TABLES
         dir_list                = lt_dir_list
       EXCEPTIONS
