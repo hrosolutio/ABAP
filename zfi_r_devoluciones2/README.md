@@ -14,6 +14,11 @@ Es uno de los 3 desarrollos del proyecto CDI_11:
 2. **Creación del lote de devoluciones** → [`zfi_r_devoluciones_crea/`](../zfi_r_devoluciones_crea/README.md), ya reescrito y probado con éxito.
 3. **Cierre y contabilización del lote** → este programa (`ZFI_R_DEVOLUCIONES2`).
 
+**Además**, este mismo RU_03 está expuesto también como servicio RFC →
+[`zfi_fm_devoluciones2/`](../zfi_fm_devoluciones2/README.md) (ejecuta
+este report con `SUBMIT`, sin duplicar su lógica — ver ese README para
+el porqué de mantener las dos formas).
+
 ## Cómo funciona
 
 El DF no define ningún mecanismo automático para que este programa se
