@@ -33,22 +33,38 @@ compartida) para no tocar código ya probado en DES: el report se queda
 exactamente igual, y este RFC es una capa fina por encima.
 
 **No se captura el listado de mensajes** (`ZXX_CL_MSG_LOGS`) que ve quien
-ejecuta el report a mano — lo que le interesa a un consumidor externo es
-el estado final de cada lote (`ET_RESULTADO-STARS`), no el texto de los
-mensajes intermedios. Si en el futuro hiciera falta también ese detalle,
+ejecuta el report a mano — el detalle de qué ha pasado en cada lote se
+construye a partir de `DFKKRK-STARS`, no parseando el texto de esos
+mensajes. Si en el futuro hiciera falta también ese texto tal cual,
 habría que capturar el listado con `SUBMIT ... EXPORTING LIST TO MEMORY`
 + `LIST_FROM_MEMORY`.
 
 ## Interfaz del servicio
 
+`E_RESULT`/`ES_ERROR` siguen el mismo patrón que
+[`ZFI_FM_PAYLOT_REVERSE`](../zfi_fm_paylot_reverse/README.md) y
+[`ZFI_FM_PAYMENT_LOT_CLARIFY2`](../zfi_fm_payment_lot_clarify2/README.md)
+(`CHAR3` `OK`/`NOK` + estructura `ZFI_DE_XX_WS_ERROR` con `CODE`/
+`DESCRIPTION`). A diferencia de esos dos RFCs (que procesan un único
+elemento por llamada), `IT_KEYR1` admite varios lotes a la vez — por eso
+`E_RESULT` es el resultado **global** de la llamada, y `ET_RESULTADO` se
+mantiene además para poder ver lote a lote qué ha pasado.
+
 | Parámetro | Dirección | Tipo | Obligatorio | Descripción |
 |---|---|---|---|---|
 | `IV_SIMU` | Import | `ABAP_BOOL` | No (`DEFAULT ABAP_FALSE`) | Igual que `P_SIMU` del report: si es `X`, no cierra ni contabiliza nada, solo permite ver el `STARS` actual |
 | `IT_KEYR1` | Import | `ZFI_T_KEYR1` (tipo de tabla DDIC, ver instalación) | Sí | Lote(s) a cerrar/contabilizar |
+| `E_RESULT` | Export | `CHAR3` | — | `OK` solo si **todos** los lotes de `IT_KEYR1` terminaron en el estado esperado; `NOK` si al menos uno no |
+| `ES_ERROR` | Export | `ZFI_DE_XX_WS_ERROR` (`CODE`, `DESCRIPTION`) | — | Si `E_RESULT = NOK`: `CODE = 'PARAM_MISSING'` (`IT_KEYR1` vacío) o `CODE = 'LOTES_INCOMPLETOS'` (`DESCRIPTION` lista los lotes que no llegaron al estado esperado y por qué) |
 | `ET_RESULTADO` | Export | `ZFI_T_KEYR1_RESULT` (tipo de tabla DDIC, ver instalación) | — | Un registro por cada `KEYR1` de `IT_KEYR1`, con el `DFKKRK-STARS` tras la llamada (`5` = contabilizado; ver tabla de valores en el README del report) |
 
-Si `IT_KEYR1` viene vacío, el módulo no hace nada y `ET_RESULTADO` sale
-vacío (no es un error, simplemente no hay nada que procesar).
+**"Estado esperado" depende de `IV_SIMU`**: en modo real, que el lote
+quede contabilizado (`STARS = '5'`); en modo simulación (no se toca
+nada), que el lote exista en `DFKKRK` — no tiene sentido exigir
+`STARS='5'` en una llamada que por diseño no contabiliza nada.
+
+Si `IT_KEYR1` viene vacío, `E_RESULT = 'NOK'` con
+`ES_ERROR-CODE = 'PARAM_MISSING'` (no se hace ningún `SUBMIT`).
 
 ## Contenido del repositorio
 
@@ -84,7 +100,8 @@ docs/
    - Pestaña *Import*: `IV_SIMU` (tipo `ABAP_BOOL`, `DEFAULT ABAP_FALSE`,
      opcional), `IT_KEYR1` (obligatorio, tipo de referencia
      `ZFI_T_KEYR1`).
-   - Pestaña *Export*: `ET_RESULTADO` (tipo de referencia
+   - Pestaña *Export*: `E_RESULT` (tipo `CHAR3`), `ES_ERROR` (tipo DDIC
+     `ZFI_DE_XX_WS_ERROR`), `ET_RESULTADO` (tipo de referencia
      `ZFI_T_KEYR1_RESULT`).
    - Pestaña *Código fuente*: pegar `src/ZFI_FM_DEVOLUCIONES2.abap`.
 5. Activar y probar en SE37 contra uno o varios lotes reales ya creados

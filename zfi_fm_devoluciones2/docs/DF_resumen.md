@@ -58,6 +58,37 @@ parsear ese texto (frágil: depende del wording exacto de los mensajes
 `ZFI_R_DEVOLUCIONES2_CLS`), así que es una fuente de verdad ya validada,
 no una interpretación nueva.
 
+### `E_RESULT`/`ES_ERROR`: mismo patrón que los otros RFCs, adaptado a varios lotes
+
+Se pidió que este RFC devolviera `E_RESULT` (`CHAR3`, `OK`/`NOK`) y
+`ES_ERROR` (`ZFI_DE_XX_WS_ERROR`, `CODE`/`DESCRIPTION`), igual que
+`ZFI_FM_PAYLOT_REVERSE`/`ZFI_FM_PAYMENT_LOT_CLARIFY2`. Diferencia
+importante: esos dos RFCs procesan un único elemento por llamada
+(`I_DOCUMENTID`, o `I_KEYZ1`+`I_POSZA`), así que su `E_RESULT` es
+directamente el resultado de ese único elemento. Este RFC acepta
+`IT_KEYR1` con **varios** lotes a la vez (pedido explícitamente, ver
+más abajo) — un único `E_RESULT`/`ES_ERROR` no puede decir "cuál" de
+varios lotes falló, así que:
+
+- `E_RESULT` pasa a ser el resultado **global** de la llamada: `OK`
+  solo si todos los lotes de `IT_KEYR1` terminaron en el estado
+  esperado; `NOK` si al menos uno no.
+- `ES_ERROR-DESCRIPTION`, cuando `E_RESULT = NOK` por lotes
+  incompletos (`CODE = 'LOTES_INCOMPLETOS'`), concatena una línea por
+  cada lote que falló (con su `KEYR1` y el motivo: `STARS` actual, o
+  que no existe en `DFKKRK`) — no es un texto fijo como en los otros
+  RFCs, porque aquí puede haber más de un fallo por llamada.
+- `ET_RESULTADO` (ya existía, ver más abajo) se mantiene además de
+  `E_RESULT`/`ES_ERROR`, precisamente para que el consumidor pueda ver
+  el detalle lote a lote sin tener que parsear `ES_ERROR-DESCRIPTION`.
+
+"Estado esperado" depende de `IV_SIMU`: en modo real, `STARS = '5'`
+(contabilizado); en modo simulación, que el `KEYR1` exista en
+`DFKKRK` (la simulación por diseño no contabiliza nada, así que exigir
+`STARS='5'` marcaría como `NOK` cualquier llamada de simulación sobre
+un lote todavía no contabilizado, que es precisamente el caso de uso
+normal de la simulación).
+
 **Explícitamente fuera de esta versión**: el texto de los mensajes
 (`ZXX_CL_MSG_LOGS`) que ve quien ejecuta el report a mano. Si un
 consumidor del servicio necesitara ese detalle (p.ej. el motivo exacto
@@ -80,6 +111,9 @@ triviales (sin lógica de negocio propia):
 | `ZFI_T_KEYR1` | Tabla estándar | Línea `ZFI_S_KEYR1` |
 | `ZFI_S_KEYR1_RESULT` | Estructura | `KEYR1` (`DFKKRK-KEYR1`), `STARS` (`DFKKRK-STARS`) |
 | `ZFI_T_KEYR1_RESULT` | Tabla estándar | Línea `ZFI_S_KEYR1_RESULT` |
+
+`ZFI_DE_XX_WS_ERROR` (`ES_ERROR`) **no es nuevo** — ya existe, reutilizado
+de `ZFI_FM_PAYLOT_REVERSE`/`ZFI_FM_PAYMENT_LOT_CLARIFY2`.
 
 ## Pendiente / a definir con el cliente
 

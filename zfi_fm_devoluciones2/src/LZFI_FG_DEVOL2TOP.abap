@@ -14,3 +14,7 @@ FUNCTION-POOL zfi_fg_devol2.
 *   ZFI_T_KEYR1        (tabla estándar, línea ZFI_S_KEYR1)
 *   ZFI_S_KEYR1_RESULT (estructura: KEYR1, STARS)
 *   ZFI_T_KEYR1_RESULT (tabla estándar, línea ZFI_S_KEYR1_RESULT)
+
+* Mismo valor que CO_STARS_POSTED en ZFI_R_DEVOLUCIONES2_CLS (DFKKRK-
+* STARS = '5', lote contabilizado) - usado aquí para decidir E_RESULT.
+CONSTANTS co_stars_posted TYPE dfkkrk-stars VALUE '5'.
