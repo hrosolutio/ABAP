@@ -2,12 +2,10 @@ FUNCTION zfi_fm_devoluciones2.
 *"----------------------------------------------------------------------
 *"*"Interfaz local:
 *"  IMPORTING
-*"     VALUE(IV_SIMU) TYPE  ABAP_BOOL DEFAULT ABAP_FALSE
 *"     VALUE(IT_KEYR1) TYPE  ZFI_T_KEYR1
 *"  EXPORTING
 *"     VALUE(E_RESULT) TYPE  CHAR3
 *"     VALUE(ES_ERROR) TYPE  ZFI_DE_XX_WS_ERROR
-*"     VALUE(ET_RESULTADO) TYPE  ZFI_T_KEYR1_RESULT
 *"----------------------------------------------------------------------
 * RU_03 (CDI_11) como servicio RFC. El DF pedía originalmente un
 * "servicio" para el cierre/contabilización del lote de devoluciones;
@@ -18,25 +16,29 @@ FUNCTION zfi_fm_devoluciones2.
 *
 * En vez de duplicar la lógica ya probada de LCL_DEVOLUCIONES2, este
 * módulo literalmente llama al propio ZFI_R_DEVOLUCIONES2 (SUBMIT ...
-* WITH SELECTION-TABLE, construyendo S_KEYR1/P_SIMU a partir de
-* IT_KEYR1/IV_SIMU) y después relee DFKKRK-STARS para decidir el
-* resultado - la misma fuente de verdad que usa el propio report para
-* decidir qué hacer con cada lote (ver ZFI_R_DEVOLUCIONES2_CLS,
-* CO_STARS_CLOSED/CO_STARS_POSTED).
+* WITH SELECTION-TABLE, construyendo S_KEYR1 a partir de IT_KEYR1) y
+* después relee DFKKRK-STARS para decidir el resultado - la misma
+* fuente de verdad que usa el propio report para decidir qué hacer con
+* cada lote (ver ZFI_R_DEVOLUCIONES2_CLS, CO_STARS_POSTED).
+*
+* SIN parámetro de simulación: a diferencia del report (que sí tiene
+* P_SIMU, para uso manual), esta RFC SIEMPRE se ejecuta en real - no
+* se pasa ninguna fila P_SIMU en la tabla de seleccion, así que el
+* report usa su propio valor por defecto (P_SIMU DEFAULT SPACE, ver
+* ZFI_R_DEVOLUCIONES2_EVE). Decisión explícita: no viene del DF, se
+* quita para no dar pie a que un consumidor externo dispare una
+* llamada en modo simulación sin querer.
 *
 * E_RESULT/ES_ERROR siguen el mismo patrón que ZFI_FM_PAYLOT_REVERSE/
 * ZFI_FM_PAYMENT_LOT_CLARIFY2 (CHAR3 'OK'/'NOK' + ZFI_DE_XX_WS_ERROR).
 * Como IT_KEYR1 admite varios lotes a la vez (a diferencia de esos dos
 * RFCs, que procesan un único elemento), E_RESULT es un resultado
-* GLOBAL de la llamada ('OK' solo si TODOS los lotes terminaron en el
-* estado esperado) y ET_RESULTADO se mantiene además para poder ver
-* lote a lote qué ha pasado - con varios lotes, "algo ha fallado" sin
-* decir cuál no sería útil para el consumidor del servicio.
-*
-* "Estado esperado" depende de IV_SIMU: en modo real, que el lote quede
-* contabilizado (STARS = CO_STARS_POSTED); en modo simulación (no se
-* toca nada), que el lote exista en DFKKRK - no tiene sentido exigir
-* STARS=contabilizado en una llamada que por diseño no contabiliza nada.
+* GLOBAL de la llamada: 'OK' solo si TODOS los lotes de IT_KEYR1
+* terminaron contabilizados (STARS = CO_STARS_POSTED); si no, 'NOK' y
+* ES_ERROR-DESCRIPTION lista qué lote(s) no llegaron a contabilizarse
+* y por qué (no hace falta una tabla de resultado aparte: con E_RESULT
+* = 'OK' ya se sabe que todo se contabilizó, y con 'NOK' el detalle
+* está en ES_ERROR).
 *
 * No se captura el listado de mensajes del report (ZXX_CL_MSG_LOGS) -
 * el detalle textual de qué ha pasado en cada lote se construye aquí a
@@ -48,9 +50,10 @@ FUNCTION zfi_fm_devoluciones2.
   DATA: lt_rspar      TYPE STANDARD TABLE OF rsparams,
         ls_rspar      TYPE rsparams,
         lv_fail_count TYPE i,
-        lv_fail_desc  TYPE string.
+        lv_fail_desc  TYPE string,
+        lv_stars      TYPE dfkkrk-stars.
 
-  CLEAR: e_result, es_error, et_resultado.
+  CLEAR: e_result, es_error.
 
   IF it_keyr1 IS INITIAL.
     e_result             = 'NOK'.
@@ -69,32 +72,23 @@ FUNCTION zfi_fm_devoluciones2.
     APPEND ls_rspar TO lt_rspar.
   ENDLOOP.
 
-  CLEAR ls_rspar.
-  ls_rspar-selname = 'P_SIMU'.
-  ls_rspar-kind    = 'P'.
-  ls_rspar-low     = COND #( WHEN iv_simu = abap_true THEN 'X' ELSE space ).
-  APPEND ls_rspar TO lt_rspar.
-
   SUBMIT zfi_r_devoluciones2
     WITH SELECTION-TABLE lt_rspar
     AND RETURN.
 
   LOOP AT it_keyr1 INTO DATA(ls_keyr1_out).
 
-    DATA(ls_resultado) = VALUE zfi_s_keyr1_result( keyr1 = ls_keyr1_out-keyr1 ).
-
-    SELECT SINGLE stars FROM dfkkrk INTO ls_resultado-stars
+    CLEAR lv_stars.
+    SELECT SINGLE stars FROM dfkkrk INTO lv_stars
       WHERE keyr1 = ls_keyr1_out-keyr1.
 
     IF sy-subrc <> 0.
       lv_fail_count = lv_fail_count + 1.
       lv_fail_desc  = lv_fail_desc && |Lote { ls_keyr1_out-keyr1 }: no existe en DFKKRK. |.
-    ELSEIF iv_simu = abap_false AND ls_resultado-stars <> co_stars_posted.
+    ELSEIF lv_stars <> co_stars_posted.
       lv_fail_count = lv_fail_count + 1.
-      lv_fail_desc  = lv_fail_desc && |Lote { ls_keyr1_out-keyr1 }: STARS={ ls_resultado-stars } (no contabilizado). |.
+      lv_fail_desc  = lv_fail_desc && |Lote { ls_keyr1_out-keyr1 }: STARS={ lv_stars } (no contabilizado). |.
     ENDIF.
-
-    APPEND ls_resultado TO et_resultado.
 
   ENDLOOP.
 

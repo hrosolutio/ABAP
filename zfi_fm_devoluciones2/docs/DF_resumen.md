@@ -41,10 +41,18 @@ sintaxis simple (`WITH s_keyr1 = ...` solo admite un valor). Para pasar
 varios lotes (`IT_KEYR1`) a la vez, hace falta construir una tabla de
 selección estándar (`RSPARAMS`: `SELNAME`/`KIND`/`SIGN`/`OPTION`/`LOW`/
 `HIGH`) con una fila por cada `KEYR1` (`KIND = 'S'`, `SIGN = 'I'`,
-`OPTION = 'EQ'`) más una fila para `P_SIMU` (`KIND = 'P'`), y llamar con
+`OPTION = 'EQ'`), y llamar con
 `SUBMIT zfi_r_devoluciones2 WITH SELECTION-TABLE lt_rspar AND RETURN.`
 `RSPARAMS` es una estructura estándar de SAP, no hace falta crear nada
 nuevo para esto.
+
+**Sin fila `P_SIMU`, a propósito**: no se rellena ninguna fila para
+`P_SIMU` en `lt_rspar`, así que el report toma su propio valor por
+defecto (`P_SIMU DEFAULT SPACE`, real). Se decidió quitar el parámetro
+de simulación de la RFC (no viene del DF, fue una adición nuestra):
+esta RFC siempre cierra/contabiliza de verdad, para no dar pie a que un
+consumidor externo dispare sin querer una llamada que no hace nada. El
+report en sí conserva `P_SIMU` para uso manual.
 
 ### Cómo se determina el resultado
 
@@ -71,23 +79,21 @@ más abajo) — un único `E_RESULT`/`ES_ERROR` no puede decir "cuál" de
 varios lotes falló, así que:
 
 - `E_RESULT` pasa a ser el resultado **global** de la llamada: `OK`
-  solo si todos los lotes de `IT_KEYR1` terminaron en el estado
-  esperado; `NOK` si al menos uno no.
+  solo si todos los lotes de `IT_KEYR1` terminaron contabilizados
+  (`DFKKRK-STARS = '5'`, ya que esta RFC siempre se ejecuta en real —
+  ver más arriba); `NOK` si al menos uno no.
 - `ES_ERROR-DESCRIPTION`, cuando `E_RESULT = NOK` por lotes
   incompletos (`CODE = 'LOTES_INCOMPLETOS'`), concatena una línea por
   cada lote que falló (con su `KEYR1` y el motivo: `STARS` actual, o
   que no existe en `DFKKRK`) — no es un texto fijo como en los otros
   RFCs, porque aquí puede haber más de un fallo por llamada.
-- `ET_RESULTADO` (ya existía, ver más abajo) se mantiene además de
-  `E_RESULT`/`ES_ERROR`, precisamente para que el consumidor pueda ver
-  el detalle lote a lote sin tener que parsear `ES_ERROR-DESCRIPTION`.
 
-"Estado esperado" depende de `IV_SIMU`: en modo real, `STARS = '5'`
-(contabilizado); en modo simulación, que el `KEYR1` exista en
-`DFKKRK` (la simulación por diseño no contabiliza nada, así que exigir
-`STARS='5'` marcaría como `NOK` cualquier llamada de simulación sobre
-un lote todavía no contabilizado, que es precisamente el caso de uso
-normal de la simulación).
+**Se descartó una tabla de resultado aparte** (`ET_RESULTADO`, con una
+fila `KEYR1`/`STARS` por lote): con `E_RESULT`/`ES_ERROR` cubriendo el
+global y el detalle de qué falló, esa tabla no aportaba nada que no
+estuviera ya ahí — se quitó por redundante (con `'OK'` ya se sabe que
+todo se contabilizó; con `'NOK'` el detalle está en
+`ES_ERROR-DESCRIPTION`).
 
 **Explícitamente fuera de esta versión**: el texto de los mensajes
 (`ZXX_CL_MSG_LOGS`) que ve quien ejecuta el report a mano. Si un
@@ -102,25 +108,24 @@ implementado todavía porque no se ha confirmado que haga falta.
 Mismo patrón ya usado en `ZFI_FM_PAYMENT_LOT_CLARIFY2` (`ZFI_T_XBLNR`):
 el Function Builder no admite un `TYPES` de programa como tipo de
 referencia de un parámetro de import/export de un módulo de función,
-tiene que ser un objeto DDIC real. Se crean 4 objetos nuevos, todos
-triviales (sin lógica de negocio propia):
+tiene que ser un objeto DDIC real. Se crean 2 objetos nuevos, triviales
+(sin lógica de negocio propia):
 
 | Objeto | Tipo | Campos |
 |---|---|---|
 | `ZFI_S_KEYR1` | Estructura | `KEYR1` (`DFKKRK-KEYR1`) |
 | `ZFI_T_KEYR1` | Tabla estándar | Línea `ZFI_S_KEYR1` |
-| `ZFI_S_KEYR1_RESULT` | Estructura | `KEYR1` (`DFKKRK-KEYR1`), `STARS` (`DFKKRK-STARS`) |
-| `ZFI_T_KEYR1_RESULT` | Tabla estándar | Línea `ZFI_S_KEYR1_RESULT` |
 
 `ZFI_DE_XX_WS_ERROR` (`ES_ERROR`) **no es nuevo** — ya existe, reutilizado
 de `ZFI_FM_PAYLOT_REVERSE`/`ZFI_FM_PAYMENT_LOT_CLARIFY2`.
 
 ## Pendiente / a definir con el cliente
 
-- Probar en SE37 contra uno o varios lotes reales (aún no ejecutado).
+- Probar en SE37 contra uno o varios lotes reales (aún no ejecutado) —
+  **ojo, no hay simulación: la llamada cierra/contabiliza de verdad**.
 - Confirmar si el consumidor del servicio necesita el texto de los
-  mensajes del report además de `STARS` (ver "Cómo se determina el
-  resultado" más arriba).
+  mensajes del report además de `E_RESULT`/`ES_ERROR` (ver "Cómo se
+  determina el resultado" más arriba).
 - Autorización RFC del usuario técnico sobre `ZFI_FG_DEVOL2`.
 - Alta del objeto en el sistema de transporte correspondiente al
-  proyecto (junto con los 4 objetos DDIC nuevos).
+  proyecto (junto con los 2 objetos DDIC nuevos).
