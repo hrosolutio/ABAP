@@ -109,24 +109,36 @@ FUNCTION zfi_fm_payment_lot_clarify2.
 * encontrada en DFKKOP (ver punto 3).
 *----------------------------------------------------------------------*
 
-  DATA: ls_dfkkzp   TYPE dfkkzp,
-        ls_seltab    TYPE iseltab,
-        lt_seltab    TYPE STANDARD TABLE OF iseltab,
-        lt_fkkcl_cand TYPE STANDARD TABLE OF fkkcl,
-        lt_fkkcl     TYPE STANDARD TABLE OF fkkcl,
-        lv_found     TYPE abap_bool,
-        lv_gpart     TYPE gpart_kk,
-        lv_vkont     TYPE vkont_kk,
-        lv_multi_gpart TYPE abap_bool,
-        ls_fkkko     TYPE fkkko,
-        ls_fkkopk    TYPE fkkopk,
-        lt_fkkopk    TYPE STANDARD TABLE OF fkkopk,
-        lt_fkkop     TYPE STANDARD TABLE OF fkkop,
-        lt_fkkop_new TYPE STANDARD TABLE OF fkkop,
-        lt_fkkopk_new TYPE STANDARD TABLE OF fkkopk,
+  DATA: ls_dfkkzp       TYPE dfkkzp,
+        ls_xblnr        TYPE zfi_s_xblnr,
+        ls_seltab       TYPE iseltab,
+        lt_seltab       TYPE STANDARD TABLE OF iseltab,
+        lt_fkkcl_cand   TYPE STANDARD TABLE OF fkkcl,
+        ls_fkkcl_cand   TYPE fkkcl,
+        lt_fkkcl_all    TYPE STANDARD TABLE OF fkkcl,
+        ls_fkkcl_sum    TYPE fkkcl,
+        lv_sum_betrw    TYPE fkkcl-betrw,
+        lt_fkkcl        TYPE STANDARD TABLE OF fkkcl,
+        lv_found        TYPE abap_bool,
+        lv_gpart        TYPE gpart_kk,
+        lv_vkont        TYPE vkont_kk,
+        lv_multi_gpart  TYPE abap_bool,
+        ls_fkkko        TYPE fkkko,
+        ls_fkkopk       TYPE fkkopk,
+        lt_fkkopk       TYPE STANDARD TABLE OF fkkopk,
+        lt_fkkopk_save  TYPE STANDARD TABLE OF fkkopk,
+        lt_fkkop        TYPE STANDARD TABLE OF fkkop,
+        lt_fkkop_new    TYPE STANDARD TABLE OF fkkop,
+        lt_fkkopk_new   TYPE STANDARD TABLE OF fkkopk,
         lt_fkkop_dp_new TYPE STANDARD TABLE OF dfkkop_dp,
-        lv_klaeh     TYPE dfkkzp-klaeh,
-        lv_diffb     TYPE rfkb4-diffb.
+        lv_klaeh        TYPE dfkkzp-klaeh,
+        lv_diffb        TYPE rfkb4-diffb,
+        lv_tolgr_clear  TYPE tolgr_clear_gen,
+        lv_comrq        TYPE flag,
+        lv_opbel_new    TYPE opbel_kk,
+        lv_budat_new    LIKE ls_dfkkzp-budat.
+
+  FIELD-SYMBOLS: <fs_fkkcl> TYPE fkkcl.
 
   CLEAR: e_result, es_error, e_opbel.
 
@@ -195,7 +207,7 @@ FUNCTION zfi_fm_payment_lot_clarify2.
 *    varias facturas.
 *
 *    Motivo del cambio (evidencia real, no supuesto): consultando
-*    DFKKOP filtrado por BLART = gc_blart_clarificacion ('2C', ver
+*    DFKKOP filtrado por BLART = gc_blart_clarificacion ('2T', ver
 *    LZFI_FG_PAY_CLARIFYTOP) y cruzando por AUGBL, se han encontrado
 *    casos reales en el sistema de integración donde un mismo
 *    documento de compensación (AUGBL) reúne partidas de varias
@@ -228,9 +240,7 @@ FUNCTION zfi_fm_payment_lot_clarify2.
 *    con I_XBLNR con más de una factura del mismo cliente antes de
 *    dar esto por cerrado.
 *----------------------------------------------------------------------*
-  DATA: lt_fkkcl_all TYPE STANDARD TABLE OF fkkcl.
-
-  LOOP AT i_xblnr INTO DATA(ls_xblnr).
+  LOOP AT i_xblnr INTO ls_xblnr.
 
     CLEAR: lt_seltab, ls_seltab, lt_fkkcl_cand.
     ls_seltab-selnr = 1.
@@ -256,7 +266,7 @@ FUNCTION zfi_fm_payment_lot_clarify2.
     CHECK sy-subrc = 0.
     CHECK lt_fkkcl_cand IS NOT INITIAL.
 
-    READ TABLE lt_fkkcl_cand INTO DATA(ls_fkkcl_cand) INDEX 1.
+    READ TABLE lt_fkkcl_cand INTO ls_fkkcl_cand INDEX 1.
 
     IF lv_found = abap_false.
       lv_gpart = ls_fkkcl_cand-gpart.
@@ -295,9 +305,9 @@ FUNCTION zfi_fm_payment_lot_clarify2.
 * sola factura con una única línea (caso ya probado end-to-end) el
 * comportamiento resultante es idéntico, ya que la suma de una única
 * línea es esa misma línea.
-  DATA(lv_sum_betrw) = REDUCE fkkcl-betrw( INIT sum TYPE fkkcl-betrw
-                                            FOR ls_fkkcl_sum IN lt_fkkcl_all
-                                            NEXT sum = sum + ls_fkkcl_sum-betrw ).
+  LOOP AT lt_fkkcl_all INTO ls_fkkcl_sum.
+    lv_sum_betrw = lv_sum_betrw + ls_fkkcl_sum-betrw.
+  ENDLOOP.
 
   IF lv_sum_betrw <> ls_dfkkzp-betrz.
     e_result             = 'NOK'.
@@ -358,12 +368,6 @@ FUNCTION zfi_fm_payment_lot_clarify2.
 *    T_FKKOPK de cambios durante esta llamada (guarda y restaura la
 *    tabla alrededor de la llamada); replicamos esa protección aquí.
 *----------------------------------------------------------------------*
-  DATA: lt_fkkopk_save TYPE STANDARD TABLE OF fkkopk,
-        lv_tolgr_clear TYPE tolgr_clear_gen,
-        lv_comrq       TYPE flag,
-        lv_opbel_new   TYPE opbel_kk,
-        lv_budat_new   LIKE ls_dfkkzp-budat.
-
   lt_fkkopk_save = lt_fkkopk.
 
   CALL FUNCTION 'ISU_CLEARING_PROPOSAL_GEN_0110'
@@ -418,7 +422,7 @@ FUNCTION zfi_fm_payment_lot_clarify2.
 *    DFKKZK-AUGRD (cabecera de lote) como reserva; aquí solo disponemos
 *    de la posición, así que se usa DFKKZP-AUGRD directamente.
 *----------------------------------------------------------------------*
-  LOOP AT lt_fkkcl ASSIGNING FIELD-SYMBOL(<fs_fkkcl>).
+  LOOP AT lt_fkkcl ASSIGNING <fs_fkkcl>.
     <fs_fkkcl>-augrd = ls_dfkkzp-augrd.
   ENDLOOP.
 
