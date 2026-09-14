@@ -7,12 +7,22 @@ Replica el comportamiento de la transacción estándar **FPCPL** para
 clarificar, desde un sistema externo (vía MuleSoft), una posición de lote
 de pago pendiente de clarificar, aplicando la(s) factura(s) recibida(s).
 
-## Estado: prueba end-to-end real superada a través del propio RFC
+## Estado: prueba end-to-end real superada a través del propio RFC, con 1 y con 2 facturas
 
 Probado en SE37 contra una posición de lote real pendiente de clarificar:
-`E_RESULT = 'OK'`, documento generado `E_OPBEL = 414500000010`. Confirma
-que la cadena completa funciona llamada directamente desde este módulo
-de función, no solo a través del flujo de pantalla de FPCPL.
+`E_RESULT = 'OK'`, documento generado `E_OPBEL = 414500000010` (caso de 1
+factura). Confirma que la cadena completa funciona llamada directamente
+desde este módulo de función, no solo a través del flujo de pantalla de
+FPCPL.
+
+Probado también con éxito el caso de **2 facturas** cuya suma coincide
+con el importe de la posición (ninguna línea individual coincidía por
+separado) — requirió la corrección de la QUINTA VERSIÓN descrita más
+abajo (validación por suma en vez de por línea suelta), pedida por la
+consultora funcional tras detectar el fallo en esa prueba real. También
+se corrigió en esa misma prueba el `BLART` del documento generado, que
+debe ser `'2T'` (no `'2C'` como se había fijado inicialmente por
+observación de depuración).
 
 El propio DF advierte que el módulo de función estándar
 `FKK_PAYMENT_BATCH_CLARIFY_ITEM` **no se puede utilizar directamente**.
@@ -115,31 +125,38 @@ docs/
    ya no se usa solo la primera factura que cuadra en importe: se
    recorren todas las facturas de `I_XBLNR`, se comprueba que todas las
    que devuelven partidas comparten cliente/cuenta contrato
-   (`GPART`/`VKONT`) y se acumulan sus partidas; sobre ese conjunto
-   combinado se exige la misma regla del DF (**al menos una línea con
-   el importe exacto** de la posición). Al contabilizar se pasan
-   **todas** las líneas encontradas de todas las facturas válidas (no
-   solo la que coincide) — probado con datos reales, para el caso de
-   una única factura, que el motor de compensación estándar aplica
+   (`GPART`/`VKONT`) y se acumulan sus partidas. Al contabilizar se
+   pasan **todas** las líneas encontradas de todas las facturas válidas
+   (no solo la que coincide) — probado con datos reales, para el caso
+   de una única factura, que el motor de compensación estándar aplica
    correctamente solo la parte que corresponde, sin que haga falta
    filtrar una única línea a mano (ver "Estado" más arriba).
 
+   **Desde la quinta versión**, sobre ese conjunto combinado se exige la
+   regla del DF ("el importe debe coincidir con el de la posición")
+   comprobada como la **suma de todas las líneas combinadas**, no como
+   la existencia de una única línea suelta con el importe exacto.
+   Corregido tras una prueba real con 2 facturas: la suma de ambas
+   coincidía con la posición, pero ninguna línea individual coincidía
+   por separado, y la versión anterior rechazaba el caso con
+   `NO_MATCHING_INVOICE`. Para una única factura con una sola línea (caso
+   ya probado end-to-end) el comportamiento es idéntico, porque la suma
+   de una única línea es esa misma línea.
+
    Motivado por evidencia real encontrada en el sistema de integración
-   (tabla `DFKKOP`, documentos `BLART = '2C'` agrupados por `AUGBL`):
+   (tabla `DFKKOP`, documentos `BLART = '2T'` agrupados por `AUGBL`):
    existen casos reales donde un mismo documento de compensación
    aplica partidas de varias facturas distintas, siempre dentro del
    mismo `GPART`/`VKONT`. Si las facturas de `I_XBLNR` resultan ser de
    clientes distintos, el servicio devuelve `ES_ERROR-CODE =
    'MULTI_CLIENT_INVOICES'` en vez de decidir cuál aplicar.
 
-   ⚠️ **Sin confirmar formalmente con negocio**: la base de este
-   comportamiento es evidencia real encontrada en datos de producción/
-   integración, no una confirmación funcional explícita (ver
-   DF_resumen.md). Tampoco se ha probado todavía end-to-end a través de
-   este RFC con un caso real de varias facturas — solo el caso de una
-   única factura tiene prueba end-to-end superada (ver más abajo).
-   Campos `GPART`/`VKONT` de la estructura `FKKCL` asumidos por
-   convención estándar de FI-CA, sin verificar en SE11.
+   ⚠️ **Sin confirmar formalmente con negocio**: la agrupación por mismo
+   cliente/cuenta contrato (`GPART`/`VKONT`) se basa en evidencia real
+   encontrada en datos de producción/integración, no en una confirmación
+   funcional explícita (ver DF_resumen.md). Campos `GPART`/`VKONT` de la
+   estructura `FKKCL` asumidos por convención estándar de FI-CA, sin
+   verificar en SE11.
 4. Construye `I_FKKKO` (cabecera) y `T_FKKOPK` (partida provisional) a
    partir de los datos de la posición del lote.
 5. Llama a `ISU_CLEARING_PROPOSAL_GEN_0110` (`I_CLARIFICATION = 'X'`)
@@ -164,11 +181,13 @@ El usuario que queda registrado en las clarificaciones es el usuario
 técnico con el que MuleSoft se conecta a SAP, en el campo `DFKKZP-AENAM`
 (actualmente `COMMUSER`).
 
-## Prueba end-to-end real: superada
+## Prueba end-to-end real: superada (1 y 2 facturas)
 
 Ejecutada en SE37 (F8) contra una posición de lote real pendiente de
 clarificar, a través de este módulo de función (no simulada dentro de
-FPCPL): `E_RESULT = 'OK'`, `E_OPBEL = 414500000010`.
+FPCPL): `E_RESULT = 'OK'`, `E_OPBEL = 414500000010` (caso de 1 factura).
+Repetida con éxito con 2 facturas cuya suma coincide con la posición,
+tras la corrección de la quinta versión.
 
 ## Instalación en SAP (SE11 / SE80 / SE37)
 
@@ -201,9 +220,6 @@ FPCPL): `E_RESULT = 'OK'`, `E_OPBEL = 414500000010`.
   `GPART`/`VKONT`, rechazar si son de clientes distintos) — hoy se basa
   en evidencia real de datos de integración, no en una confirmación
   funcional explícita (ver punto 3 de "Lógica implementada").
-- Probar end-to-end a través de este RFC un caso real con varias
-  facturas del mismo cliente en `I_XBLNR` (solo está probado
-  end-to-end el caso de una única factura).
 - Verificar en SE11 que la estructura `FKKCL` expone los campos
   `GPART`/`VKONT` con esos nombres (asumido por convención estándar de
   FI-CA, no comprobado directamente).

@@ -13,11 +13,19 @@ FUNCTION zfi_fm_payment_lot_clarify2.
 * Clarificación de transferencias pendientes de contabilizar en SAP
 * (equivalente a FPCPL)
 *
-* ESTADO: CUARTA VERSIÓN. Cadena completa localizada por depuración,
-* incluyendo el paso de contabilización real que faltaba. Pendiente de
-* probar de principio a fin activando este módulo en SE37 (las pruebas
-* hasta ahora se hicieron forzando variables por depuración dentro del
-* flujo real de FPCPL, no todavía a través de este RFC).
+* ESTADO: QUINTA VERSIÓN. Probado end-to-end con éxito a través de este
+* propio RFC, tanto con 1 factura como con 2 facturas (ver más abajo).
+*
+* QUINTA VERSIÓN (cambios pedidos por la consultora funcional tras
+* prueba real con 2 facturas):
+*   - BLART del documento generado corregido a '2T' (era '2C'), ver
+*     LZFI_FG_PAY_CLARIFYTOP.
+*   - Corregida la validación de importe del punto 3: con 2 facturas
+*     cuya SUMA coincidía con la posición pero ninguna línea individual
+*     coincidía por separado, la versión anterior rechazaba el caso
+*     (NO_MATCHING_INVOICE) por exigir una única línea suelta con el
+*     importe exacto. Ahora se compara la suma de TODAS las líneas
+*     combinadas contra el importe de la posición.
 *
 * CUARTA VERSIÓN (cambio respecto a la tercera): cuando I_XBLNR trae
 * varias facturas, ya no se usa solo la primera que cuadre en importe
@@ -28,7 +36,6 @@ FUNCTION zfi_fm_payment_lot_clarify2.
 * real encontrada en DFKKOP/AUGBL del sistema de integración (ver
 * comentario en el punto 3 de la lógica, más abajo) de que el reparto
 * entre varias facturas del mismo cliente sí ocurre en el negocio.
-* PENDIENTE DE PROBAR end-to-end con un caso real de varias facturas.
 *
 * El DF advierte que FKK_PAYMENT_BATCH_CLARIFY_ITEM "no se puede
 * utilizar directamente" (es un módulo de diálogo: abre una pantalla
@@ -90,13 +97,16 @@ FUNCTION zfi_fm_payment_lot_clarify2.
 * ACTUALIZADO EN LA CUARTA VERSIÓN (ver punto 3 más abajo): cuando
 * I_XBLNR trae varias facturas del mismo cliente/cuenta contrato, ya
 * no se descartan todas menos la primera que cuadra — se acumulan las
-* partidas de todas y se dejan al motor de compensación, manteniendo
-* la regla del DF ("el importe debe coincidir con el de la posición")
-* comprobada sobre el conjunto combinado. Si las facturas son de
-* clientes distintos, se rechaza (MULTI_CLIENT_INVOICES). Sigue sin
-* haber confirmación explícita de negocio de que este sea el
-* comportamiento esperado — la base es evidencia real encontrada en
-* DFKKOP (ver punto 3), no una confirmación funcional formal.
+* partidas de todas y se dejan al motor de compensación. Si las
+* facturas son de clientes distintos, se rechaza (MULTI_CLIENT_INVOICES).
+*
+* ACTUALIZADO EN LA QUINTA VERSIÓN (ver punto 3 más abajo): la regla del
+* DF ("el importe debe coincidir con el de la posición") se comprueba
+* sobre la SUMA del conjunto combinado, no sobre una única línea suelta
+* — confirmado con caso real de 2 facturas por la consultora funcional.
+* La agrupación por mismo cliente/cuenta contrato (GPART/VKONT) sigue
+* sin confirmación explícita de negocio más allá de la evidencia real
+* encontrada en DFKKOP (ver punto 3).
 *----------------------------------------------------------------------*
 
   DATA: ls_dfkkzp   TYPE dfkkzp,
@@ -274,20 +284,25 @@ FUNCTION zfi_fm_payment_lot_clarify2.
     RETURN.
   ENDIF.
 
-* Se mantiene la regla de negocio original del DF ("el importe de la
-* factura debe coincidir con el importe de la posición"), pero
-* comprobada ahora sobre el conjunto de TODAS las líneas encontradas
-* (lt_fkkcl_all) en vez de sobre una única factura: para el caso de
-* una sola factura en I_XBLNR el comportamiento es idéntico al ya
-* probado (el conjunto es esa única factura); para varias facturas del
-* mismo cliente, basta con que exista esa línea en algún punto del
-* conjunto combinado.
-  READ TABLE lt_fkkcl_all TRANSPORTING NO FIELDS
-    WITH KEY betrw = ls_dfkkzp-betrz.
-  IF sy-subrc <> 0.
+* QUINTA VERSIÓN (corrección pedida por la consultora tras prueba real
+* con 2 facturas, POS 7): la regla de negocio del DF ("el importe de la
+* factura debe coincidir con el importe de la posición") se comprueba
+* sobre la SUMA de TODAS las líneas combinadas (lt_fkkcl_all), no
+* exigiendo que exista una única línea suelta con el importe exacto.
+* Caso real que motivó el cambio: 2 facturas cuya suma sí coincidía con
+* la posición pero ninguna línea individual coincidía por separado, y
+* el código anterior lo rechazaba con NO_MATCHING_INVOICE. Para una
+* sola factura con una única línea (caso ya probado end-to-end) el
+* comportamiento resultante es idéntico, ya que la suma de una única
+* línea es esa misma línea.
+  DATA(lv_sum_betrw) = REDUCE fkkcl-betrw( INIT sum TYPE fkkcl-betrw
+                                            FOR ls_fkkcl_sum IN lt_fkkcl_all
+                                            NEXT sum = sum + ls_fkkcl_sum-betrw ).
+
+  IF lv_sum_betrw <> ls_dfkkzp-betrz.
     e_result             = 'NOK'.
     es_error-code        = 'NO_MATCHING_INVOICE'.
-    es_error-description = 'Ninguna de las facturas indicadas coincide en importe con la posición'.
+    es_error-description = 'La suma de las facturas indicadas no coincide en importe con la posición'.
     RETURN.
   ENDIF.
 

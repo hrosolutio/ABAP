@@ -17,11 +17,14 @@ FUNCTION-POOL zfi_fg_pay_clarify.
 CONSTANTS gc_cuenta_provisional TYPE hkont VALUE '4305520150'.
 
 * Valores observados por depuración en un I_FKKKO real de contabilización
-* de lote de pagos (no confirmados como fijos/obligatorios para todos los
-* casos, pero consistentes en la prueba realizada):
+* de lote de pagos. BLART confirmado por la consultora funcional tras
+* prueba real (el documento generado debe ser clase '2T', no '2C' como
+* se había observado inicialmente). APPLK/HERKF siguen sin confirmar
+* como fijos/obligatorios para todos los casos, aunque consistentes en
+* la prueba realizada:
 CONSTANTS:
   gc_applk_clarificacion TYPE applk_kk VALUE 'R',
-  gc_blart_clarificacion TYPE blart    VALUE '2C',
+  gc_blart_clarificacion TYPE blart    VALUE '2T',
   gc_herkf_clarificacion TYPE char2    VALUE '05'.  " FKKKO-HERKF; tipo exacto (elemento de datos) sin verificar
 
 * Mapeo verificado en tabla de customizing TFK004 (Área R):
