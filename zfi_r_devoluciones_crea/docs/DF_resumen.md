@@ -540,6 +540,7 @@ ver más abajo):
 | `MOTIVO` | `Z01` (confirmado válido, prueba real end-to-end en DES) | `Z01` |
 | `CTA_COMPENSACION` | `4305500250` (la que deriva banco/cuenta en DES; `4305500150` del DF no está configurada) | `4305500150` (probado con éxito, ver tabla de test más abajo) |
 | `RUTA_LOG_DEV` | Ruta **física** real (no lógica de `FILE`, ver más abajo; antes se llamaba `RUTA_LOGICA`) — la definitiva de producción aún no está decidida/creada; para probar, cualquier carpeta física ya existente en DES | igual |
+| `RUTA_PROC_DEV` | Ruta **física** real, carpeta donde se mueve el `_DEV` ya usado para crear el lote (antes era la subcarpeta `procesados/` de `RUTA_LOG_DEV`, ver más abajo) — cualquier carpeta física ya existente | igual |
 | `MONEDA` | `EUR` | `EUR` |
 
 Además, `APPLICATION_ID`/`PROCESS_ID` no son texto libre: `PROCESS_ID`
@@ -549,15 +550,15 @@ como fila nueva (`APPLICATION_ID='FICA'`, `PROCESS_ID='DEVOL_CREA'`,
 `ACTIVE='X'`), igual que ya hay `CONTRATAS`, `MIGRACION`, `VULNERABLE`,
 etc. — es una tabla de mantenimiento del equipo, no un dominio fijo de SAP.
 
-`RUTA_LOG_DEV` y `MONEDA` se añadieron por el mismo motivo que las tres
-anteriores: eran `CONSTANTS` hardcodeadas en la clase
-(`co_logical_path`/`co_eur_tag`) y, a diferencia de `co_processed_dir`/
-`co_error_dir` (que son solo nombres de subcarpeta internos, no datos de
-configuración), sí son valores que conviene poder cambiar sin tocar
-código — en concreto para poder probar el modo Server apuntando a
-cualquier carpeta física que ya exista (mientras la definitiva de
-producción no esté decidida/creada), o repetir la prueba con un fichero
-en otra moneda sin reactivar la clase. `MONEDA` se usa tanto para
+`RUTA_LOG_DEV`, `RUTA_PROC_DEV` y `MONEDA` se añadieron por el mismo
+motivo que las tres anteriores: eran `CONSTANTS` hardcodeadas en la clase
+(`co_logical_path`/`co_processed_dir`/`co_eur_tag`) y, a diferencia de
+`co_error_dir` (que sigue siendo solo un nombre de subcarpeta interno, no
+un dato de configuración), sí son valores que conviene poder cambiar sin
+tocar código — en concreto para poder probar el modo Server apuntando a
+cualquier carpeta física que ya exista (mientras las definitivas de
+producción no estén decididas/creadas), o repetir la prueba con un
+fichero en otra moneda sin reactivar la clase. `MONEDA` se usa tanto para
 `DFKKRK-WAERS` (moneda del lote) como para localizar el importe dentro de
 la línea del `_DEV` (`parse_dev_lines` busca ese mismo tag en el texto).
 
@@ -585,6 +586,22 @@ probada con éxito en DES) hay que actualizarla** — cambiar su
 cambia) — en cada sistema donde ya exista, o tanto este programa como
 `ZFI_R_ECOFI_SPLIT` dejan de encontrarla (fallan en tiempo de ejecución
 con "Faltan constantes...", no al activar).
+
+**`RUTA_PROC_DEV` sustituye a la subcarpeta `procesados/` de
+`RUTA_LOG_DEV`**: hasta ahora, tras crear el lote con éxito,
+`transport_files` movía el `_DEV` a `<RUTA_LOG_DEV>procesados/`
+(`co_processed_dir`, concatenado). **Fallo real reportado por Eva
+probando en Integración**: el lote se creó correctamente (60 posiciones,
+`260915CDI110`) pero el movimiento del fichero falló con "No fue posible
+transportar el fichero ... en el servidor" (mensaje `ZFI_MC_001`/`014`,
+excepción `ZFI_CL_CX_FILE` de `ZXX_CL_FILE_UTILS=>MOVE_SERVER_FILE`) —
+la subcarpeta `procesados/` no existe en la carpeta física de
+Integración (la de `error/` sí existe, esa no ha cambiado). En vez de
+asumir que esa subcarpeta existe en todos los sistemas, se pasa a una
+ruta física independiente y configurable (`RUTA_PROC_DEV`), mismo patrón
+que las demás rutas de este proyecto. Distinta de `RUTA_LOG_PROC` de
+`ZFI_R_ECOFI_SPLIT` (esa es para el ECOFI de entrada ya dividido, esta es
+para el `_DEV` ya consumido por este programa).
 
 ## Enfoque descartado: `RFKKKA00`/multicash (no usar, referencia solamente)
 

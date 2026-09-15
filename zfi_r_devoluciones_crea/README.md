@@ -172,15 +172,17 @@ distintos, p.ej. la cta. de compensación — ver `docs/DF_resumen.md`):
 | `MOTIVO` | Motivo de devolución (`DFKKRK-RLGRD`) | `Z01` |
 | `CTA_COMPENSACION` | Cta. compensación devoluciones (`DFKKRK-RLSKO`) | `4305500150` (DF) — no configurada en DES, ahí usar `4305500250` (ver `docs/DF_resumen.md`) |
 | `RUTA_LOG_DEV` | Ruta **física** del servidor (modo Server) donde se buscan los `_DEV` — es la ruta física tal cual (no una ruta lógica de transacción `FILE`), p.ej. `/interfaces/cobros/transf_N43/in/`. **⚠️ Antes se llamaba `RUTA_LOGICA`** — la fila ya creada en cada sistema (DES, Integración...) hay que renombrarla (solo el `CONSTANT_ID`, no el valor) a `RUTA_LOG_DEV`, o el programa deja de encontrarla. Renombrada por consistencia con `RUTA_LOG_ECOFI`/`RUTA_LOG_TRF`/`RUTA_LOG_PROC` de `ZFI_R_ECOFI_SPLIT`, que también lee esta misma fila | Ruta física real de producción — **aún no decidida/creada**; para probar, poner aquí cualquier carpeta física que ya exista en el sistema de prueba |
+| `RUTA_PROC_DEV` | Carpeta donde se mueve el `_DEV` una vez usado para crear el lote — ruta física **propia**, ya no una subcarpeta `procesados/` de `RUTA_LOG_DEV` como antes (esa subcarpeta no existe en Integración — real, encontrado probando: error `>014` "No fue posible transportar el fichero..." justo después de crear el lote con éxito). Distinta de `RUTA_LOG_PROC` de `ZFI_R_ECOFI_SPLIT` (esa es para el ECOFI de entrada, esta es para el `_DEV` ya consumido) | Cualquier carpeta física que ya exista en el sistema de prueba |
 | `MONEDA` | Moneda (`DFKKRK-WAERS`) y tag de moneda que identifica el importe dentro de la línea del `_DEV` | `EUR` |
 
-Si falta cualquiera de las 5 filas (o `ACTIVE` no es `X`), el programa
+Si falta cualquiera de las 6 filas (o `ACTIVE` no es `X`), el programa
 aborta sin crear ningún lote.
 
-`RUTA_LOG_DEV` y `MONEDA` son, además de datos de sistema, la vía para
-**probar sin depender de que la carpeta física definitiva de producción
-exista o de que el fichero de prueba esté en euros**: basta con cambiar
-el valor de esa fila en `ZFI_T_CONSTANTS`, sin tocar ni reactivar código.
+`RUTA_LOG_DEV`, `RUTA_PROC_DEV` y `MONEDA` son, además de datos de
+sistema, la vía para **probar sin depender de que las carpetas físicas
+definitivas de producción existan o de que el fichero de prueba esté en
+euros**: basta con cambiar el valor de esa fila en `ZFI_T_CONSTANTS`, sin
+tocar ni reactivar código.
 
 ## Pendiente
 
@@ -193,6 +195,10 @@ Ver `docs/DF_resumen.md` para el detalle completo. Resumen:
 - **Renombrar en cada sistema donde ya exista** (DES, Integración...) la
   fila `RUTA_LOGICA` a `RUTA_LOG_DEV` (mismo valor, solo cambia el
   `CONSTANT_ID`) — ver aviso en "Configuración" más arriba.
-- La ruta física definitiva de producción para `RUTA_LOG_DEV` (modo
-  Server) todavía no está decidida/creada.
+- **Dar de alta la fila nueva `RUTA_PROC_DEV`** en cada sistema, con una
+  carpeta física real (en Integración, `procesados/` ya no existe como
+  subcarpeta de `RUTA_LOG_DEV` — motivo de este cambio, ver
+  "Configuración").
+- La ruta física definitiva de producción para `RUTA_LOG_DEV`/
+  `RUTA_PROC_DEV` (modo Server) todavía no está decidida/creada.
 - Alta del objeto en el sistema de transporte correspondiente al proyecto.

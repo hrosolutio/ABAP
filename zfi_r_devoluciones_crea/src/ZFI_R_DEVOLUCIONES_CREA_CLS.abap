@@ -54,11 +54,25 @@
 * cada sistema donde ya exista (DES, Integracion...), o el programa deja
 * de encontrarla silenciosamente (no falla al activar, falla en runtime
 * con "Faltan constantes...").
+*
+* RUTA_PROC_DEV (modo Server): carpeta donde se mueve el _DEV una vez
+* usado para crear el lote (metodo TRANSPORT_FILES, caso de exito).
+* Ruta fisica PROPIA, igual que RUTA_LOG_DEV - ya NO es la subcarpeta
+* "procesados/" de RUTA_LOG_DEV como en la version anterior. Motivo real
+* (no hipotetico): en Integracion, Eva probo el programa y esa subcarpeta
+* no existe (aunque "error/" si existe, esa sigue siendo subcarpeta de
+* RUTA_LOG_DEV sin cambios) - el fallo real fue "No fue posible
+* transportar el fichero ... en el servidor" (ZFI_MC_001/014,
+* ZXX_CL_FILE_UTILS=>MOVE_SERVER_FILE con excepcion ZFI_CL_CX_FILE) justo
+* despues de crear el lote con exito. En vez de asumir que esa subcarpeta
+* existe en todos los sistemas, se pasa a ruta fisica configurable, igual
+* patron que las demas rutas de este proyecto. Distinta de RUTA_LOG_PROC
+* de ZFI_R_ECOFI_SPLIT (esa es para el ECOFI de entrada ya dividido, esto
+* es para el _DEV ya consumido por este programa).
 CLASS lcl_devoluciones_crea DEFINITION.
   PUBLIC SECTION.
 
     CONSTANTS:
-      co_processed_dir TYPE string     VALUE 'procesados/',
       co_error_dir     TYPE string     VALUE 'error/',
       co_suffix_dev    TYPE string     VALUE '_DEV',
 
@@ -67,12 +81,12 @@ CLASS lcl_devoluciones_crea DEFINITION.
       co_dev           TYPE string     VALUE 'EXT',
 
       " --- Claves en ZFI_T_CONSTANTS de los valores fijos del DF (RU_02):
-      " sociedad, motivo de devolucion, cta. de compensacion, ruta fisica
-      " del servidor (ver comentario al principio del include) y moneda.
-      " Se leen en GET_CONSTANTS al principio de la ejecucion (no son
-      " valores fijos en el codigo, cambian por sistema o por prueba sin
-      " tocar ni reactivar ABAP - p.ej. la cta. de compensacion es distinta
-      " en DES que en Integracion, ver docs/DF_resumen.md).
+      " sociedad, motivo de devolucion, cta. de compensacion, rutas
+      " fisicas del servidor (ver comentario al principio del include) y
+      " moneda. Se leen en GET_CONSTANTS al principio de la ejecucion (no
+      " son valores fijos en el codigo, cambian por sistema o por prueba
+      " sin tocar ni reactivar ABAP - p.ej. la cta. de compensacion es
+      " distinta en DES que en Integracion, ver docs/DF_resumen.md).
       co_application_id  TYPE zfi_de_application_id VALUE 'FICA',
       co_process_id      TYPE zfi_de_process_id     VALUE 'DEVOL_CREA',
       co_sub_process_id  TYPE zfi_de_sub_process_id VALUE space,
@@ -80,6 +94,13 @@ CLASS lcl_devoluciones_crea DEFINITION.
       co_const_motivo    TYPE zfi_de_constant_id    VALUE 'MOTIVO',
       co_const_cta_comp  TYPE zfi_de_constant_id    VALUE 'CTA_COMPENSACION',
       co_const_ruta_dev  TYPE zfi_de_constant_id    VALUE 'RUTA_LOG_DEV',
+      " Carpeta donde se mueve el _DEV ya usado para crear el lote -
+      " ruta fisica PROPIA (no subcarpeta "procesados/" de RUTA_LOG_DEV
+      " como en la version anterior; en Integracion esa subcarpeta no
+      " existe, ver comentario al principio del include). Distinta de
+      " RUTA_LOG_PROC de ZFI_R_ECOFI_SPLIT (esa es para el ECOFI de
+      " entrada, esto es para el _DEV ya consumido).
+      co_const_ruta_dev_proc TYPE zfi_de_constant_id VALUE 'RUTA_PROC_DEV',
       co_const_moneda    TYPE zfi_de_constant_id    VALUE 'MONEDA'.
 
     TYPES:
@@ -112,7 +133,8 @@ CLASS lcl_devoluciones_crea DEFINITION.
       gv_cta_comp     TYPE dfkkrk-rlsko,
       " Ruta fisica directa (no ruta logica de FILE) - ver comentario al
       " principio del include.
-      gv_ruta_dev     TYPE string,
+      gv_ruta_dev      TYPE string,
+      gv_ruta_dev_proc TYPE string,
       " STRING (no dfkkrk-waers) para que la busqueda del tag de moneda en
       " el fichero (FIND FIRST OCCURRENCE) no arrastre blancos de relleno
       " de un tipo de longitud fija - ver CLAUDE.md.
@@ -204,13 +226,15 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
           gv_cta_comp = ls_constant-constant_value.
         WHEN co_const_ruta_dev.
           CONCATENATE ls_constant-constant_value '' INTO gv_ruta_dev.
+        WHEN co_const_ruta_dev_proc.
+          CONCATENATE ls_constant-constant_value '' INTO gv_ruta_dev_proc.
         WHEN co_const_moneda.
           gv_moneda = ls_constant-constant_value.
       ENDCASE.
     ENDLOOP.
 
     IF gv_sociedad IS INITIAL OR gv_motivo IS INITIAL OR gv_cta_comp IS INITIAL
-       OR gv_ruta_dev IS INITIAL OR gv_moneda IS INITIAL.
+       OR gv_ruta_dev IS INITIAL OR gv_ruta_dev_proc IS INITIAL OR gv_moneda IS INITIAL.
       WRITE: / 'Faltan constantes en ZFI_T_CONSTANTS para', co_application_id, co_process_id.
       RETURN.
     ENDIF.
@@ -354,8 +378,17 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
       gv_root_path = gv_root_path && '/'.
     ENDIF.
 
-    CONCATENATE gv_root_path co_processed_dir INTO gv_backup_path.
-    CONCATENATE gv_root_path co_error_dir     INTO gv_error_path.
+    " GV_RUTA_DEV_PROC es una ruta fisica PROPIA (RUTA_PROC_DEV), no una
+    " subcarpeta "procesados/" de la de entrada como en la version
+    " anterior - en Integracion esa subcarpeta no existe (ver comentario
+    " al principio del include), asi que ya no se asume que exista.
+    DATA(lv_backup) = gv_ruta_dev_proc.
+    IF lv_backup IS NOT INITIAL AND substring( val = lv_backup off = strlen( lv_backup ) - 1 ) <> '/'.
+      lv_backup = lv_backup && '/'.
+    ENDIF.
+    gv_backup_path = lv_backup.
+
+    CONCATENATE gv_root_path co_error_dir INTO gv_error_path.
 
   ENDMETHOD.
 
