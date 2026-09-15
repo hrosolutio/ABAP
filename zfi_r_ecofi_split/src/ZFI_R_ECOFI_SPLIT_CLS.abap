@@ -52,13 +52,17 @@
 * programas son en la practica el mismo eslabon logico del proceso CDI_11
 * (division + creacion del lote de devoluciones):
 *   - SALIDA _DEV = ENTRADA de ZFI_R_DEVOLUCIONES_CREA:
-*                 CONSTANT_ID=RUTA_LOGICA - la misma fila que ya usa
+*                 CONSTANT_ID=RUTA_LOG_DEV (antes RUTA_LOGICA, renombrada
+*                 por consistencia con RUTA_LOG_ECOFI/RUTA_LOG_TRF/
+*                 RUTA_LOG_PROC) - la misma fila que ya usa
 *                 ZFI_R_DEVOLUCIONES_CREA para saber donde buscar los
-*                 _DEV, sin duplicar el valor en ningun sitio (el nombre
-*                 de la clave es historico, del diseño con ruta logica de
-*                 FILE - hoy contiene una ruta fisica igual que las otras,
-*                 no se ha renombrado para no romper filas ya dadas de
-*                 alta).
+*                 _DEV, sin duplicar el valor en ningun sitio. OJO
+*                 MIGRACION: la fila ya existente en ZFI_T_CONSTANTS
+*                 (creada para ZFI_R_DEVOLUCIONES_CREA, probada con
+*                 exito en DES) tiene CONSTANT_ID='RUTA_LOGICA' - hay
+*                 que actualizarla a 'RUTA_LOG_DEV' en cada sistema
+*                 donde ya exista, o los dos programas dejan de
+*                 encontrarla.
 *   - SALIDA _TRF: CONSTANT_ID=RUTA_LOG_TRF, fila nueva, mismo PROCESS_ID
 *                 - carpeta distinta de la de _DEV (a diferencia de
 *                 versiones anteriores, que dejaban _TRF y _DEV en la
@@ -92,7 +96,7 @@ CLASS lcl_ecofi_split DEFINITION.
       co_process_id       TYPE zfi_de_process_id     VALUE 'DEVOL_CREA',
       co_sub_process_id   TYPE zfi_de_sub_process_id VALUE space,
       co_const_ruta_ecofi TYPE zfi_de_constant_id    VALUE 'RUTA_LOG_ECOFI',
-      co_const_ruta_log   TYPE zfi_de_constant_id    VALUE 'RUTA_LOGICA',
+      co_const_ruta_dev   TYPE zfi_de_constant_id    VALUE 'RUTA_LOG_DEV',
       co_const_ruta_trf   TYPE zfi_de_constant_id    VALUE 'RUTA_LOG_TRF',
       co_const_ruta_proc  TYPE zfi_de_constant_id    VALUE 'RUTA_LOG_PROC'.
 
@@ -208,7 +212,7 @@ CLASS lcl_ecofi_split IMPLEMENTATION.
         AND sub_process_id = co_sub_process_id
         AND active         = abap_true
         AND ( constant_id = co_const_ruta_ecofi
-           OR constant_id = co_const_ruta_log
+           OR constant_id = co_const_ruta_dev
            OR constant_id = co_const_ruta_trf
            OR constant_id = co_const_ruta_proc ).
 
@@ -216,7 +220,7 @@ CLASS lcl_ecofi_split IMPLEMENTATION.
       CASE ls_constant-constant_id.
         WHEN co_const_ruta_ecofi.
           gv_dir_in = normalize_dir( CONV string( ls_constant-constant_value ) ).
-        WHEN co_const_ruta_log.
+        WHEN co_const_ruta_dev.
           gv_dir_out_dev = normalize_dir( CONV string( ls_constant-constant_value ) ).
         WHEN co_const_ruta_trf.
           gv_dir_out_trf = normalize_dir( CONV string( ls_constant-constant_value ) ).

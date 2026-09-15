@@ -37,17 +37,23 @@
 * verdad), el cierre del lote en RU_03 (ZFI_R_DEVOLUCIONES2) falla con el
 * error real >2549 ("No existen entradas para la remesa").
 *
-* RUTA_LOGICA (modo Server): a pesar del nombre (historico, de un primer
-* diseño con ruta logica de transaccion FILE resuelta via
-* ZXX_CL_FILE_UTILS=>GET_DIRECTORY), CONSTANT_VALUE contiene hoy la RUTA
-* FISICA DIRECTA del servidor (p.ej. '/interfaces/cobros/transf_N43/in/'),
-* sin pasar por FILE en absoluto - decision compartida con
+* RUTA_LOG_DEV (modo Server, antes RUTA_LOGICA - renombrada por
+* consistencia con RUTA_LOG_ECOFI/RUTA_LOG_TRF/RUTA_LOG_PROC de
+* ZFI_R_ECOFI_SPLIT): CONSTANT_VALUE contiene la RUTA FISICA DIRECTA del
+* servidor (p.ej. '/interfaces/cobros/transf_N43/in/'), sin pasar por
+* transaccion FILE en absoluto - decision compartida con
 * ZFI_R_ECOFI_SPLIT (que tambien lee esta misma fila para saber donde
-* dejar _TRF/_DEV, ver su include): el sistema de ficheros ya existe
-* antes que el programa, mejor adaptar el programa que forzar de alta
-* rutas logicas nuevas solo para una indireccion que ZFI_T_CONSTANTS ya
-* da (el valor cambia por sistema, fila a fila, sin tocar codigo). No se
-* ha renombrado la clave para no romper filas ya dadas de alta.
+* dejar _DEV, ver su include): el sistema de ficheros ya existe antes
+* que el programa, mejor adaptar el programa que forzar de alta rutas
+* logicas nuevas solo para una indireccion que ZFI_T_CONSTANTS ya da (el
+* valor cambia por sistema, fila a fila, sin tocar codigo).
+*
+* OJO MIGRACION: la fila ya existente en ZFI_T_CONSTANTS (creada para
+* este programa, probada con exito en DES) tiene CONSTANT_ID='RUTA_
+* LOGICA' - hay que actualizar esa fila a CONSTANT_ID='RUTA_LOG_DEV' en
+* cada sistema donde ya exista (DES, Integracion...), o el programa deja
+* de encontrarla silenciosamente (no falla al activar, falla en runtime
+* con "Faltan constantes...").
 CLASS lcl_devoluciones_crea DEFINITION.
   PUBLIC SECTION.
 
@@ -73,7 +79,7 @@ CLASS lcl_devoluciones_crea DEFINITION.
       co_const_sociedad  TYPE zfi_de_constant_id    VALUE 'SOCIEDAD',
       co_const_motivo    TYPE zfi_de_constant_id    VALUE 'MOTIVO',
       co_const_cta_comp  TYPE zfi_de_constant_id    VALUE 'CTA_COMPENSACION',
-      co_const_ruta_log  TYPE zfi_de_constant_id    VALUE 'RUTA_LOGICA',
+      co_const_ruta_dev  TYPE zfi_de_constant_id    VALUE 'RUTA_LOG_DEV',
       co_const_moneda    TYPE zfi_de_constant_id    VALUE 'MONEDA'.
 
     TYPES:
@@ -196,7 +202,7 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
           gv_motivo = ls_constant-constant_value.
         WHEN co_const_cta_comp.
           gv_cta_comp = ls_constant-constant_value.
-        WHEN co_const_ruta_log.
+        WHEN co_const_ruta_dev.
           CONCATENATE ls_constant-constant_value '' INTO gv_ruta_dev.
         WHEN co_const_moneda.
           gv_moneda = ls_constant-constant_value.

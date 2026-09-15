@@ -79,7 +79,7 @@ eslabón lógico del proceso `CDI_11`. Se distinguen solo por `CONSTANT_ID`:
 | `CONSTANT_ID` | Carpeta | ¿Fila nueva? |
 |---|---|---|
 | `RUTA_LOG_ECOFI` | Entrada (donde llega el ECOFI) | Sí |
-| `RUTA_LOGICA` | Salida `_DEV` | **No** — ya existe, es la misma fila que `ZFI_R_DEVOLUCIONES_CREA` usa como su propia entrada |
+| `RUTA_LOG_DEV` | Salida `_DEV` | **No** — ya existe (antes `RUTA_LOGICA`, renombrada por consistencia — ver aviso de migración más abajo), es la misma fila que `ZFI_R_DEVOLUCIONES_CREA` usa como su propia entrada |
 | `RUTA_LOG_TRF` | Salida `_TRF` | Sí |
 | `RUTA_LOG_PROC` | Procesados (donde se archiva el original) | Sí |
 
@@ -93,10 +93,20 @@ Las tres filas nuevas:
 | `CONSTANT_ID` | `RUTA_LOG_ECOFI` | `RUTA_LOG_TRF` | `RUTA_LOG_PROC` |
 | `ACTIVE` | `X` | `X` | `X` |
 
-La fila de salida de `_DEV` (`RUTA_LOGICA`) no se toca — sigue siendo la
-misma que ya usa `ZFI_R_DEVOLUCIONES_CREA`, documentada en su propio
-README. Así hay una única fuente de verdad para esa carpeta compartida —
-no hay dos valores que mantener sincronizados a mano, y por tanto no hay
+**⚠️ Migración de la fila de salida `_DEV`**: esa fila **ya existe**
+(creada para `ZFI_R_DEVOLUCIONES_CREA`, probada con éxito en DES) con
+`CONSTANT_ID='RUTA_LOGICA'`. Se ha renombrado a `RUTA_LOG_DEV` por
+consistencia con las otras tres claves (`RUTA_LOG_ECOFI`/`RUTA_LOG_TRF`/
+`RUTA_LOG_PROC`) — hay que **actualizar el `CONSTANT_ID` de esa fila ya
+creada** (no el valor, solo la clave) en cada sistema donde exista
+(DES, Integración...), o los dos programas dejan de encontrarla sin dar
+ningún error de activación (fallan en tiempo de ejecución con "Faltan
+constantes...").
+
+La fila de salida de `_DEV` sigue siendo la misma que usa
+`ZFI_R_DEVOLUCIONES_CREA`, documentada en su propio README. Así hay una
+única fuente de verdad para esa carpeta compartida — no hay dos valores
+que mantener sincronizados a mano, y por tanto no hay
 riesgo de que se desincronicen.
 
 ## Contenido del repositorio
@@ -132,8 +142,10 @@ docs/
    procesados, carpetas físicas distintas que ya existan (ya no hace
    falta que sean subcarpetas de la de entrada, ni coincidir entre sí).
    La ruta de salida de **`_DEV`** ya tiene que existir de antes — es la
-   misma fila `RUTA_LOGICA` que ya usa `ZFI_R_DEVOLUCIONES_CREA` — no hay
-   que crear nada nuevo para ella aquí.
+   misma fila que ya usa `ZFI_R_DEVOLUCIONES_CREA` (`CONSTANT_ID=
+   RUTA_LOG_DEV`, antes `RUTA_LOGICA` — ver el aviso de migración en
+   "Configuración" más arriba) — no hay que crear nada nuevo para ella
+   aquí, solo actualizar su `CONSTANT_ID` si aún no se ha hecho.
 5. Activar y ejecutar (F8).
    - Modo **Upload**: en `P_PATH`, seleccionar (F4) un fichero ECOFI real en
      tu PC (p.ej. uno de los dos ficheros de prueba). Los ficheros de salida

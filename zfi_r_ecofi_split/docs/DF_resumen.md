@@ -109,14 +109,14 @@ Analizados `YFRECAU_1239_260402.140017.txt` (378 líneas) y
   `_TRF` (`CONSTANT_ID='RUTA_LOG_TRF'`) y procesados
   (`CONSTANT_ID='RUTA_LOG_PROC'`) tienen fila nueva; la de salida `_DEV`
   **no tiene fila propia**, se lee directamente de la fila que ya usa
-  `ZFI_R_DEVOLUCIONES_CREA` (`CONSTANT_ID='RUTA_LOGICA'` — nombre
-  histórico del diseño con ruta lógica de `FILE`, hoy contiene una ruta
-  física igual que las demás, sin renombrar para no romper filas ya
-  dadas de alta —, mismo `PROCESS_ID='DEVOL_CREA'`), que es quien escanea
-  esa misma carpeta buscando los `_DEV` — una única fuente de verdad para
-  la carpeta compartida, ver `README.md`. La carpeta de `_TRF` no la
-  consume ningún desarrollo de este repositorio — es para el proceso ya
-  existente que crea el lote de transferencias, mencionado en "Fuera de
+  `ZFI_R_DEVOLUCIONES_CREA` (`CONSTANT_ID='RUTA_LOG_DEV'` — renombrada
+  desde `RUTA_LOGICA` por consistencia con las otras 3 claves, ver aviso
+  de migración más abajo —, mismo `PROCESS_ID='DEVOL_CREA'`), que es
+  quien escanea esa misma carpeta buscando los `_DEV` — una única fuente
+  de verdad para la carpeta compartida, ver `README.md`. La carpeta de
+  `_TRF` no la consume ningún desarrollo de este repositorio — es para
+  el proceso ya existente que crea el lote de transferencias, mencionado
+  en "Fuera de
   alcance" más arriba. **Sin probar aún dentro de SAP** y sin disparo
   automático: hoy hay que ejecutarlo a mano en SE38. Falta:
   - Dar de alta en `ZFI_T_CONSTANTS` las filas de entrada, salida `_TRF`
@@ -126,6 +126,11 @@ Analizados `YFRECAU_1239_260402.140017.txt` (378 líneas) y
     las de `_TRF` y procesados, cualquier otra carpeta física existente
     — ya no tienen que ser subcarpetas de la de entrada, ni coincidir
     entre sí, ni pasar por transacción `FILE`).
+  - **Renombrar la fila ya existente** de `ZFI_R_DEVOLUCIONES_CREA`
+    (`CONSTANT_ID='RUTA_LOGICA'` → `'RUTA_LOG_DEV'`) en cada sistema
+    donde ya esté creada (DES, Integración...) — sin este paso, tanto
+    este programa como `ZFI_R_DEVOLUCIONES_CREA` dejan de encontrarla
+    (fallo silencioso en runtime, no un error de activación).
   - Decidir cómo se dispara en producción: job propio programado, o
     integrado en el job que hoy crea el lote de transferencias.
 - Si la moneda puede ser distinta de `EUR` en algún caso (el programa localiza
