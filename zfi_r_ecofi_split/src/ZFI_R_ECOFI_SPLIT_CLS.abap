@@ -23,10 +23,11 @@
 * Modo servidor: escanea TODOS los ficheros de la carpeta de ENTRADA
 * (ruta fisica leida de ZFI_T_CONSTANTS, ver GET_CONSTANTS - antes era la
 * constante CO_LOGICAL_PATH = 'ZFICA_COBROS_ECOFI', inventada y sin
-* existir en ningun sistema). Divide cada fichero uno a uno, deja _TRF/
-* _DEV en la carpeta de SALIDA, y mueve el original a la carpeta de
-* PROCESADOS (con ZXX_CL_FILE_UTILS=>MOVE_SERVER_FILE, la misma utilidad
-* que usa ZFI_R_DEVOLUCIONES para sus subcarpetas backup/error) para no
+* existir en ningun sistema). Divide cada fichero uno a uno, deja _DEV y
+* _TRF cada uno en su propia carpeta de SALIDA (distintas entre si), y
+* mueve el original a la carpeta de PROCESADOS (con
+* ZXX_CL_FILE_UTILS=>MOVE_SERVER_FILE, la misma utilidad que usa
+* ZFI_R_DEVOLUCIONES para sus subcarpetas backup/error) para no
 * reprocesarlo en la siguiente ejecucion. No usa ZFI_T_FILE_LOG: el
 * fichero ECOFI es el primer eslabon de la cadena, no esta registrado en
 * ningun sitio todavia (a diferencia de ZFI_R_DEVOLUCIONES, que ya recibe
@@ -34,7 +35,7 @@
 *
 * IMPORTANTE - decision sobre rutas logicas vs. fisicas: en vez de dar de
 * alta rutas logicas en transaccion FILE y resolverlas con
-* ZXX_CL_FILE_UTILS=>GET_DIRECTORY (como hace ZFI_R_DEVOLUCIONES), las 3
+* ZXX_CL_FILE_UTILS=>GET_DIRECTORY (como hace ZFI_R_DEVOLUCIONES), las
 * carpetas se leen de ZFI_T_CONSTANTS como RUTA FISICA DIRECTA (el valor
 * de CONSTANT_VALUE es ya la ruta del servidor, p.ej.
 * '/interfaces/cobros/transf_N43/in/'), sin pasar por FILE en absoluto.
@@ -44,30 +45,37 @@
 * capa de indireccion que ZFI_T_CONSTANTS ya proporciona (el valor cambia
 * por sistema igualmente, fila a fila, sin tocar codigo).
 *
-* Son 3 rutas fisicas distintas, todas variables (nada hardcodeado), pero
-* las 3 filas de ZFI_T_CONSTANTS viven bajo el MISMO PROCESS_ID=DEVOL_CREA
+* Son 4 rutas fisicas distintas, todas variables (nada hardcodeado), pero
+* las 4 filas de ZFI_T_CONSTANTS viven bajo el MISMO PROCESS_ID=DEVOL_CREA
 * que ya usa ZFI_R_DEVOLUCIONES_CREA - decision deliberada para no dar de
-* alta un PROCESS_ID propio (ECOFI_SPLIT) en ZFI_T_PROCESS, ya que los dos
+* alta un PROCESS_ID propio (ECOFI_SPLIT) en ZFI_T_PROCESS, ya que estos
 * programas son en la practica el mismo eslabon logico del proceso CDI_11
 * (division + creacion del lote de devoluciones):
-*   - SALIDA (_TRF/_DEV) = ENTRADA de ZFI_R_DEVOLUCIONES_CREA:
+*   - SALIDA _DEV = ENTRADA de ZFI_R_DEVOLUCIONES_CREA:
 *                 CONSTANT_ID=RUTA_LOGICA - la misma fila que ya usa
 *                 ZFI_R_DEVOLUCIONES_CREA para saber donde buscar los
 *                 _DEV, sin duplicar el valor en ningun sitio (el nombre
 *                 de la clave es historico, del diseño con ruta logica de
-*                 FILE - hoy contiene una ruta fisica igual que las otras
-*                 dos, no se ha renombrado para no romper filas ya dadas
-*                 de alta).
+*                 FILE - hoy contiene una ruta fisica igual que las otras,
+*                 no se ha renombrado para no romper filas ya dadas de
+*                 alta).
+*   - SALIDA _TRF: CONSTANT_ID=RUTA_LOG_TRF, fila nueva, mismo PROCESS_ID
+*                 - carpeta distinta de la de _DEV (a diferencia de
+*                 versiones anteriores, que dejaban _TRF y _DEV en la
+*                 misma carpeta de salida). No la consume ningun otro
+*                 desarrollo de este repositorio - es para el proceso ya
+*                 existente que crea el lote de transferencias, fuera de
+*                 alcance de CDI_11 (ver README).
 *   - ENTRADA (ECOFI de este programa): CONSTANT_ID=RUTA_LOG_ECOFI, fila
 *                 nueva, mismo PROCESS_ID.
 *   - PROCESADOS: CONSTANT_ID=RUTA_LOG_PROC, fila nueva, mismo PROCESS_ID
-*                 - carpeta distinta de las otras dos (ya no es una
+*                 - carpeta distinta de las demas (ya no es una
 *                 subcarpeta "procesados/" de la de entrada, como en una
 *                 version anterior).
 *
-* Este modo Server es el unico afectado por las 3 rutas - el modo Upload
-* (local) no cambia: sigue subiendo/descargando por GUI en la misma
-* carpeta del PC que indique el usuario.
+* Este modo Server es el unico afectado por estas rutas - el modo Upload
+* (local) no cambia: sigue subiendo/descargando por GUI, con _TRF y _DEV
+* en la misma carpeta del PC que indique el usuario (junto al original).
 CLASS lcl_ecofi_split DEFINITION.
   PUBLIC SECTION.
 
@@ -76,7 +84,7 @@ CLASS lcl_ecofi_split DEFINITION.
       co_suffix_dev     TYPE string    VALUE '_DEV',
       co_eur_tag        TYPE string    VALUE 'EUR',
 
-      " Claves en ZFI_T_CONSTANTS de las 3 rutas fisicas del modo Server -
+      " Claves en ZFI_T_CONSTANTS de las rutas fisicas del modo Server -
       " leidas en GET_CONSTANTS, no hace falta para el modo Upload. Mismo
       " PROCESS_ID que ZFI_R_DEVOLUCIONES_CREA (ver comentario al
       " principio del include) - no se crea uno propio para ECOFI_SPLIT.
@@ -85,6 +93,7 @@ CLASS lcl_ecofi_split DEFINITION.
       co_sub_process_id   TYPE zfi_de_sub_process_id VALUE space,
       co_const_ruta_ecofi TYPE zfi_de_constant_id    VALUE 'RUTA_LOG_ECOFI',
       co_const_ruta_log   TYPE zfi_de_constant_id    VALUE 'RUTA_LOGICA',
+      co_const_ruta_trf   TYPE zfi_de_constant_id    VALUE 'RUTA_LOG_TRF',
       co_const_ruta_proc  TYPE zfi_de_constant_id    VALUE 'RUTA_LOG_PROC'.
 
     METHODS:
@@ -107,13 +116,14 @@ CLASS lcl_ecofi_split DEFINITION.
 
   PRIVATE SECTION.
 
-    DATA: gv_path     TYPE string,
-          gv_upload   TYPE c,
+    DATA: gv_path        TYPE string,
+          gv_upload      TYPE c,
           " Rutas fisicas directas (no rutas logicas de FILE) - ver
           " comentario al principio del include.
-          gv_dir_in   TYPE string,
-          gv_dir_out  TYPE string,
-          gv_dir_proc TYPE string.
+          gv_dir_in      TYPE string,
+          gv_dir_out_dev TYPE string,
+          gv_dir_out_trf TYPE string,
+          gv_dir_proc    TYPE string.
 
     METHODS:
       get_constants RETURNING VALUE(rv_ok) TYPE flag,
@@ -125,9 +135,10 @@ CLASS lcl_ecofi_split DEFINITION.
       split_and_write_local IMPORTING it_lines TYPE string_table
                                        iv_name  TYPE string,
 
-      split_and_write_server IMPORTING it_lines TYPE string_table
-                                        iv_name  TYPE string
-                                        iv_dir   TYPE string,
+      split_and_write_server IMPORTING it_lines    TYPE string_table
+                                        iv_name     TYPE string
+                                        iv_dir_trf  TYPE string
+                                        iv_dir_dev  TYPE string,
 
       get_filename_from_path IMPORTING iv_path            TYPE string
                               RETURNING VALUE(rv_filename) TYPE string,
@@ -188,7 +199,7 @@ CLASS lcl_ecofi_split IMPLEMENTATION.
 
     DATA: lt_constants TYPE TABLE OF zfi_t_constants.
 
-    " Las 3 filas viven bajo el mismo PROCESS_ID (DEVOL_CREA) - se
+    " Las 4 filas viven bajo el mismo PROCESS_ID (DEVOL_CREA) - se
     " distinguen solo por CONSTANT_ID. Ver comentario al principio del
     " include.
     SELECT * FROM zfi_t_constants INTO TABLE lt_constants
@@ -198,6 +209,7 @@ CLASS lcl_ecofi_split IMPLEMENTATION.
         AND active         = abap_true
         AND ( constant_id = co_const_ruta_ecofi
            OR constant_id = co_const_ruta_log
+           OR constant_id = co_const_ruta_trf
            OR constant_id = co_const_ruta_proc ).
 
     LOOP AT lt_constants INTO DATA(ls_constant).
@@ -205,13 +217,15 @@ CLASS lcl_ecofi_split IMPLEMENTATION.
         WHEN co_const_ruta_ecofi.
           gv_dir_in = normalize_dir( CONV string( ls_constant-constant_value ) ).
         WHEN co_const_ruta_log.
-          gv_dir_out = normalize_dir( CONV string( ls_constant-constant_value ) ).
+          gv_dir_out_dev = normalize_dir( CONV string( ls_constant-constant_value ) ).
+        WHEN co_const_ruta_trf.
+          gv_dir_out_trf = normalize_dir( CONV string( ls_constant-constant_value ) ).
         WHEN co_const_ruta_proc.
           gv_dir_proc = normalize_dir( CONV string( ls_constant-constant_value ) ).
       ENDCASE.
     ENDLOOP.
 
-    IF gv_dir_in IS INITIAL OR gv_dir_out IS INITIAL OR gv_dir_proc IS INITIAL.
+    IF gv_dir_in IS INITIAL OR gv_dir_out_dev IS INITIAL OR gv_dir_out_trf IS INITIAL OR gv_dir_proc IS INITIAL.
       WRITE: / 'Faltan constantes de ruta en ZFI_T_CONSTANTS para', co_application_id, co_process_id.
       RETURN.
     ENDIF.
@@ -242,9 +256,10 @@ CLASS lcl_ecofi_split IMPLEMENTATION.
         CONTINUE.
       ENDIF.
 
-      split_and_write_server( it_lines = lt_lines
-                               iv_name  = lv_filename
-                               iv_dir   = gv_dir_out ).
+      split_and_write_server( it_lines   = lt_lines
+                               iv_name    = lv_filename
+                               iv_dir_trf = gv_dir_out_trf
+                               iv_dir_dev = gv_dir_out_dev ).
 
       " Se mueve el original a la carpeta de procesados (ruta propia,
       " distinta de entrada y salida) para no reprocesarlo en la
@@ -295,12 +310,12 @@ CLASS lcl_ecofi_split IMPLEMENTATION.
                  IMPORTING et_trf   = DATA(lt_trf)
                            et_dev   = DATA(lt_dev) ).
 
-    write_server_file( iv_path  = iv_dir && build_output_filename( iv_filename = iv_name
-                                                                     iv_suffix  = co_suffix_trf )
+    write_server_file( iv_path  = iv_dir_trf && build_output_filename( iv_filename = iv_name
+                                                                        iv_suffix  = co_suffix_trf )
                         it_lines = lt_trf ).
 
-    write_server_file( iv_path  = iv_dir && build_output_filename( iv_filename = iv_name
-                                                                     iv_suffix  = co_suffix_dev )
+    write_server_file( iv_path  = iv_dir_dev && build_output_filename( iv_filename = iv_name
+                                                                        iv_suffix  = co_suffix_dev )
                         it_lines = lt_dev ).
 
     DATA(lv_total) = lines( it_lines ) - 1.
