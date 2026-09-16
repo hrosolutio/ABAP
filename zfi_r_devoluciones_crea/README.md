@@ -77,6 +77,16 @@ los 10 valores de un día, `generate_keyr1` devuelve vacío y
 **Confirmar con el funcional que esta desviación del DF (secuencial de 1
 dígito, no 2) es aceptable.**
 
+## Concepto de búsqueda (`DFKKRK-KEYR2`)
+
+Pedido por Eva: para identificar fácilmente de qué fichero `_DEV` viene
+cada lote, `create_lot` rellena `DFKKRK-KEYR2` (concepto de búsqueda,
+`CHAR40`) con el **nombre del fichero** `_DEV` origen — en modo Server,
+el nombre real del fichero procesado; en modo Upload, el nombre de
+fichero extraído de `P_PATH`. Sin ningún criterio especial de recorte si
+el nombre no cupiera en 40 caracteres (los nombres reales observados
+caben enteros).
+
 ## Validación de posiciones y `ANZPO`
 
 `SELT1`='B'/`SELW1`=nº de documento es solo un **criterio de búsqueda**,

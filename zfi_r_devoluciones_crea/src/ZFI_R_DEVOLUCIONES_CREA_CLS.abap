@@ -166,13 +166,17 @@ CLASS lcl_devoluciones_crea DEFINITION.
 
       generate_keyr1 RETURNING VALUE(rv_keyr1) TYPE dfkkrk-keyr1,
 
-      create_lot IMPORTING it_items TYPE ty_t_item
+      create_lot IMPORTING it_items    TYPE ty_t_item
+                           iv_filename TYPE string
                  EXPORTING ev_keyr1 TYPE dfkkrk-keyr1
                            ev_ok    TYPE flag
                            ev_error TYPE string,
 
       transport_files IMPORTING is_file_log TYPE zfi_t_file_log
                                  iv_path     TYPE eseftappl,
+
+      get_filename_from_path IMPORTING iv_path            TYPE string
+                              RETURNING VALUE(rv_filename) TYPE string,
 
       show_log_msg.
 
@@ -301,7 +305,8 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
       RETURN.
     ENDIF.
 
-    create_lot( EXPORTING it_items = lt_items
+    create_lot( EXPORTING it_items    = lt_items
+                          iv_filename = get_filename_from_path( gv_path )
                 IMPORTING ev_keyr1 = DATA(lv_keyr1)
                           ev_ok    = DATA(lv_ok)
                           ev_error = DATA(lv_error) ).
@@ -341,7 +346,8 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
     DATA(lv_total_cent) = REDUCE i( INIT s = 0 FOR item IN lt_items NEXT s = s + item-importe_cent ).
     ls_file_log-importe = cent_to_str( lv_total_cent ).
 
-    create_lot( EXPORTING it_items = lt_items
+    create_lot( EXPORTING it_items    = lt_items
+                          iv_filename = iv_filename
                 IMPORTING ev_keyr1 = DATA(lv_keyr1)
                           ev_ok    = DATA(lv_ok)
                           ev_error = DATA(lv_error) ).
@@ -539,6 +545,12 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
     ls_dfkkrk-waers = gv_moneda.
     ls_dfkkrk-blart = `DV`.
     ls_dfkkrk-keyr1 = generate_keyr1( ).
+    " Concepto de busqueda (DFKKRK-KEYR2, CHAR40): nombre del fichero
+    " _DEV origen, para identificar facilmente de que fichero viene cada
+    " lote (pedido por Eva) - se corta a 40 caracteres si hiciera falta,
+    " sin ningun criterio especial (los nombres reales observados caben
+    " enteros).
+    ls_dfkkrk-keyr2 = iv_filename.
 
     CALL FUNCTION 'FKK_RLS_HDR_PREPARE'
       CHANGING
@@ -737,6 +749,19 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
           iv_param_v1   = condense( is_file_log-file_name(50) )
           iv_param_v2   = condense( is_file_log-file_name+50(50) ) ).
     ENDTRY.
+
+  ENDMETHOD.
+
+  METHOD get_filename_from_path.
+
+    SPLIT iv_path AT '\' INTO TABLE DATA(lt_win).
+    IF lines( lt_win ) > 1.
+      rv_filename = lt_win[ lines( lt_win ) ].
+      RETURN.
+    ENDIF.
+
+    SPLIT iv_path AT '/' INTO TABLE DATA(lt_unix).
+    rv_filename = lt_unix[ lines( lt_unix ) ].
 
   ENDMETHOD.
 

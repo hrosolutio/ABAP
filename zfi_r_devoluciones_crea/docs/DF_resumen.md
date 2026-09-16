@@ -603,6 +603,19 @@ que las demás rutas de este proyecto. Distinta de `RUTA_LOG_PROC` de
 `ZFI_R_ECOFI_SPLIT` (esa es para el ECOFI de entrada ya dividido, esta es
 para el `_DEV` ya consumido por este programa).
 
+## Concepto de búsqueda del lote (`DFKKRK-KEYR2`)
+
+Pedido por Eva (no viene del DF): para identificar fácilmente de qué
+fichero `_DEV` viene cada lote al mirarlo en `FP09`/`FQC0`, `create_lot`
+rellena `DFKKRK-KEYR2` ("Concepto de búsqueda", `CHAR40`, confirmado en
+pantalla) con el nombre del fichero `_DEV` origen. Se pasa como nuevo
+parámetro `IV_FILENAME` a `create_lot`: en modo Server es el nombre real
+del fichero listado por `EPS2_GET_DIRECTORY_LISTING`; en modo Upload se
+extrae de `P_PATH` con un `get_filename_from_path` (mismo patrón ya usado
+en `ZFI_R_ECOFI_SPLIT`). Sin recorte especial más allá del truncamiento
+natural de un `CHAR40` — los nombres reales observados (`YFRECAU_1239_
+260827.140156_DEV.txt`, 34 caracteres) caben enteros.
+
 ## Enfoque descartado: `RFKKKA00`/multicash (no usar, referencia solamente)
 
 Se dejó el trabajo hecho documentado por si resulta útil más adelante (p.ej.
