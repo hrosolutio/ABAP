@@ -35,6 +35,9 @@ concretos, no genéricos `string`:
   ... )` → `TYPE eseftappl`.
 - `zfi_cl_update_file_log->create_log( iv_filename = ... )` → `TYPE
   zfi_t_file_log-file_name`.
+- `zxx_cl_msg_logs->append_messages( iv_param_v1 = ... iv_param_v2 = ...
+  )` → tampoco es `string` (error real de activación al pasar una
+  variable `TYPE string` directa: "no es compatible con el tipo").
 
 Si no se sabe el tipo exacto de un parámetro de este estilo, **envolver el
 actual con `CONV #( ... )`** (sin indicar el tipo) para que se infiera del

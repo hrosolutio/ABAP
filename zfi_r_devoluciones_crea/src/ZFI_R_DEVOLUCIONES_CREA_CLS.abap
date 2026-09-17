@@ -764,8 +764,8 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
           iv_msg_type   = 'E'
           iv_msg_class  = 'ZFI_MC_001'
           iv_msg_number = '014'
-          iv_param_v1   = lv_param_v1
-          iv_param_v2   = lv_param_v2 ).
+          iv_param_v1   = CONV #( lv_param_v1 )
+          iv_param_v2   = CONV #( lv_param_v2 ) ).
     ENDTRY.
 
   ENDMETHOD.
