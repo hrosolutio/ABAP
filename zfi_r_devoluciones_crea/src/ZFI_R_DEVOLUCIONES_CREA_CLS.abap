@@ -172,7 +172,7 @@ CLASS lcl_devoluciones_crea DEFINITION.
                            ev_ok    TYPE flag
                            ev_error TYPE string,
 
-      transport_files IMPORTING is_file_log TYPE zfi_t_file_log
+      transport_files IMPORTING iv_filename TYPE string
                                  iv_path     TYPE eseftappl,
 
       get_filename_from_path IMPORTING iv_path            TYPE string
@@ -269,6 +269,9 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
 
       IF lt_lines IS INITIAL.
         WRITE: / 'No se ha podido leer:', lv_filename.
+        " Se mueve igualmente a error/, para no dejarlo en la carpeta de
+        " entrada y que se reintente sin fin en la siguiente ejecucion.
+        transport_files( iv_filename = lv_filename iv_path = gv_error_path ).
         CONTINUE.
       ENDIF.
 
@@ -326,6 +329,10 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
                                   IMPORTING es_file_log = DATA(ls_file_log) ).
       CATCH zfi_cl_cx.
         WRITE: / 'No se ha podido registrar en ZFI_T_FILE_LOG:', iv_filename.
+        " Se mueve igualmente a error/, para no dejarlo en la carpeta de
+        " entrada y que se reintente sin fin en la siguiente ejecucion
+        " (pedido explicito: mover SIEMPRE, se procese bien o mal).
+        transport_files( iv_filename = iv_filename iv_path = gv_error_path ).
         RETURN.
     ENDTRY.
 
@@ -337,7 +344,7 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
       ls_file_log-hora_processo  = sy-uzeit.
       ls_file_log-usuario        = sy-uname.
       UPDATE zfi_t_file_log FROM ls_file_log.
-      transport_files( is_file_log = ls_file_log iv_path = gv_error_path ).
+      transport_files( iv_filename = iv_filename iv_path = gv_error_path ).
       WRITE: / 'Sin líneas de extorno reconocibles:', iv_filename.
       RETURN.
     ENDIF.
@@ -362,12 +369,12 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
       " para dejar trazado el nº de lote de devoluciones creado.
       ls_file_log-file_name_header = lv_keyr1.
       UPDATE zfi_t_file_log FROM ls_file_log.
-      transport_files( is_file_log = ls_file_log iv_path = gv_backup_path ).
+      transport_files( iv_filename = iv_filename iv_path = gv_backup_path ).
       WRITE: / iv_filename, '-> lote', lv_keyr1, '(', lines( lt_items ), 'posiciones)'.
     ELSE.
       ls_file_log-status = 'ERROR'.
       UPDATE zfi_t_file_log FROM ls_file_log.
-      transport_files( is_file_log = ls_file_log iv_path = gv_error_path ).
+      transport_files( iv_filename = iv_filename iv_path = gv_error_path ).
       WRITE: / iv_filename, '-> ERROR:', lv_error.
     ENDIF.
 
@@ -739,15 +746,26 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
           EXPORTING
             i_sourcepath = CONV #( gv_root_path )
             i_targetpath = iv_path
-            i_filename   = CONV #( is_file_log-file_name ) ).
+            i_filename   = CONV #( iv_filename ) ).
 
       CATCH zfi_cl_cx_file.
+        " IV_FILENAME es TYPE string (no un campo de longitud fija como
+        " antes ZFI_T_FILE_LOG-FILE_NAME) - el acceso posicional +50(50)
+        " solo es valido si la cadena llega a esa longitud, o revienta en
+        " tiempo de ejecucion.
+        DATA(lv_param_v1) = iv_filename.
+        DATA(lv_param_v2) = ``.
+        IF strlen( iv_filename ) > 50.
+          lv_param_v1 = substring( val = iv_filename len = 50 ).
+          lv_param_v2 = substring( val = iv_filename off = 50 ).
+        ENDIF.
+
         go_msg_logs->append_messages(
           iv_msg_type   = 'E'
           iv_msg_class  = 'ZFI_MC_001'
           iv_msg_number = '014'
-          iv_param_v1   = condense( is_file_log-file_name(50) )
-          iv_param_v2   = condense( is_file_log-file_name+50(50) ) ).
+          iv_param_v1   = lv_param_v1
+          iv_param_v2   = lv_param_v2 ).
     ENDTRY.
 
   ENDMETHOD.

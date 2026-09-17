@@ -87,6 +87,23 @@ fichero extraído de `P_PATH`. Sin ningún criterio especial de recorte si
 el nombre no cupiera en 40 caracteres (los nombres reales observados
 caben enteros).
 
+## Modo Server: el fichero SIEMPRE se mueve, se procese bien o mal
+
+Pedido por Eva: para dejar la carpeta de entrada limpia de cara a la
+siguiente ejecución, un `_DEV` procesado **siempre** acaba movido —
+a `RUTA_PROC_DEV` si se creó el lote con éxito, o a `error/` (subcarpeta
+de `RUTA_LOG_DEV`, sin cambios) en cualquier otro caso: no se pudo leer
+el fichero, no tenía líneas de extorno reconocibles, no se pudo
+registrar en `ZFI_T_FILE_LOG`, o falló la creación del lote. Antes
+había casos (sobre todo el fallo de lectura y el fallo de registro en
+`ZFI_T_FILE_LOG`) en los que el programa solo escribía un mensaje y
+pasaba al siguiente fichero **sin moverlo**, dejándolo abandonado en la
+carpeta de entrada — se reintentaba (y volvía a fallar) en cada
+ejecución siguiente. `transport_files` ya no depende de que el registro
+en `ZFI_T_FILE_LOG` haya funcionado (antes recibía toda la fila
+`ZFI_T_FILE_LOG`, ahora solo el nombre de fichero), precisamente para
+poder llamarse en el caso en que ese registro falla.
+
 ## Validación de posiciones y `ANZPO`
 
 `SELT1`='B'/`SELW1`=nº de documento es solo un **criterio de búsqueda**,

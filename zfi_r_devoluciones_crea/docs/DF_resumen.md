@@ -616,6 +616,41 @@ en `ZFI_R_ECOFI_SPLIT`). Sin recorte especial más allá del truncamiento
 natural de un `CHAR40` — los nombres reales observados (`YFRECAU_1239_
 260827.140156_DEV.txt`, 34 caracteres) caben enteros.
 
+## El fichero SIEMPRE se mueve, se procese bien o mal
+
+Pedido por Eva (no viene del DF): a veces el fichero de entrada no se
+movía de la carpeta de entrada, dejándolo abandonado ahí y provocando
+que se reintentara (y volviera a fallar) en cada ejecución siguiente del
+modo Server. Revisando `PROCESS_DEV_FILE` y `EXECUTE_SERVER` se
+encontraron dos huecos reales donde el código escribía un mensaje y
+pasaba al siguiente fichero **sin llamar a `transport_files`**:
+
+1. `read_server_file` devuelve vacío (fichero no legible, o vacío de
+   verdad) — en `EXECUTE_SERVER`, antes de aislar `PROCESS_DEV_FILE`.
+2. `go_file_log->create_log` lanza `ZFI_CL_CX` (fallo registrando en
+   `ZFI_T_FILE_LOG`) — en `PROCESS_DEV_FILE`, el primer paso de todos.
+
+En el caso 2 en concreto, `transport_files` no podía llamarse aunque se
+quisiera: su parámetro era `IS_FILE_LOG TYPE ZFI_T_FILE_LOG` (usaba solo
+el campo `FILE_NAME`), y ese registro es precisamente el que había
+fallado, así que no había ninguna fila que pasarle. Se cambia el
+parámetro a `IV_FILENAME TYPE STRING` (el nombre de fichero solo, que sí
+está disponible siempre) para desacoplar "mover el fichero" de "haberlo
+podido registrar en `ZFI_T_FILE_LOG`", y se añaden las dos llamadas que
+faltaban (a `ERROR_PATH` en ambos casos). Ahora los 4 desenlaces posibles
+de un fichero de entrada (no legible, sin líneas de extorno, lote creado
+con éxito, lote fallido) mueven el fichero — a `RUTA_PROC_DEV` el único
+caso de éxito, a `error/` los otros tres.
+
+Efecto colateral del cambio de tipo del parámetro: el mensaje `014`
+partía `IS_FILE_LOG-FILE_NAME` (campo de longitud fija) en dos trozos de
+50 caracteres con acceso posicional directo (`FILE_NAME(50)`/
+`FILE_NAME+50(50)`), seguro porque un campo de longitud fija siempre
+tiene esa longitud (relleno de espacios si hace falta). Con
+`IV_FILENAME TYPE STRING` ese mismo acceso posicional revienta en
+tiempo de ejecución si la cadena es más corta que el offset pedido — se
+protege con un `IF STRLEN( IV_FILENAME ) > 50` antes de partirla.
+
 ## Enfoque descartado: `RFKKKA00`/multicash (no usar, referencia solamente)
 
 Se dejó el trabajo hecho documentado por si resulta útil más adelante (p.ej.
