@@ -161,6 +161,24 @@ PERFORM retrieve_data IN PROGRAM saplfkktrace
     USING 'X' 'X' 'X' 'X' 'X'.
 ```
 
+## `ASSIGN` dinámico a una tabla con línea de cabecera: hace falta `[]`
+
+`ASSIGN ('(PROGRAMA)NOMBRE_TABLA') TO <fs>` (con `<fs>` declarado `TYPE
+STANDARD TABLE`) revienta en tiempo de ejecución con el dump
+**`ASSIGN_TYPE_CONFLICT`** si `NOMBRE_TABLA` es una tabla interna **con
+línea de cabecera** (declaración al estilo antiguo, `OCCURS n` o
+similar — frecuente en programas estándar antiguos). Con línea de
+cabecera, el nombre a secas se refiere a la **cabecera** (una estructura,
+área de trabajo), no al cuerpo de la tabla — de ahí el choque de tipo
+contra un `FIELD-SYMBOL` que espera una tabla.
+
+**Regla:** para acceder al cuerpo de la tabla en un `ASSIGN` dinámico,
+añadir `[]` al final del nombre:
+
+```abap
+ASSIGN ('(PROGRAMA)NOMBRE_TABLA[]') TO <fs>.
+```
+
 ## Si GitHub falla
 
 Si la web de GitHub da error (incidencia de su lado, no del repo — se
