@@ -146,6 +146,21 @@ del parámetro formal (consultar el interfaz real en `SE37`, que puede no
 coincidir con ejemplos "de libro" — mismo módulo puede tener
 parámetros/tipos distintos según el sistema/kernel).
 
+## `PERFORM form(programa)` no vale dentro de una clase
+
+La sintaxis corta para invocar un FORM de otro programa,
+`PERFORM retrieve_data(saplfkktrace) USING ...`, da error de sintaxis
+**dentro de un método de una clase** (contexto OO): *"PERFORM form(prog)"
+is not supported in the OO context. Use "PERFORM form IN PROGRAM prog"*.
+Fuera de una clase (programa clásico) sí sería válida.
+
+**Regla:** en un método, usar siempre la forma larga:
+
+```abap
+PERFORM retrieve_data IN PROGRAM saplfkktrace
+    USING 'X' 'X' 'X' 'X' 'X'.
+```
+
 ## Si GitHub falla
 
 Si la web de GitHub da error (incidencia de su lado, no del repo — se
