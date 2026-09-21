@@ -113,10 +113,11 @@ docs/
 
 ## Pendiente
 
-- Probar en SE37 (aún no ejecutado).
-- Confirmar si el consumidor del servicio necesita también el texto de
-  los mensajes del report, o le basta con `E_RESULT`/`ES_ERROR` (ver
-  "Cómo funciona" más arriba).
+- **Probado en SE37 (21/09/2026)**: `ES_ERROR-DESCRIPTION` devuelve el
+  detalle real de FI-CA por documento/lote (lote de prueba
+  `260921CDI110`), igual que se ve a mano en `FP09N` — el mecanismo vía
+  memoria ABAP (`ZFI_R_DEVOLUCIONES2_CLS` → `ZFI_DEVOL2_ERRORS` →
+  `ZFI_FM_DEVOLUCIONES2`) queda validado en real, no solo en debug.
 - Autorización RFC del usuario técnico que vaya a llamar a este módulo
   sobre el grupo de función `ZFI_FG_DEVOL2`.
 - Alta del objeto en el sistema de transporte correspondiente al

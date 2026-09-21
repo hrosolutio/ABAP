@@ -1,6 +1,6 @@
 # ZFI_R_DEVOLUCIONES2 — Cierre y contabilización del lote de devolución de extornos (CDI_11)
 
-**Estado: reescrito sobre `FKK_RLS_CLOSE`/`FKK_RLS_POST_LOT`, circuito probado en DES.**
+**Estado: reescrito sobre `FKK_RLS_CLOSE`/`FKK_RLS_POST_LOT`, circuito probado en DES — incluido el detalle de error tipo FP09, confirmado en real.**
 Ya no es la copia de `ZFI_R_DEVOLUCIONES` — igual que pasó con el desarrollo 2
 (`zfi_r_devoluciones_crea/`), la sugerencia original de EVA de reutilizar el
 motor `RFKKKA00` resultó ser una lectura incorrecta del DF. Depurando `FP09`
@@ -120,9 +120,9 @@ docs/
 
 ## Pendiente
 
-- Probar una contabilización real con éxito — requiere un lote cuyos
-  documentos existan de verdad (Integración, o documentos reales de DES).
-  En DES, con el lote de prueba `260825CDI111`, el circuito completo
-  funciona bien pero `FKK_RLS_POST_LOT` falla (`NOT_VALID`) porque los
-  documentos del `_DEV` de prueba no existen — ver `docs/DF_resumen.md`.
+- **Detalle de error tipo FP09 confirmado en real** (21/09/2026, lote
+  `260921CDI110`): la RFC devolvió el desglose real de FI-CA
+  (`ES_ERROR-DESCRIPTION`) igual que lo haría `FP09N` a mano — la técnica
+  (`PERFORM retrieve_data` + `ASSIGN` dinámico + `MESSAGE...INTO`) queda
+  validada de punta a punta, no solo en debug aislado.
 - Alta del objeto en el sistema de transporte correspondiente al proyecto.
