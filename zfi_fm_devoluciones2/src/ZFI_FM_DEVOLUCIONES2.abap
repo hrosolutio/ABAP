@@ -51,6 +51,9 @@ FUNCTION zfi_fm_devoluciones2.
 * aquí y lo añadimos a ES_ERROR-DESCRIPTION junto al STARS de cada lote.
 * TY_POST_ERROR se declara igual (misma estructura, no hace falta que
 * sea el mismo tipo con nombre) que la de ZFI_R_DEVOLUCIONES2_CLS.
+* El nombre 'GT_POST_ERRORS' en EXPORT/IMPORT es la clave del dato
+* dentro de la memoria ABAP (no el nombre de la variable en cada lado,
+* que puede ser distinto) - tiene que coincidir en ambos.
 
   TYPES:
     BEGIN OF ty_post_error,
@@ -88,7 +91,7 @@ FUNCTION zfi_fm_devoluciones2.
     WITH SELECTION-TABLE lt_rspar
     AND RETURN.
 
-  IMPORT lt_post_errors FROM MEMORY ID 'ZFI_DEVOL2_ERRORS'.
+  IMPORT gt_post_errors = lt_post_errors FROM MEMORY ID 'ZFI_DEVOL2_ERRORS'.
   FREE MEMORY ID 'ZFI_DEVOL2_ERRORS'.
 
   LOOP AT it_keyr1 INTO DATA(ls_keyr1_out).

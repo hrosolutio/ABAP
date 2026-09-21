@@ -104,7 +104,7 @@ CLASS lcl_devoluciones2 IMPLEMENTATION.
         iv_msg_class  = 'ZFI_MC_001'
         iv_msg_number = '178' ).
       show_log_msg( ).
-      EXPORT gt_post_errors TO MEMORY ID 'ZFI_DEVOL2_ERRORS'.
+      EXPORT gt_post_errors = gt_post_errors TO MEMORY ID 'ZFI_DEVOL2_ERRORS'.
       RETURN.
     ENDIF.
 
@@ -117,7 +117,7 @@ CLASS lcl_devoluciones2 IMPLEMENTATION.
     " Deja siempre el detalle de esta ejecucion en memoria ABAP (aunque
     " este vacio) para que ZFI_FM_DEVOLUCIONES2 no se encuentre datos
     " residuales de una llamada anterior en la misma sesion.
-    EXPORT gt_post_errors TO MEMORY ID 'ZFI_DEVOL2_ERRORS'.
+    EXPORT gt_post_errors = gt_post_errors TO MEMORY ID 'ZFI_DEVOL2_ERRORS'.
 
   ENDMETHOD.
 

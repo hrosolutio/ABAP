@@ -161,6 +161,28 @@ PERFORM retrieve_data IN PROGRAM saplfkktrace
     USING 'X' 'X' 'X' 'X' 'X'.
 ```
 
+## `EXPORT`/`IMPORT ... TO/FROM MEMORY` sin nombre no vale dentro de una clase
+
+Igual que `PERFORM form(programa)` (ver arriba), la forma corta
+`EXPORT variable TO MEMORY ID '...'` da error de sintaxis **dentro de un
+método de una clase** (contexto OO): *"EXPORT var_1 ... var_n TO
+memory" is not supported in the OO context. Use "EXPORT name_1 = var_1
+... name_n = var_n TO memory" instead*. Fuera de una clase (programa o
+módulo de función clásico) sí sería válida.
+
+**Regla:** en un método, usar siempre la forma con nombre:
+
+```abap
+EXPORT gt_datos = gt_datos TO MEMORY ID 'MI_ID'.
+```
+
+El nombre (`gt_datos` a la izquierda del `=`) es la **clave del dato**
+dentro de la memoria, no tiene por qué coincidir con el nombre de la
+variable — pero si se lee desde otro programa/módulo de función con
+`IMPORT`, ese nombre sí tiene que coincidir en los dos sitios (`IMPORT
+gt_datos = lv_variable_local FROM MEMORY ID 'MI_ID'.`), aunque la
+variable de destino se llame distinto.
+
 ## `ASSIGN` dinámico a una tabla con línea de cabecera: hace falta `[]`
 
 `ASSIGN ('(PROGRAMA)NOMBRE_TABLA') TO <fs>` (con `<fs>` declarado `TYPE
