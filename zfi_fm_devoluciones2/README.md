@@ -37,12 +37,20 @@ Se decidió así (en vez de extraer la lógica a una clase global
 compartida) para no tocar código ya probado en DES: el report se queda
 exactamente igual, y este RFC es una capa fina por encima.
 
-**No se captura el listado de mensajes** (`ZXX_CL_MSG_LOGS`) que ve quien
-ejecuta el report a mano — el detalle de qué ha pasado en cada lote se
-construye a partir de `DFKKRK-STARS`, no parseando el texto de esos
-mensajes. Si en el futuro hiciera falta también ese texto tal cual,
-habría que capturar el listado con `SUBMIT ... EXPORTING LIST TO MEMORY`
-+ `LIST_FROM_MEMORY`.
+**Detalle de error tipo FP09**: cuando algún lote no llega a
+contabilizarse, además del `STARS` resultante, `ES_ERROR-DESCRIPTION`
+incluye el mismo desglose de mensajes por documento que muestra la FP09
+(ej. *"El documento 484000019565 no existe. Corrija la entrada"*). Ese
+detalle lo captura `ZFI_R_DEVOLUCIONES2_CLS` en el momento de llamar a
+`FKK_RLS_POST_LOT` (ver
+[`zfi_r_devoluciones2/docs/DF_resumen.md`](../zfi_r_devoluciones2/docs/DF_resumen.md)
+para la investigación completa y la técnica usada — sin tocar código
+estándar) y lo deja en **memoria ABAP** al terminar (`MEMORY ID
+'ZFI_DEVOL2_ERRORS'`); esta RFC lo importa justo después del
+`SUBMIT ... AND RETURN` (memoria ABAP sí cruza esa frontera de sesión
+interna, a diferencia de los datos globales de un grupo de función, que
+es donde vive el detalle original y por lo que no se puede leer
+directamente desde aquí).
 
 ## Interfaz del servicio
 
@@ -61,7 +69,7 @@ cuáles no está en `ES_ERROR-DESCRIPTION`.
 |---|---|---|---|---|
 | `IT_KEYR1` | Import | `ZFI_T_KEYR1` (tipo de tabla DDIC, ver instalación) | Sí | Lote(s) a cerrar/contabilizar |
 | `E_RESULT` | Export | `CHAR3` | — | `OK` solo si **todos** los lotes de `IT_KEYR1` terminaron contabilizados (`DFKKRK-STARS = '5'`); `NOK` si al menos uno no |
-| `ES_ERROR` | Export | `ZFI_DE_XX_WS_ERROR` (`CODE`, `DESCRIPTION`) | — | Si `E_RESULT = NOK`: `CODE = 'PARAM_MISSING'` (`IT_KEYR1` vacío) o `CODE = 'LOTES_INCOMPLETOS'` (`DESCRIPTION` lista, lote a lote, cuáles no se contabilizaron y por qué — `STARS` actual, o que no existe en `DFKKRK`) |
+| `ES_ERROR` | Export | `ZFI_DE_XX_WS_ERROR` (`CODE`, `DESCRIPTION`) | — | Si `E_RESULT = NOK`: `CODE = 'PARAM_MISSING'` (`IT_KEYR1` vacío) o `CODE = 'LOTES_INCOMPLETOS'` (`DESCRIPTION` lista, lote a lote, cuáles no se contabilizaron, el `STARS` actual (o que no existe en `DFKKRK`), y el detalle de mensajes por documento tipo FP09 si `FKK_RLS_POST_LOT` llegó a fallar) |
 
 Si `IT_KEYR1` viene vacío, `E_RESULT = 'NOK'` con
 `ES_ERROR-CODE = 'PARAM_MISSING'` (no se hace ningún `SUBMIT`).

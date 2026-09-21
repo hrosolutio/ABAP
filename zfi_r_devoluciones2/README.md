@@ -33,19 +33,50 @@ descartada).
 Por cada `KEYR1` indicado que exista realmente en `DFKKRK`:
 
 1. Lee `DFKKRK-STARS` del lote (estado real en FI-CA).
-2. Si está abierto (`STARS` en blanco) → `FKK_RLS_CLOSE`.
-3. Si está cerrado sin contabilizar (`STARS = 1`, incluido justo después
-   de cerrarlo en el paso anterior) → `FKK_RLS_POST_LOT`.
-4. Si ya está contabilizado del todo (`STARS = 5`) → no se toca.
-5. Cualquier otro `STARS` (`2`/`3`/`4`/`6`/`9`, contabilización
-   incompleta/con incidencias/archivado) → no se toca, se deja constancia
-   en pantalla para revisión manual — **sin reintento ni corrección
-   automática**.
+2. Si ya está contabilizado del todo (`STARS = 5`) → no se toca.
+3. Si está abierto (`STARS` en blanco) → `FKK_RLS_CLOSE`.
+4. Cualquier otro caso (recién cerrado en el paso anterior, ya estaba
+   cerrado sin contabilizar, o cualquier estado intermedio/con
+   incidencias) → se llama a `FKK_RLS_POST_LOT` igualmente — **no se
+   filtra por `STARS` antes**, se deja que el propio FM decida si el
+   lote es válido y devuelva su error estándar si no lo es (así ese
+   error llega también al detalle capturado tipo FP09, ver más abajo) —
+   **sin reintento ni corrección automática** en ningún caso.
 
 Parámetros de selección: **`S_KEYR1`** (obligatorio — nº de lote(s) a
 tratar) y **`P_SIMU`** (checkbox — si se marca, el programa solo escribe
 el `STARS` actual de cada lote indicado, sin cerrar ni contabilizar nada
 de verdad).
+
+## Detalle de error tipo FP09 (para `ZFI_FM_DEVOLUCIONES2`)
+
+Cuando `FKK_RLS_POST_LOT` falla, este programa captura el **mismo
+detalle de mensajes por documento que muestra la FP09** (el popup que
+sale al pulsar "Contabilizar" cuando hay errores, ej. *"El documento
+484000019565 no existe. Corrija la entrada"*) — sin tocar ni una línea
+de código estándar ni reconstruir la validación por nuestra cuenta.
+
+Técnica (confirmada por depuración real, ver `docs/DF_resumen.md`):
+`FKK_RLS_POST_LOT` llama internamente al FM público `FKK_TRACE_INIT`,
+que crea un objeto `LCL_MESSENGER` (clase local del programa estándar
+`SAPLFKKTRACE`) donde se van acumulando todos los mensajes de
+validación de cada documento. Ese objeto (`GDBG`) es invisible desde
+fuera de `SAPLFKKTRACE`, pero ese mismo programa tiene un FORM público,
+`RETRIEVE_DATA`, que sí podemos invocar desde fuera
+(`PERFORM retrieve_data IN PROGRAM saplfkktrace USING ...`, dentro de la
+misma sesión interna, justo después de `FKK_RLS_POST_LOT`) y que vuelca
+el filtro de mensajes que le pidamos (aquí, solo errores) a la tabla
+global `T_MESSENGERDATA` — de ahí se lee con `ASSIGN` dinámico
+(`'(SAPLFKKTRACE)T_MESSENGERDATA[]'`, el `[]` porque es una tabla con
+línea de cabecera) y, línea a línea, se reconstruye el texto final con
+`MESSAGE ID ... TYPE ... NUMBER ... WITH ... INTO`, usando el
+`ID`/`TY`/`NR`/`V1-V4` de cada línea (`TYPE dfkktracep`, estructura DDIC
+real, no un tipo local invisible).
+
+El resultado (`KEYR1` + texto) se deja en memoria ABAP
+(`MEMORY ID 'ZFI_DEVOL2_ERRORS'`) al terminar `EXECUTE` — `ZFI_FM_DEVOLUCIONES2`
+lo importa después de su `SUBMIT ... AND RETURN` (ver ese README) y lo
+añade a `ES_ERROR-DESCRIPTION`.
 
 ## Mensajes (`ZFI_MC_001`)
 
@@ -60,7 +91,6 @@ no `WRITE` con texto suelto:
 | `180` | E | Lote &1: error en &2 (&3) |
 | `181` | S | Lote &1: cerrado y contabilizado |
 | `182` | S | Lote &1: ya estaba contabilizado, nada que hacer |
-| `183` | I | Lote &1: STARS=&2, revisar a mano en FP09 |
 
 ## Contenido del repositorio
 

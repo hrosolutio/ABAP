@@ -40,18 +40,30 @@ FUNCTION zfi_fm_devoluciones2.
 * = 'OK' ya se sabe que todo se contabilizó, y con 'NOK' el detalle
 * está en ES_ERROR).
 *
-* No se captura el listado de mensajes del report (ZXX_CL_MSG_LOGS) -
-* el detalle textual de qué ha pasado en cada lote se construye aquí a
-* partir de DFKKRK-STARS, no parseando el texto de esos mensajes. Si en
-* el futuro hiciera falta el texto tal cual del report, habría que
-* capturar el listado con SUBMIT ... EXPORTING LIST TO MEMORY +
-* LIST_FROM_MEMORY.
+* Detalle de error tipo FP09: además de STARS, ZFI_R_DEVOLUCIONES2_CLS
+* captura (cuando FKK_RLS_POST_LOT falla) el mismo detalle de mensajes
+* por documento que muestra la FP09 y lo deja en memoria ABAP
+* (MEMORY ID 'ZFI_DEVOL2_ERRORS') al terminar su EXECUTE. Como el
+* SUBMIT ... AND RETURN de abajo abre una sesión interna nueva, no
+* podemos leer ahí los datos globales de SAPLFKKTRACE directamente
+* (por eso el report hace el trabajo y nos deja el resultado ya
+* montado en memoria ABAP, que sí cruza esa frontera) - lo importamos
+* aquí y lo añadimos a ES_ERROR-DESCRIPTION junto al STARS de cada lote.
+* TY_POST_ERROR se declara igual (misma estructura, no hace falta que
+* sea el mismo tipo con nombre) que la de ZFI_R_DEVOLUCIONES2_CLS.
 
-  DATA: lt_rspar      TYPE STANDARD TABLE OF rsparams,
-        ls_rspar      TYPE rsparams,
-        lv_fail_count TYPE i,
-        lv_fail_desc  TYPE string,
-        lv_stars      TYPE dfkkrk-stars.
+  TYPES:
+    BEGIN OF ty_post_error,
+      keyr1   TYPE dfkkrk-keyr1,
+      message TYPE string,
+    END OF ty_post_error.
+
+  DATA: lt_rspar       TYPE STANDARD TABLE OF rsparams,
+        ls_rspar       TYPE rsparams,
+        lv_fail_count  TYPE i,
+        lv_fail_desc   TYPE string,
+        lv_stars       TYPE dfkkrk-stars,
+        lt_post_errors TYPE STANDARD TABLE OF ty_post_error.
 
   CLEAR: e_result, es_error.
 
@@ -76,6 +88,9 @@ FUNCTION zfi_fm_devoluciones2.
     WITH SELECTION-TABLE lt_rspar
     AND RETURN.
 
+  IMPORT lt_post_errors FROM MEMORY ID 'ZFI_DEVOL2_ERRORS'.
+  FREE MEMORY ID 'ZFI_DEVOL2_ERRORS'.
+
   LOOP AT it_keyr1 INTO DATA(ls_keyr1_out).
 
     CLEAR lv_stars.
@@ -88,6 +103,10 @@ FUNCTION zfi_fm_devoluciones2.
     ELSEIF lv_stars <> co_stars_posted.
       lv_fail_count = lv_fail_count + 1.
       lv_fail_desc  = lv_fail_desc && |Lote { ls_keyr1_out-keyr1 }: STARS={ lv_stars } (no contabilizado). |.
+
+      LOOP AT lt_post_errors INTO DATA(ls_post_error) WHERE keyr1 = ls_keyr1_out-keyr1.
+        lv_fail_desc = lv_fail_desc && |{ ls_post_error-message }. |.
+      ENDLOOP.
     ENDIF.
 
   ENDLOOP.

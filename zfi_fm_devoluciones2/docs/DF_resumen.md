@@ -62,9 +62,8 @@ parsear ese texto (frágil: depende del wording exacto de los mensajes
 `ZFI_MC_001`), el RFC relee directamente `DFKKRK-STARS` de cada
 `KEYR1` después del `SUBMIT` — es el mismo campo que usa el propio
 `LCL_DEVOLUCIONES2` internamente para decidir qué hacer con cada lote
-(`CO_STARS_CLOSED = '1'`, `CO_STARS_POSTED = '5'`, ver el código de
-`ZFI_R_DEVOLUCIONES2_CLS`), así que es una fuente de verdad ya validada,
-no una interpretación nueva.
+(`CO_STARS_POSTED = '5'`, ver el código de `ZFI_R_DEVOLUCIONES2_CLS`),
+así que es una fuente de verdad ya validada, no una interpretación nueva.
 
 ### `E_RESULT`/`ES_ERROR`: mismo patrón que los otros RFCs, adaptado a varios lotes
 
@@ -95,13 +94,43 @@ estuviera ya ahí — se quitó por redundante (con `'OK'` ya se sabe que
 todo se contabilizó; con `'NOK'` el detalle está en
 `ES_ERROR-DESCRIPTION`).
 
-**Explícitamente fuera de esta versión**: el texto de los mensajes
-(`ZXX_CL_MSG_LOGS`) que ve quien ejecuta el report a mano. Si un
-consumidor del servicio necesitara ese detalle (p.ej. el motivo exacto
-de un fallo en `FKK_RLS_POST_LOT`, no solo "no llegó a `STARS=5`"),
-habría que capturar el listado del `SUBMIT` con `EXPORTING LIST TO
-MEMORY` + `LIST_FROM_MEMORY` y devolverlo como texto adicional — no
-implementado todavía porque no se ha confirmado que haga falta.
+### Detalle de error tipo FP09 (petición posterior de Eva)
+
+Petición explícita: que esta RFC "devuelva el error tal y como lo hace
+la FP09" — el desglose por documento que se ve al pulsar "Contabilizar"
+cuando el lote tiene errores, no solo "no llegó a `STARS=5`". Investigado
+a fondo (ver
+[`../zfi_r_devoluciones2/docs/DF_resumen.md`](../zfi_r_devoluciones2/docs/DF_resumen.md),
+sección "Detalle de error tipo FP09") y resuelto sin tocar código
+estándar ni reconstruir la validación por nuestra cuenta.
+
+**No se captura vía `SUBMIT ... EXPORTING LIST TO MEMORY`** (la opción
+que se había apuntado aquí originalmente, pensada para el texto de
+`ZXX_CL_MSG_LOGS`) — la vía real usada es distinta y más rica: dentro de
+`ZFI_R_DEVOLUCIONES2_CLS`, en el momento de llamar a `FKK_RLS_POST_LOT`,
+se captura el detalle de mensajes por documento del propio FI-CA
+(`LCL_MESSENGER`/`GDBG` de `SAPLFKKTRACE`, vía el FORM público
+`RETRIEVE_DATA` + `ASSIGN` dinámico + `MESSAGE...INTO`) y se deja en
+**memoria ABAP** (`EXPORT ... TO MEMORY ID 'ZFI_DEVOL2_ERRORS'`) al
+terminar `EXECUTE`.
+
+**Por qué memoria ABAP y no otra cosa**: los datos globales de
+`SAPLFKKTRACE` (`GDBG`/`T_MESSENGERDATA`) solo existen dentro de la
+sesión interna donde se llamó a `FKK_RLS_POST_LOT` — que aquí es la
+sesión interna abierta por el `SUBMIT ... AND RETURN`, no la de esta
+RFC. Al volver del `SUBMIT`, esos datos ya no son alcanzables. Memoria
+ABAP (`EXPORT`/`IMPORT ... MEMORY ID`), en cambio, está pensada
+precisamente para cruzar esa frontera dentro de la misma sesión externa,
+así que este RFC hace, justo después del `SUBMIT`:
+
+```abap
+IMPORT lt_post_errors FROM MEMORY ID 'ZFI_DEVOL2_ERRORS'.
+FREE MEMORY ID 'ZFI_DEVOL2_ERRORS'.
+```
+
+y añade el texto de cada línea (`KEYR1` + mensaje) que corresponda a
+cada lote fallido dentro de `ES_ERROR-DESCRIPTION`, a continuación del
+`STARS` resultante.
 
 ## Objetos DDIC nuevos
 
@@ -121,11 +150,9 @@ de `ZFI_FM_PAYLOT_REVERSE`/`ZFI_FM_PAYMENT_LOT_CLARIFY2`.
 
 ## Pendiente / a definir con el cliente
 
-- Probar en SE37 contra uno o varios lotes reales (aún no ejecutado) —
+- Probar en SE37 contra uno o varios lotes reales, ahora ya con el
+  detalle tipo FP09 en `ES_ERROR-DESCRIPTION` (aún no ejecutado) —
   **ojo, no hay simulación: la llamada cierra/contabiliza de verdad**.
-- Confirmar si el consumidor del servicio necesita el texto de los
-  mensajes del report además de `E_RESULT`/`ES_ERROR` (ver "Cómo se
-  determina el resultado" más arriba).
 - Autorización RFC del usuario técnico sobre `ZFI_FG_DEVOL2`.
 - Alta del objeto en el sistema de transporte correspondiente al
   proyecto (junto con los 2 objetos DDIC nuevos).

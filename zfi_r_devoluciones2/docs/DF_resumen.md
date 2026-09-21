@@ -112,15 +112,120 @@ Pendiente probar una contabilización real con éxito (en Integración, o
 con documentos que sí existan en DES).
 
 `FKK_RLS_POST_LOT` no devuelve el detalle de qué documentos fallaron por
-parámetro (no hay `TABLES` de mensajes en la firma) — el desglose que se
-ve en pantalla en `FP09` sale de algún sitio aparte (probablemente log de
-aplicación, quizá vía métodos como `GET_ERR_ITEMS_TABLE`/`GET_LASTERROR`
-de `LCL_RLOT`, sin confirmar). **Decisión de gestión de errores**: no
-merece la pena perseguir el detalle — igual que el resto del código de
-este proyecto (`ev_error` genérico con el nombre de la FM y `sy-subrc`),
-si `FKK_RLS_POST_LOT` no devuelve `0` se marca `ERROR` sin más detalle;
-quien necesite ver qué documento en concreto falló puede entrar a `FP09`
-con el nº de lote.
+parámetro (no hay `TABLES` de mensajes en la firma). **Esto se ha
+resuelto** (petición posterior de Eva, para `ZFI_FM_DEVOLUCIONES2`) — ver
+la sección "Detalle de error tipo FP09" más abajo para la investigación
+completa y la técnica final. `ZFI_R_DEVOLUCIONES2_CLS` ya no se limita al
+`sy-subrc`/nombre de la FM genérico: cuando `FKK_RLS_POST_LOT` falla,
+captura el mismo desglose por documento que se ve en `FP09`.
+
+## Detalle de error tipo FP09 (petición posterior de Eva, para `ZFI_FM_DEVOLUCIONES2`)
+
+Petición explícita: que la RFC `ZFI_FM_DEVOLUCIONES2` "devuelva el error
+tal y como lo hace la FP09" — el desglose por documento que se ve al
+pulsar "Contabilizar" cuando el lote tiene errores (ej. *"El documento
+484000019565 no existe. Corrija la entrada"*, uno por línea). Con tres
+restricciones explícitas del cliente: no reconstruir la validación por
+nuestra cuenta (duplicar la lógica de `DFKKOP` sería frágil y quedaría
+desincronizado de futuros cambios estándar), no modificar código
+estándar (ni un solo parámetro), y no dejarlo como estaba (con solo
+`sy-subrc` + nombre de la FM).
+
+### Investigación (varias vías descartadas antes de encontrar la buena)
+
+- **No es el Log de Aplicación estándar** (`SLG1`/`BAL_LOG_*`): un
+  breakpoint en `BAL_LOG_MSG_ADD` nunca se disparó al reproducir el error
+  en `FP09`.
+- El mecanismo real es una **clase local** `LCL_MESSENGER` (programa
+  `SAPLFKKTRACE`, grupo de función `FKKTRACE`), instanciada como objeto
+  global `GDBG`. Va acumulando los mensajes de validación con un método
+  `catch(...)` (parámetros por defecto `sy-msgid`/`sy-msgty`/`sy-msgno`/
+  `sy-msgv1-4`, pensado para llamarse justo después de un `MESSAGE`).
+  **`LCL_MESSENGER` es invisible fuera de `SAPLFKKTRACE`** — es una clase
+  local de verdad, no hay forma soportada (reflexión, `CREATE OBJECT`
+  dinámico...) de referenciarla desde otro programa. Crear una clase
+  local propia con la misma pinta no sirve: nunca recibiría los datos
+  reales, porque el código de SAP tiene el `GDBG` original cableado.
+- `LCL_MESSENGER->store()` persiste a las tablas transparentes
+  `DFKKTRACEK`/`DFKKTRACEP`, pero solo si `INIT` recibe
+  `i_store_on_commit` no vacío — **confirmado por depuración que tanto en
+  el "Contabilizar" manual de Eva en `FP09` como en nuestra propia llamada
+  a `FKK_RLS_POST_LOT`, ese parámetro llega en blanco**, así que nunca se
+  guarda ahí (solo había un registro antiguo, de julio 2024, sin relación).
+- El FM público `FKK_TRACE_INIT` (el que crea `GDBG`) hace `FREE gdbg.
+  CREATE OBJECT gdbg...` **incondicionalmente** al principio — y por
+  depuración se confirmó que **`FKK_RLS_POST_LOT` lo llama internamente
+  él solo**, con su propio `i_store_on_commit` en blanco, sea quien sea
+  el llamador. Llamarlo nosotros antes con `i_store_on_commit = 'X'` no
+  sirve de nada: en cuanto arranca `FKK_RLS_POST_LOT`, tira nuestro
+  `GDBG` a la basura y crea uno nuevo desde cero, otra vez en blanco.
+- Los 11 FMs del grupo `FKKTRACE` se revisaron uno a uno: ninguno exporta
+  la tabla de mensajes en memoria como dato — `FKK_TRACE_SHOW`/
+  `FKK_TRACE_LIST` solo hacen `CALL SCREEN` (popup interactivo), inútil
+  para una RFC sin pantalla.
+
+### La solución que sí funciona (confirmada por depuración, cero cambios en estándar)
+
+El programa `SAPLFKKTRACE` (donde vive `GDBG`) tiene un **FORM público**,
+`RETRIEVE_DATA`, que es el que rellena la pantalla 100 de
+`FKK_TRACE_SHOW` — y ese FORM sí se puede invocar desde fuera:
+
+1. **Llamar `FKK_RLS_POST_LOT`** como siempre (con `i_xfull_trace =
+   abap_true`) — internamente arranca `FKK_TRACE_INIT`/`GDBG` y lo va
+   rellenando con cada mensaje de validación.
+2. **Justo después, en la misma sesión interna** (imprescindible — ver
+   más abajo), invocar el FORM:
+   ```abap
+   PERFORM retrieve_data IN PROGRAM saplfkktrace
+       USING abap_true space space space space.   " solo errores
+   ```
+   (dentro de un método de clase hace falta la forma larga
+   `IN PROGRAM`, no `retrieve_data(saplfkktrace)` — ver `CLAUDE.md`).
+   Esto ejecuta el código en el contexto de `SAPLFKKTRACE`, ve el `GDBG`
+   real, llama a `gdbg->filter_messages` y deja el resultado filtrado en
+   la tabla global `T_MESSENGERDATA`.
+3. **Leer esa tabla global desde fuera** con `ASSIGN` dinámico. Tiene
+   línea de cabecera, así que hace falta el `[]` para referirse al
+   cuerpo, no a la cabecera (dump real `ASSIGN_TYPE_CONFLICT` sin el
+   `[]` — ver `CLAUDE.md`):
+   ```abap
+   FIELD-SYMBOLS: <msgtab> TYPE STANDARD TABLE.
+   ASSIGN ('(SAPLFKKTRACE)T_MESSENGERDATA[]') TO <msgtab>.
+   ```
+4. Cada línea trae un componente `DATA` **`TYPE dfkktracep`** — estructura
+   DDIC real (no un tipo local invisible), con campos `ID`/`TY`/`NR`/
+   `V1`-`V4` (el equivalente a `msgid`/`msgty`/`msgno`/`msgv1-4`) más
+   `SRC`/`INF`. Para las líneas de error (`TY = 'E'`) `INF` viene vacío
+   (solo lo trae relleno en líneas de traza/paso interno) — el texto hay
+   que reconstruirlo con la sentencia clásica `MESSAGE ... INTO`:
+   ```abap
+   MESSAGE ID <ls_data>-id TYPE <ls_data>-ty NUMBER <ls_data>-nr
+           WITH <ls_data>-v1 <ls_data>-v2 <ls_data>-v3 <ls_data>-v4
+           INTO DATA(lv_text).
+   ```
+   **Verificado carácter a carácter contra la pantalla real de la FP09**
+   (ej. `lv_text` = *"La diferencia del importe de 147,78 está fuera de
+   la tolerancia 0,00 EUR"*, idéntico a la fila correspondiente del popup
+   de Eva).
+
+Implementado en `ZFI_R_DEVOLUCIONES2_CLS`, método privado
+`get_post_lot_errors` (llamado desde `process_lot` cuando
+`FKK_RLS_POST_LOT` falla) — la llamada a `retrieve_data` ya pide solo
+errores (`i_error = abap_true`, el resto en blanco), así que no hace
+falta filtrar `TY` otra vez en el bucle.
+
+**Por qué esto no vale para la RFC directamente**: `ZFI_FM_DEVOLUCIONES2`
+no llama a `FKK_RLS_POST_LOT` — hace `SUBMIT zfi_r_devoluciones2 ... AND
+RETURN` (ver `../zfi_fm_devoluciones2/docs/DF_resumen.md`), y eso abre una
+**sesión interna nueva**: los datos globales de un grupo de función (como
+`GDBG`/`T_MESSENGERDATA`) no sobreviven al volver de esa sesión a la RFC.
+Por eso la captura tiene que pasar aquí, dentro de este programa (en el
+mismo momento en que se llama a `FKK_RLS_POST_LOT`), y el resultado se dejar
+en **memoria ABAP** (`EXPORT ... TO MEMORY ID 'ZFI_DEVOL2_ERRORS'` al
+final de `execute`, siempre, aunque esté vacía — para no arrastrar
+resultados de una llamada anterior en la misma sesión) — memoria ABAP sí
+cruza la frontera de `SUBMIT`/`CALL TRANSACTION`, a diferencia de los
+datos globales de un grupo de función.
 
 ## Fuera de alcance (de este programa)
 
@@ -177,28 +282,33 @@ Estado real del lote en FI-CA, con ayuda de búsqueda confirmada por
 
 | `STARS` | Significado | Acción |
 |---|---|---|
-| (blanco) | Aún se pueden añadir devoluciones (abierto) | `FKK_RLS_CLOSE` |
-| `1` | Ya no se pueden modificar devoluciones (cerrado) | `FKK_RLS_POST_LOT` |
-| `2` | Contabilizaciones planificadas | no se toca |
-| `3` | Contabilizaciones incompletas | no se toca |
-| `4` | Contabilizaciones realizadas: se requiere trabajo de repaso | no se toca |
+| (blanco) | Aún se pueden añadir devoluciones (abierto) | `FKK_RLS_CLOSE`, y luego `FKK_RLS_POST_LOT` |
 | `5` | Contabilizaciones realizadas | no se toca (ya está hecho) |
-| `6` | Creación automática cancelada | no se toca |
-| `9` | Lote archivado | no se toca |
+| `1` (cerrado) / `2`/`3`/`4`/`6`/`9` (intermedio o con incidencias) | cualquier otro estado | `FKK_RLS_POST_LOT` igualmente |
 
 Confirmado con datos reales: `260825CDI110` (se intentó contabilizar y
 falló para casi todos los documentos, DES) quedó con `STARS = 3`
 ("incompletas" — encaja). `260825CDI111` (solo se cerró, nunca se
 contabilizó) quedó con `STARS = 1`.
 
+**Decisión (revisada tras añadir el detalle tipo FP09, ver más abajo)**:
+ya no se filtra por `STARS` antes de llamar a `FKK_RLS_POST_LOT` — antes,
+los estados intermedios/con incidencias (`2`/`3`/`4`/`6`/`9`) se dejaban
+sin tocar ("revisión manual"); ahora se intenta contabilizar igual en
+todos los casos salvo `STARS = 5` (ya contabilizado), dejando que sea el
+propio `FKK_RLS_POST_LOT` quien decida si el lote es válido — así su
+error estándar (y el detalle por documento que capturamos) llega también
+para esos casos, en vez de quedarse en un simple "revisar a mano".
+
 **Implementado** en `ZFI_R_DEVOLUCIONES2_CLS` (`lcl_devoluciones2`):
 `execute` resuelve `S_KEYR1` (obligatorio en pantalla) contra `DFKKRK`
 (`SELECT keyr1 ... WHERE keyr1 IN gr_keyr1`, para quedarse solo con los
-que existen de verdad) y `process_lot` decide la acción según `STARS` con
-la tabla de arriba. Sin gestión de errores por detalle (ver antes) —
-`WRITE` del `KEYR1` + el error genérico de la FM que falle. Parámetro
-`P_SIMU` (pantalla de selección) para solo mostrar el `STARS` de cada
-lote indicado sin tocar nada.
+que existen de verdad) y `process_lot` decide la acción según la tabla de
+arriba. Cuando `FKK_RLS_POST_LOT` falla, además del mensaje genérico
+(`WRITE` del `KEYR1` + nombre de la FM + `sy-subrc`), captura el detalle
+por documento tipo FP09 (ver sección siguiente). Parámetro `P_SIMU`
+(pantalla de selección) para solo mostrar el `STARS` de cada lote
+indicado sin tocar nada.
 
 **Probado en DES** (`S_KEYR1 = 260825CDI111`, lote real ya cerrado):
 - Con `P_SIMU`: `260825CDI111 -> STARS actual: 1 (simulación, no se toca
