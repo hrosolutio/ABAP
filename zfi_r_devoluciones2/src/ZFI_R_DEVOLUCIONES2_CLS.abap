@@ -40,13 +40,14 @@
 * T_MESSENGERDATA[] + MESSAGE...INTO por cada linea TY='E') y se deja en
 * GT_POST_ERRORS; se muestra tambien en pantalla (SHOW_LOG_MSG, con
 * WRITE directo - son mensajes dinamicos de FI-CA, no un numero de
-* mensaje fijo de ZFI_MC_001) y al final de EXECUTE se exporta siempre
-* a memoria ABAP (MEMORY ID 'ZFI_DEVOL2_ERRORS', ver EXPORT_POST_ERRORS)
-* para que ZFI_FM_DEVOLUCIONES2 (que llama a este report via
-* SUBMIT...AND RETURN, una sesion interna distinta donde los datos
-* globales de SAPLFKKTRACE ya no son alcanzables) pueda importarlo
-* despues y montar ES_ERROR-DESCRIPTION con el detalle real, no solo
-* con el STARS resultante.
+* mensaje fijo de ZFI_MC_001) y, solo si nos ha llamado
+* ZFI_FM_DEVOLUCIONES2 (senal P_RFC, ver ZFI_R_DEVOLUCIONES2_EVE), al
+* final de EXECUTE se exporta a memoria ABAP (MEMORY ID
+* 'ZFI_DEVOL2_ERRORS', ver EXPORT_POST_ERRORS) para que esa RFC (que
+* llama a este report via SUBMIT...AND RETURN, una sesion interna
+* distinta donde los datos globales de SAPLFKKTRACE ya no son
+* alcanzables) pueda importarlo despues y montar ES_ERROR-DESCRIPTION
+* con el detalle real, no solo con el STARS resultante.
 CLASS lcl_devoluciones2 DEFINITION.
   PUBLIC SECTION.
 
@@ -238,13 +239,17 @@ CLASS lcl_devoluciones2 IMPLEMENTATION.
 
   METHOD export_post_errors.
 
-    " SY-CALLD no distingue de forma fiable "llamado por SUBMIT desde
-    " ZFI_FM_DEVOLUCIONES2" de "ejecutado a mano en SE38" (el propio
-    " "Ejecutar" de SE38 tambien lo deja a 'X') - se exporta siempre.
-    " Siempre (aunque este vacio), para que ZFI_FM_DEVOLUCIONES2 no se
-    " encuentre datos residuales de una llamada anterior en la misma
-    " sesion. En ejecucion manual esta clave de memoria simplemente no
-    " la lee nadie, no hace falta filtrar.
+    " P_RFC (parametro NO-DISPLAY de la pantalla de seleccion, ver
+    " ZFI_R_DEVOLUCIONES2_EVE) - solo lo rellena ZFI_FM_DEVOLUCIONES2 al
+    " hacer su SUBMIT ... WITH SELECTION-TABLE. En ejecucion manual
+    " (SE38) queda en blanco, y no exportamos nada - no hay ninguna RFC
+    " esperando leerlo. SY-CALLD se probo antes y se descarto: no
+    " distingue de forma fiable esta llamada de una ejecucion manual.
+    CHECK p_rfc = abap_true.
+
+    " Siempre que se llegue aqui (aunque este vacio), para que
+    " ZFI_FM_DEVOLUCIONES2 no se encuentre datos residuales de una
+    " llamada anterior en la misma sesion.
     EXPORT gt_post_errors = gt_post_errors TO MEMORY ID 'ZFI_DEVOL2_ERRORS'.
 
   ENDMETHOD.

@@ -228,14 +228,21 @@ una llamada anterior en la misma sesión) — memoria ABAP sí cruza la
 frontera de `SUBMIT`/`CALL TRANSACTION`, a diferencia de los datos
 globales de un grupo de función.
 
-**Se valoró exportar solo si `SY-CALLD = 'X'`** (se pone a `'X'` cuando
-el programa se lanza con `SUBMIT`/`CALL TRANSACTION`, pensado para
-distinguir "llamado por `ZFI_FM_DEVOLUCIONES2`" de "ejecución manual en
-SE38") — **descartado tras probarlo**: el propio "Ejecutar" de SE38
-también deja `SY-CALLD = 'X'`, así que no distingue lo que necesitábamos
-distinguir. Se exporta siempre, sin condición — no hay coste real en
-hacerlo en una ejecución manual, esa clave de memoria simplemente no la
-lee nadie si no hay una RFC detrás en la misma sesión.
+**El `EXPORT` solo se hace si la llamada viene de `ZFI_FM_DEVOLUCIONES2`**
+— para no dejar datos en memoria ABAP en una ejecución manual del report
+sin que haga falta. Primero se probó con `SY-CALLD` (se pone a `'X'`
+cuando el programa se lanza con `SUBMIT`/`CALL TRANSACTION`) pero se
+**descartó tras probarlo**: el propio "Ejecutar" de SE38 también deja
+`SY-CALLD = 'X'`, así que no distingue lo que necesitábamos distinguir.
+Solución final: un parámetro de pantalla `P_RFC` (`NO-DISPLAY`, añadido
+en `ZFI_R_DEVOLUCIONES2_EVE`, no sale en la pantalla de selección) —
+`ZFI_FM_DEVOLUCIONES2` rellena esa fila a `'X'` en su tabla de selección
+del `SUBMIT` (una señal explícita nuestra, no un campo de sistema
+ambiguo); en ejecución manual (SE38) queda en blanco por defecto y
+`export_post_errors` no exporta nada (`CHECK p_rfc = abap_true.`).
+`P_RFC` es un parámetro global de la pantalla de selección, así que
+`ZFI_R_DEVOLUCIONES2_CLS` (mismo programa, include `_CLS`) lo lee
+directamente, sin que haga falta pasarlo por ningún método.
 
 El resultado también se muestra **en pantalla** (`show_log_msg`, con
 `WRITE` directo, no vía `go_msg_logs->append_messages`): son mensajes

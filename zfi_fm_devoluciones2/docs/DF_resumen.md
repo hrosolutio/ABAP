@@ -111,8 +111,9 @@ que se había apuntado aquí originalmente, pensada para el texto de
 se captura el detalle de mensajes por documento del propio FI-CA
 (`LCL_MESSENGER`/`GDBG` de `SAPLFKKTRACE`, vía el FORM público
 `RETRIEVE_DATA` + `ASSIGN` dinámico + `MESSAGE...INTO`) y se deja en
-**memoria ABAP** (`EXPORT ... TO MEMORY ID 'ZFI_DEVOL2_ERRORS'`) al
-terminar `EXECUTE`.
+**memoria ABAP** (`EXPORT gt_post_errors = gt_post_errors TO MEMORY ID
+'ZFI_DEVOL2_ERRORS'`) al terminar `EXECUTE` — pero solo si esta RFC se
+lo pide (ver "Señal `P_RFC`" más abajo).
 
 **Por qué memoria ABAP y no otra cosa**: los datos globales de
 `SAPLFKKTRACE` (`GDBG`/`T_MESSENGERDATA`) solo existen dentro de la
@@ -124,13 +125,43 @@ precisamente para cruzar esa frontera dentro de la misma sesión externa,
 así que este RFC hace, justo después del `SUBMIT`:
 
 ```abap
-IMPORT lt_post_errors FROM MEMORY ID 'ZFI_DEVOL2_ERRORS'.
+IMPORT gt_post_errors = lt_post_errors FROM MEMORY ID 'ZFI_DEVOL2_ERRORS'.
 FREE MEMORY ID 'ZFI_DEVOL2_ERRORS'.
 ```
 
 y añade el texto de cada línea (`KEYR1` + mensaje) que corresponda a
 cada lote fallido dentro de `ES_ERROR-DESCRIPTION`, a continuación del
-`STARS` resultante.
+`STARS` resultante. Nótese que el nombre `gt_post_errors` a la
+izquierda del `=` es la **clave del dato** en memoria (tiene que
+coincidir con el `EXPORT` del report), no el nombre de la variable
+local `lt_post_errors` que recibe el valor aquí.
+
+### Señal `P_RFC`: exportar solo cuando hace falta
+
+Para no dejar datos en memoria ABAP cuando alguien ejecuta
+`ZFI_R_DEVOLUCIONES2` a mano en SE38 (nadie va a leer esa memoria en ese
+caso), el report solo exporta si detecta que la llamada viene de esta
+RFC. Se probó primero con el campo de sistema `SY-CALLD` (se pone a
+`'X'` cuando el programa se lanza con `SUBMIT`/`CALL TRANSACTION`) pero
+se descartó: el propio "Ejecutar" de SE38 también lo deja a `'X'`, así
+que no distinguía lo que hacía falta distinguir.
+
+Solución final: un parámetro `P_RFC` (`NO-DISPLAY`, no aparece en la
+pantalla de selección) en `ZFI_R_DEVOLUCIONES2_EVE`. Esta RFC añade una
+fila explícita a `lt_rspar` para rellenarlo a `'X'`:
+
+```abap
+CLEAR ls_rspar.
+ls_rspar-selname = 'P_RFC'.
+ls_rspar-kind    = 'P'.
+ls_rspar-sign    = 'I'.
+ls_rspar-option  = 'EQ'.
+ls_rspar-low     = abap_true.
+APPEND ls_rspar TO lt_rspar.
+```
+
+En ejecución manual (SE38), `P_RFC` no se rellena y queda en blanco por
+defecto, así que el report no exporta nada.
 
 ## Objetos DDIC nuevos
 

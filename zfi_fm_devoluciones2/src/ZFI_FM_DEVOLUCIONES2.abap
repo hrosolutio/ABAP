@@ -43,7 +43,10 @@ FUNCTION zfi_fm_devoluciones2.
 * Detalle de error tipo FP09: además de STARS, ZFI_R_DEVOLUCIONES2_CLS
 * captura (cuando FKK_RLS_POST_LOT falla) el mismo detalle de mensajes
 * por documento que muestra la FP09 y lo deja en memoria ABAP
-* (MEMORY ID 'ZFI_DEVOL2_ERRORS') al terminar su EXECUTE. Como el
+* (MEMORY ID 'ZFI_DEVOL2_ERRORS') al terminar su EXECUTE - pero SOLO si
+* esta RFC se lo pide, vía la fila P_RFC = 'X' en la tabla de selección
+* del SUBMIT de abajo (parámetro NO-DISPLAY de ZFI_R_DEVOLUCIONES2_EVE):
+* así una ejecución manual del report en SE38 no exporta nada. Como el
 * SUBMIT ... AND RETURN de abajo abre una sesión interna nueva, no
 * podemos leer ahí los datos globales de SAPLFKKTRACE directamente
 * (por eso el report hace el trabajo y nos deja el resultado ya
@@ -86,6 +89,19 @@ FUNCTION zfi_fm_devoluciones2.
     ls_rspar-low     = ls_keyr1_in-keyr1.
     APPEND ls_rspar TO lt_rspar.
   ENDLOOP.
+
+  " P_RFC (NO-DISPLAY en ZFI_R_DEVOLUCIONES2_EVE): senal explicita de
+  " que esta llamada viene de esta RFC, para que el report exporte el
+  " detalle de errores a memoria ABAP (ver ZFI_R_DEVOLUCIONES2_CLS,
+  " EXPORT_POST_ERRORS) - sin esto, una ejecucion manual del report en
+  " SE38 no dejaria nada en memoria para nadie que lo necesite.
+  CLEAR ls_rspar.
+  ls_rspar-selname = 'P_RFC'.
+  ls_rspar-kind    = 'P'.
+  ls_rspar-sign    = 'I'.
+  ls_rspar-option  = 'EQ'.
+  ls_rspar-low     = abap_true.
+  APPEND ls_rspar TO lt_rspar.
 
   SUBMIT zfi_r_devoluciones2
     WITH SELECTION-TABLE lt_rspar

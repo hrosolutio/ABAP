@@ -46,7 +46,9 @@ Por cada `KEYR1` indicado que exista realmente en `DFKKRK`:
 Parámetros de selección: **`S_KEYR1`** (obligatorio — nº de lote(s) a
 tratar) y **`P_SIMU`** (checkbox — si se marca, el programa solo escribe
 el `STARS` actual de cada lote indicado, sin cerrar ni contabilizar nada
-de verdad).
+de verdad). Además, **`P_RFC`** (`NO-DISPLAY`, no aparece en pantalla) —
+solo lo rellena `ZFI_FM_DEVOLUCIONES2` al llamar por `SUBMIT`, ver
+"Detalle de error tipo FP09" más abajo.
 
 ## Detalle de error tipo FP09 (para `ZFI_FM_DEVOLUCIONES2`)
 
@@ -76,16 +78,19 @@ real, no un tipo local invisible).
 El resultado (`KEYR1` + texto) se muestra también **en pantalla**
 (`show_log_msg`, con `WRITE` directo — son mensajes dinámicos de FI-CA
 reconstruidos en tiempo real, no un número de mensaje fijo de
-`ZFI_MC_001`, así que no se puede montar con `append_messages`) y se
-deja siempre en memoria ABAP (`MEMORY ID 'ZFI_DEVOL2_ERRORS'`) al
-terminar `EXECUTE` — `ZFI_FM_DEVOLUCIONES2` lo importa después de su
-`SUBMIT ... AND RETURN` (ver ese README) y lo añade a
-`ES_ERROR-DESCRIPTION`. (Se valoró exportar solo cuando el report es
-llamado por la RFC, usando `SY-CALLD`, pero ese campo no distingue de
-forma fiable esa llamada de una ejecución manual en SE38 — el propio
-"Ejecutar" de SE38 también lo deja a `'X'` — así que se exporta
-siempre; no hay coste real en hacerlo, esa clave de memoria simplemente
-no la lee nadie si no hay una RFC detrás.)
+`ZFI_MC_001`, así que no se puede montar con `append_messages`) y,
+**solo si la llamada viene de `ZFI_FM_DEVOLUCIONES2`**, se deja además
+en memoria ABAP (`MEMORY ID 'ZFI_DEVOL2_ERRORS'`) al terminar `EXECUTE`
+para que esa RFC lo importe después de su `SUBMIT ... AND RETURN` (ver
+ese README) y lo añada a `ES_ERROR-DESCRIPTION`.
+
+Esa condición se resuelve con un parámetro de pantalla **`P_RFC`**
+(`NO-DISPLAY`, no sale en la pantalla de selección): la RFC rellena esa
+fila a `'X'` en su tabla de selección del `SUBMIT`; en una ejecución
+manual (SE38) queda en blanco y no se exporta nada. (Se probó primero
+con `SY-CALLD`, pensado para lo mismo, pero se descartó: el propio
+"Ejecutar" de SE38 también deja `SY-CALLD = 'X'`, así que no distinguía
+lo que necesitábamos.)
 
 ## Mensajes (`ZFI_MC_001`)
 
