@@ -73,14 +73,19 @@ línea de cabecera) y, línea a línea, se reconstruye el texto final con
 `ID`/`TY`/`NR`/`V1-V4` de cada línea (`TYPE dfkktracep`, estructura DDIC
 real, no un tipo local invisible).
 
-El resultado (`KEYR1` + texto) se deja en memoria ABAP
-(`MEMORY ID 'ZFI_DEVOL2_ERRORS'`) al terminar `EXECUTE` — pero
-**solo si `SY-CALLD = 'X'`** (el programa se ha lanzado con `SUBMIT`,
-que es como lo llama `ZFI_FM_DEVOLUCIONES2`; en blanco si se ejecuta a
-mano en SE38, para no dejar datos en memoria ABAP cuando no hay ninguna
-RFC esperando leerlos). `ZFI_FM_DEVOLUCIONES2` lo importa después de su
+El resultado (`KEYR1` + texto) se muestra también **en pantalla**
+(`show_log_msg`, con `WRITE` directo — son mensajes dinámicos de FI-CA
+reconstruidos en tiempo real, no un número de mensaje fijo de
+`ZFI_MC_001`, así que no se puede montar con `append_messages`) y se
+deja siempre en memoria ABAP (`MEMORY ID 'ZFI_DEVOL2_ERRORS'`) al
+terminar `EXECUTE` — `ZFI_FM_DEVOLUCIONES2` lo importa después de su
 `SUBMIT ... AND RETURN` (ver ese README) y lo añade a
-`ES_ERROR-DESCRIPTION`.
+`ES_ERROR-DESCRIPTION`. (Se valoró exportar solo cuando el report es
+llamado por la RFC, usando `SY-CALLD`, pero ese campo no distingue de
+forma fiable esa llamada de una ejecución manual en SE38 — el propio
+"Ejecutar" de SE38 también lo deja a `'X'` — así que se exporta
+siempre; no hay coste real en hacerlo, esa clave de memoria simplemente
+no la lee nadie si no hay una RFC detrás.)
 
 ## Mensajes (`ZFI_MC_001`)
 

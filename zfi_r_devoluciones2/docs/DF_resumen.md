@@ -228,14 +228,25 @@ una llamada anterior en la misma sesión) — memoria ABAP sí cruza la
 frontera de `SUBMIT`/`CALL TRANSACTION`, a diferencia de los datos
 globales de un grupo de función.
 
-**El `EXPORT` solo se hace si `SY-CALLD = 'X'`** — este campo de sistema
-se pone a `'X'` cuando el programa se ha lanzado con `SUBMIT`/`CALL
-TRANSACTION` (el caso de `ZFI_FM_DEVOLUCIONES2`) y queda en blanco en
-ejecución manual (SE38, F8): así una prueba manual del report no deja
-datos en memoria ABAP para nadie que no vaya a leerlos. Nótese además
-que, dentro de un método de clase, `EXPORT variable TO MEMORY ID` (forma
-corta) da error de sintaxis — hace falta la forma con nombre,
-`EXPORT nombre = variable TO MEMORY ID`, ver `CLAUDE.md`.
+**Se valoró exportar solo si `SY-CALLD = 'X'`** (se pone a `'X'` cuando
+el programa se lanza con `SUBMIT`/`CALL TRANSACTION`, pensado para
+distinguir "llamado por `ZFI_FM_DEVOLUCIONES2`" de "ejecución manual en
+SE38") — **descartado tras probarlo**: el propio "Ejecutar" de SE38
+también deja `SY-CALLD = 'X'`, así que no distingue lo que necesitábamos
+distinguir. Se exporta siempre, sin condición — no hay coste real en
+hacerlo en una ejecución manual, esa clave de memoria simplemente no la
+lee nadie si no hay una RFC detrás en la misma sesión.
+
+El resultado también se muestra **en pantalla** (`show_log_msg`, con
+`WRITE` directo, no vía `go_msg_logs->append_messages`): son mensajes
+dinámicos reconstruidos en tiempo real a partir de lo que devuelve
+FI-CA, no un número de mensaje fijo de `ZFI_MC_001` — no hay forma de
+darlos de alta como mensaje propio de antemano porque el texto (y su
+clase/número reales) varían según qué haya fallado.
+
+Nótese además que, dentro de un método de clase, `EXPORT variable TO
+MEMORY ID` (forma corta) da error de sintaxis — hace falta la forma con
+nombre, `EXPORT nombre = variable TO MEMORY ID`, ver `CLAUDE.md`.
 
 ## Fuera de alcance (de este programa)
 

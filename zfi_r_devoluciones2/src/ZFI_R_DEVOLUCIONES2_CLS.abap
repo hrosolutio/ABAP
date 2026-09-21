@@ -38,14 +38,15 @@
 * documento que muestra la FP09 (LCL_MESSENGER/GDBG de SAPLFKKTRACE, via
 * PERFORM retrieve_data IN PROGRAM + ASSIGN dinamico a
 * T_MESSENGERDATA[] + MESSAGE...INTO por cada linea TY='E') y se deja en
-* GT_POST_ERRORS; al final de EXECUTE se exporta a memoria ABAP
-* (MEMORY ID 'ZFI_DEVOL2_ERRORS', solo si SY-CALLD = 'X', es decir solo
-* si nos han llamado via SUBMIT - no en ejecucion manual SE38, ver
-* EXPORT_POST_ERRORS) para que ZFI_FM_DEVOLUCIONES2 (que llama a este
-* report via SUBMIT...AND RETURN, una sesion interna distinta donde los
-* datos globales de SAPLFKKTRACE ya no son alcanzables) pueda
-* importarlo despues y montar ES_ERROR-DESCRIPTION con el detalle real,
-* no solo con el STARS resultante.
+* GT_POST_ERRORS; se muestra tambien en pantalla (SHOW_LOG_MSG, con
+* WRITE directo - son mensajes dinamicos de FI-CA, no un numero de
+* mensaje fijo de ZFI_MC_001) y al final de EXECUTE se exporta siempre
+* a memoria ABAP (MEMORY ID 'ZFI_DEVOL2_ERRORS', ver EXPORT_POST_ERRORS)
+* para que ZFI_FM_DEVOLUCIONES2 (que llama a este report via
+* SUBMIT...AND RETURN, una sesion interna distinta donde los datos
+* globales de SAPLFKKTRACE ya no son alcanzables) pueda importarlo
+* despues y montar ES_ERROR-DESCRIPTION con el detalle real, no solo
+* con el STARS resultante.
 CLASS lcl_devoluciones2 DEFINITION.
   PUBLIC SECTION.
 
@@ -237,15 +238,13 @@ CLASS lcl_devoluciones2 IMPLEMENTATION.
 
   METHOD export_post_errors.
 
-    " Solo si nos han llamado via SUBMIT (caso de ZFI_FM_DEVOLUCIONES2) -
-    " SY-CALLD = 'X' cuando el programa se lanzo con SUBMIT/CALL
-    " TRANSACTION, en blanco en ejecucion manual (SE38, F8). Evita dejar
-    " datos en memoria ABAP cuando no hay ninguna RFC esperando leerlos.
-    CHECK sy-calld = abap_true.
-
+    " SY-CALLD no distingue de forma fiable "llamado por SUBMIT desde
+    " ZFI_FM_DEVOLUCIONES2" de "ejecutado a mano en SE38" (el propio
+    " "Ejecutar" de SE38 tambien lo deja a 'X') - se exporta siempre.
     " Siempre (aunque este vacio), para que ZFI_FM_DEVOLUCIONES2 no se
     " encuentre datos residuales de una llamada anterior en la misma
-    " sesion.
+    " sesion. En ejecucion manual esta clave de memoria simplemente no
+    " la lee nadie, no hace falta filtrar.
     EXPORT gt_post_errors = gt_post_errors TO MEMORY ID 'ZFI_DEVOL2_ERRORS'.
 
   ENDMETHOD.
@@ -256,6 +255,15 @@ CLASS lcl_devoluciones2 IMPLEMENTATION.
 
     LOOP AT lt_msg_logs ASSIGNING FIELD-SYMBOL(<fs_log>).
       WRITE / <fs_log>-message.
+    ENDLOOP.
+
+    " Detalle de error tipo FP09 (ver GET_POST_LOT_ERRORS): son mensajes
+    " dinamicos de FI-CA reconstruidos con MESSAGE...INTO, no mensajes
+    " propios via ZFI_MC_001 (no hay un numero de mensaje fijo posible
+    " para "cualquier texto que devuelva FKK_RLS_POST_LOT"), por eso van
+    " con WRITE directo en vez de por GO_MSG_LOGS.
+    LOOP AT gt_post_errors ASSIGNING FIELD-SYMBOL(<fs_post_error>).
+      WRITE / |{ <fs_post_error>-keyr1 }: { <fs_post_error>-message }|.
     ENDLOOP.
 
     go_msg_logs->clear_messages( ).
