@@ -220,12 +220,22 @@ RETURN` (ver `../zfi_fm_devoluciones2/docs/DF_resumen.md`), y eso abre una
 **sesión interna nueva**: los datos globales de un grupo de función (como
 `GDBG`/`T_MESSENGERDATA`) no sobreviven al volver de esa sesión a la RFC.
 Por eso la captura tiene que pasar aquí, dentro de este programa (en el
-mismo momento en que se llama a `FKK_RLS_POST_LOT`), y el resultado se dejar
-en **memoria ABAP** (`EXPORT ... TO MEMORY ID 'ZFI_DEVOL2_ERRORS'` al
-final de `execute`, siempre, aunque esté vacía — para no arrastrar
-resultados de una llamada anterior en la misma sesión) — memoria ABAP sí
-cruza la frontera de `SUBMIT`/`CALL TRANSACTION`, a diferencia de los
-datos globales de un grupo de función.
+mismo momento en que se llama a `FKK_RLS_POST_LOT`), y el resultado se
+deja en **memoria ABAP** (`EXPORT ... TO MEMORY ID 'ZFI_DEVOL2_ERRORS'`
+al final de `execute`, vía el método privado `export_post_errors`,
+siempre que se haga, aunque esté vacía — para no arrastrar resultados de
+una llamada anterior en la misma sesión) — memoria ABAP sí cruza la
+frontera de `SUBMIT`/`CALL TRANSACTION`, a diferencia de los datos
+globales de un grupo de función.
+
+**El `EXPORT` solo se hace si `SY-CALLD = 'X'`** — este campo de sistema
+se pone a `'X'` cuando el programa se ha lanzado con `SUBMIT`/`CALL
+TRANSACTION` (el caso de `ZFI_FM_DEVOLUCIONES2`) y queda en blanco en
+ejecución manual (SE38, F8): así una prueba manual del report no deja
+datos en memoria ABAP para nadie que no vaya a leerlos. Nótese además
+que, dentro de un método de clase, `EXPORT variable TO MEMORY ID` (forma
+corta) da error de sintaxis — hace falta la forma con nombre,
+`EXPORT nombre = variable TO MEMORY ID`, ver `CLAUDE.md`.
 
 ## Fuera de alcance (de este programa)
 

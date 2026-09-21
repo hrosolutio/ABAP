@@ -74,9 +74,13 @@ línea de cabecera) y, línea a línea, se reconstruye el texto final con
 real, no un tipo local invisible).
 
 El resultado (`KEYR1` + texto) se deja en memoria ABAP
-(`MEMORY ID 'ZFI_DEVOL2_ERRORS'`) al terminar `EXECUTE` — `ZFI_FM_DEVOLUCIONES2`
-lo importa después de su `SUBMIT ... AND RETURN` (ver ese README) y lo
-añade a `ES_ERROR-DESCRIPTION`.
+(`MEMORY ID 'ZFI_DEVOL2_ERRORS'`) al terminar `EXECUTE` — pero
+**solo si `SY-CALLD = 'X'`** (el programa se ha lanzado con `SUBMIT`,
+que es como lo llama `ZFI_FM_DEVOLUCIONES2`; en blanco si se ejecuta a
+mano en SE38, para no dejar datos en memoria ABAP cuando no hay ninguna
+RFC esperando leerlos). `ZFI_FM_DEVOLUCIONES2` lo importa después de su
+`SUBMIT ... AND RETURN` (ver ese README) y lo añade a
+`ES_ERROR-DESCRIPTION`.
 
 ## Mensajes (`ZFI_MC_001`)
 

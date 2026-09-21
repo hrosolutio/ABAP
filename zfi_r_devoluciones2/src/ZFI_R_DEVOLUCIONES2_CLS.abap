@@ -39,11 +39,13 @@
 * PERFORM retrieve_data IN PROGRAM + ASSIGN dinamico a
 * T_MESSENGERDATA[] + MESSAGE...INTO por cada linea TY='E') y se deja en
 * GT_POST_ERRORS; al final de EXECUTE se exporta a memoria ABAP
-* (MEMORY ID 'ZFI_DEVOL2_ERRORS') para que ZFI_FM_DEVOLUCIONES2 (que
-* llama a este report via SUBMIT...AND RETURN, una sesion interna
-* distinta donde los datos globales de SAPLFKKTRACE ya no son
-* alcanzables) pueda importarlo despues y montar ES_ERROR-DESCRIPTION
-* con el detalle real, no solo con el STARS resultante.
+* (MEMORY ID 'ZFI_DEVOL2_ERRORS', solo si SY-CALLD = 'X', es decir solo
+* si nos han llamado via SUBMIT - no en ejecucion manual SE38, ver
+* EXPORT_POST_ERRORS) para que ZFI_FM_DEVOLUCIONES2 (que llama a este
+* report via SUBMIT...AND RETURN, una sesion interna distinta donde los
+* datos globales de SAPLFKKTRACE ya no son alcanzables) pueda
+* importarlo despues y montar ES_ERROR-DESCRIPTION con el detalle real,
+* no solo con el STARS resultante.
 CLASS lcl_devoluciones2 DEFINITION.
   PUBLIC SECTION.
 
@@ -78,6 +80,8 @@ CLASS lcl_devoluciones2 DEFINITION.
       get_post_lot_errors IMPORTING iv_keyr1 TYPE dfkkrk-keyr1
                            RETURNING VALUE(rt_errors) TYPE tt_post_error,
 
+      export_post_errors,
+
       show_log_msg.
 
 ENDCLASS.
@@ -104,7 +108,7 @@ CLASS lcl_devoluciones2 IMPLEMENTATION.
         iv_msg_class  = 'ZFI_MC_001'
         iv_msg_number = '178' ).
       show_log_msg( ).
-      EXPORT gt_post_errors = gt_post_errors TO MEMORY ID 'ZFI_DEVOL2_ERRORS'.
+      export_post_errors( ).
       RETURN.
     ENDIF.
 
@@ -113,11 +117,7 @@ CLASS lcl_devoluciones2 IMPLEMENTATION.
     ENDLOOP.
 
     show_log_msg( ).
-
-    " Deja siempre el detalle de esta ejecucion en memoria ABAP (aunque
-    " este vacio) para que ZFI_FM_DEVOLUCIONES2 no se encuentre datos
-    " residuales de una llamada anterior en la misma sesion.
-    EXPORT gt_post_errors = gt_post_errors TO MEMORY ID 'ZFI_DEVOL2_ERRORS'.
+    export_post_errors( ).
 
   ENDMETHOD.
 
@@ -232,6 +232,21 @@ CLASS lcl_devoluciones2 IMPLEMENTATION.
 
       APPEND VALUE #( keyr1 = iv_keyr1 message = lv_text ) TO rt_errors.
     ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD export_post_errors.
+
+    " Solo si nos han llamado via SUBMIT (caso de ZFI_FM_DEVOLUCIONES2) -
+    " SY-CALLD = 'X' cuando el programa se lanzo con SUBMIT/CALL
+    " TRANSACTION, en blanco en ejecucion manual (SE38, F8). Evita dejar
+    " datos en memoria ABAP cuando no hay ninguna RFC esperando leerlos.
+    CHECK sy-calld = abap_true.
+
+    " Siempre (aunque este vacio), para que ZFI_FM_DEVOLUCIONES2 no se
+    " encuentre datos residuales de una llamada anterior en la misma
+    " sesion.
+    EXPORT gt_post_errors = gt_post_errors TO MEMORY ID 'ZFI_DEVOL2_ERRORS'.
 
   ENDMETHOD.
 
