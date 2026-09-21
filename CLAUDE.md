@@ -201,6 +201,25 @@ añadir `[]` al final del nombre:
 ASSIGN ('(PROGRAMA)NOMBRE_TABLA[]') TO <fs>.
 ```
 
+## `MESSAGE ... INTO` pisa `SY-SUBRC` como efecto colateral
+
+Cualquier `MESSAGE` (con o sin `INTO`) actualiza los campos de sistema
+del mensaje (`sy-msgid`/`sy-msgty`/`sy-msgno`/`sy-msgv1-4`) **y también
+`sy-subrc`**. Si se usa `MESSAGE ... INTO lv_text.` dentro de una rutina
+auxiliar (p.ej. para reconstruir el texto de mensajes capturados) que se
+llama *después* de comprobar el `sy-subrc` de una llamada anterior pero
+*antes* de usarlo (p.ej. para mostrarlo en otro mensaje de log), el
+`sy-subrc` que se lea después ya no es el de la llamada original, sino
+el que deja el último `MESSAGE`. Real: `sy-subrc` de un
+`CALL FUNCTION` que fallaba salía como `0` en el mensaje de log porque,
+entre medias, se llamaba a una rutina que hacía `MESSAGE ... INTO` por
+cada línea de un detalle capturado.
+
+**Regla:** guardar `sy-subrc` en una variable propia **inmediatamente**
+después de la llamada cuyo resultado importa, antes de ejecutar
+cualquier otra cosa (incluido cualquier `MESSAGE`) que pueda
+sobrescribirlo.
+
 ## Si GitHub falla
 
 Si la web de GitHub da error (incidencia de su lado, no del repo — se

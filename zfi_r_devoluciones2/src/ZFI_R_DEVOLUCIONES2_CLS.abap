@@ -184,7 +184,12 @@ CLASS lcl_devoluciones2 IMPLEMENTATION.
         no_data             = 4
         postings_incomplete = 5
         OTHERS              = 6.
-    IF sy-subrc <> 0.
+    " Guardar SY-SUBRC ya: GET_POST_LOT_ERRORS hace MESSAGE...INTO por
+    " cada linea capturada, y MESSAGE (con o sin INTO) pisa SY-SUBRC
+    " como efecto colateral - si se lee despues de llamarlo, ya no es
+    " el de FKK_RLS_POST_LOT.
+    DATA(lv_subrc) = sy-subrc.
+    IF lv_subrc <> 0.
       APPEND LINES OF get_post_lot_errors( lv_keyr1 ) TO gt_post_errors.
       go_msg_logs->append_messages(
         iv_msg_type   = 'E'
@@ -192,7 +197,7 @@ CLASS lcl_devoluciones2 IMPLEMENTATION.
         iv_msg_number = '180'
         iv_param_v1   = CONV #( lv_keyr1 )
         iv_param_v2   = `FKK_RLS_POST_LOT`
-        iv_param_v3   = |{ sy-subrc }| ).
+        iv_param_v3   = |{ lv_subrc }| ).
       RETURN.
     ENDIF.
 
