@@ -242,6 +242,28 @@ SELECT SINGLE COUNT( * ) FROM tabla INTO lv_count WHERE ...
 IF lv_count <> 0.
 ```
 
+## Reutilizar la misma variable como `IMPORTING` y `EXPORTING` de un método: hace falta `VALUE()`
+
+Los parámetros `IMPORTING`/`EXPORTING`/`CHANGING` de un método son **por
+referencia por defecto** (a menos que se declaren `VALUE(nombre)`). Si se
+llama al método reutilizando la misma variable como parámetro de entrada
+y de salida a la vez (patrón habitual para "filtrar/transformar en
+sitio", p.ej. `metodo( EXPORTING it_x = lt_datos IMPORTING et_x =
+lt_datos ).`), y el método hace `CLEAR et_x.` (u otra escritura) al
+principio **antes de terminar de leer `it_x`**, esa escritura afecta
+**también** al parámetro de entrada, porque los dos apuntan al mismo
+bloque de memoria (misma variable actual). Real: un método que hacía
+`CLEAR: et_items, ...` como primera línea y luego `LOOP AT it_items`
+recibía siempre una tabla vacía — el `CLEAR` del parámetro de salida
+borraba también el de entrada antes de que el `LOOP` llegara a
+ejecutarse, dando resultados incorrectos sin ningún error ni dump.
+
+**Regla:** si un parámetro `EXPORTING`/`RETURNING` de un método se va a
+`CLEAR`/reconstruir dentro del propio método (el caso normal), declararlo
+con `VALUE(nombre)` — fuerza el paso por valor (una copia propia), así no
+puede pisar la entrada aunque el llamador reutilice la misma variable
+para los dos parámetros.
+
 ## Si GitHub falla
 
 Si la web de GitHub da error (incidencia de su lado, no del repo — se

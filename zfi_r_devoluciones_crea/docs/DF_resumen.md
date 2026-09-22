@@ -746,6 +746,19 @@ Dos hallazgos importantes de esta prueba:
   (`go_file_log->create_log`), no con el conteo real (`0`, tabla
   vacía). Fix: `INTO lv_count` explícito + `IF lv_count <> 0` (ver
   `CLAUDE.md`).
+- **Segundo bug real corregido** (el mensaje "todas las posiciones ya
+  estaban registradas" seguía saliendo incluso después del fix
+  anterior): `PROCESS_DEV_FILE`/`EXECUTE_UPLOAD` llaman a
+  `FILTER_DUPLICATES` reutilizando la misma variable `lt_items` como
+  `it_items` (entrada) y `et_items` (salida) — patrón habitual para
+  "filtrar en sitio". Como los parámetros de un método son por
+  referencia por defecto (sin `VALUE()`), las dos quedaban apuntando al
+  mismo bloque de memoria, y el `CLEAR: et_items, et_r3seg_dev.` al
+  principio del método **borraba también `it_items` antes de que el
+  `LOOP AT it_items` leyera nada** — el bucle se ejecutaba 0 veces, sin
+  ningún duplicado real de por medio. Fix: `EXPORTING VALUE(et_items)
+  VALUE(et_r3seg_dev)` en la firma del método (paso por valor, copia
+  propia — ver `CLAUDE.md`).
 - El `MODIFY zfi_t_r3seg_dev FROM TABLE lt_r3seg_dev` solo se ejecuta si
   `create_lot` termina con `ev_ok = abap_true` — mismo criterio que el
   programa de pagos, para no marcar como "ya procesadas" posiciones de

@@ -182,10 +182,15 @@ CLASS lcl_devoluciones_crea DEFINITION.
       " con exito (ver PROCESS_DEV_FILE) - igual que el programa de pagos
       " solo graba en ZFI_T_R3SEG si el SUBMIT de contabilizacion tuvo
       " exito.
+      " ET_ITEMS/ET_R3SEG_DEV van con VALUE(): se llaman reutilizando la
+      " misma variable como IT_ITEMS y ET_ITEMS (para "filtrar en sitio"),
+      " y por defecto los parametros de un metodo son por referencia -
+      " sin VALUE(), el CLEAR de ET_ITEMS dentro del metodo borraria
+      " tambien IT_ITEMS antes de poder leerlo (mismo bloque de memoria).
       filter_duplicates IMPORTING it_items     TYPE ty_t_item
                                    iv_filename  TYPE string
-                         EXPORTING et_items     TYPE ty_t_item
-                                   et_r3seg_dev TYPE ty_t_r3seg_dev,
+                         EXPORTING VALUE(et_items)     TYPE ty_t_item
+                                   VALUE(et_r3seg_dev) TYPE ty_t_r3seg_dev,
 
       cent_to_str IMPORTING iv_cent          TYPE i
                              iv_negative      TYPE abap_bool DEFAULT abap_false
