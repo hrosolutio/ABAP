@@ -594,6 +594,32 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
 
     CLEAR: et_items, et_r3seg_dev.
 
+    " Una sola consulta a BD antes del bucle (en vez de un SELECT por
+    " linea, que con ficheros de muchas posiciones - se han visto 72 -
+    " es un acceso a BD innecesario por cada una): trae de una vez todos
+    " los registros de ZFI_T_R3SEG_DEV cuyo BELNR coincida con algun
+    " documento de este fichero. BELNR ya es suficientemente selectivo
+    " (numero de documento SAP) para no traer de mas; la clave completa
+    " se sigue comprobando en memoria con LINE_EXISTS, igual que el
+    " duplicado dentro del propio fichero.
+    TYPES: BEGIN OF ty_belnr, belnr TYPE zfi_t_r3seg_dev-belnr, END OF ty_belnr.
+    DATA: lt_belnr    TYPE STANDARD TABLE OF ty_belnr,
+          lt_existing TYPE STANDARD TABLE OF zfi_t_r3seg_dev.
+
+    LOOP AT it_items INTO DATA(ls_item_key).
+      APPEND VALUE #( belnr = ls_item_key-docnum ) TO lt_belnr.
+    ENDLOOP.
+    SORT lt_belnr.
+    DELETE ADJACENT DUPLICATES FROM lt_belnr.
+
+    IF lt_belnr IS NOT INITIAL.
+      SELECT *
+        FROM zfi_t_r3seg_dev
+        INTO TABLE lt_existing
+        FOR ALL ENTRIES IN lt_belnr
+       WHERE belnr = lt_belnr-belnr.
+    ENDIF.
+
     LOOP AT it_items INTO DATA(ls_item).
 
       DATA(ls_r3seg) = VALUE zfi_t_r3seg_dev( bukrs = ls_item-bukrs
@@ -618,22 +644,13 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
         CONTINUE.
       ENDIF.
 
-      " Duplicado ya registrado de un fichero anterior.
-      " OJO: COUNT(*) sin INTO no tiene donde dejar el resultado -
-      " SY-DBCNT despues puede venir de OTRA operacion de BD anterior en
-      " el programa (p.ej. GO_FILE_LOG->CREATE_LOG), no del conteo real
-      " de esta consulta. Hace falta un INTO explicito.
-      DATA: lv_count TYPE i.
-      CLEAR lv_count.
-      SELECT SINGLE COUNT( * )
-        FROM zfi_t_r3seg_dev
-        INTO lv_count
-       WHERE apunt EQ ls_r3seg-apunt
-         AND zuonr EQ ls_r3seg-zuonr
-         AND bukrs EQ ls_r3seg-bukrs
-         AND belnr EQ ls_r3seg-belnr
-         AND gjahr EQ ls_r3seg-gjahr.
-      IF lv_count <> 0.
+      " Duplicado ya registrado de un fichero anterior - contra
+      " LT_EXISTING, ya traida entera antes del bucle.
+      IF line_exists( lt_existing[ apunt = ls_r3seg-apunt
+                                    zuonr = ls_r3seg-zuonr
+                                    bukrs = ls_r3seg-bukrs
+                                    belnr = ls_r3seg-belnr
+                                    gjahr = ls_r3seg-gjahr ] ).
         go_msg_logs->append_messages(
           iv_msg_type   = 'I'
           iv_msg_class  = 'ZFI_MC_001'

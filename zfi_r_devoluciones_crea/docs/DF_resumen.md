@@ -731,11 +731,20 @@ Dos hallazgos importantes de esta prueba:
 - Nuevo método privado `FILTER_DUPLICATES` (llamado en `PROCESS_DEV_FILE`
   y en `EXECUTE_UPLOAD`, justo después de `PARSE_DEV_LINES`): mismo
   mecanismo de dos pasos que `LCL_GESTION_COBROS_TRANSF` (duplicado en el
-  propio fichero vía `line_exists`, duplicado ya persistido vía `SELECT
-  SINGLE COUNT( * )`), mensajes nuevos de `ZFI_MC_001` (hay que darlos de
+  propio fichero vía `line_exists`, duplicado ya persistido vía otro
+  `line_exists`), mensajes nuevos de `ZFI_MC_001` (hay que darlos de
   alta en `SE91`, `&1` = documento, `&2` = fichero):
   - `184` (I): `Posición &1 duplicada en el propio fichero &2, se descarta`
   - `185` (I): `Posición &1 ya registrada de un fichero anterior, se descarta`
+- **Rendimiento**: a diferencia de `LCL_GESTION_COBROS_TRANSF` (que hace
+  un `SELECT SINGLE COUNT( * )` **por línea**, dentro del bucle),
+  `FILTER_DUPLICATES` trae **una sola vez, antes del bucle**, todos los
+  registros de `ZFI_T_R3SEG_DEV` cuyo `BELNR` coincida con algún
+  documento del fichero (`SELECT ... FOR ALL ENTRIES IN lt_belnr WHERE
+  belnr = lt_belnr-belnr`, con la lista de documentos ya deduplicada por
+  `SORT`+`DELETE ADJACENT DUPLICATES`) y comprueba la clave completa en
+  memoria con `line_exists` — evita un acceso a BD por cada posición
+  (ficheros de 72 posiciones ya vistos en pruebas anteriores).
 - **Bug real corregido** (probado con la tabla `ZFI_T_R3SEG_DEV` vacía y
   aun así todas las posiciones salían como duplicadas): la consulta de
   duplicado contra BD, copiada tal cual del programa de pagos
