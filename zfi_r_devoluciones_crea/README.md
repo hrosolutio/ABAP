@@ -104,6 +104,55 @@ en `ZFI_T_FILE_LOG` haya funcionado (antes recibía toda la fila
 `ZFI_T_FILE_LOG`, ahora solo el nombre de fichero), precisamente para
 poder llamarse en el caso en que ese registro falla.
 
+## Validación de duplicados (`ZFI_T_R3SEG_DEV`)
+
+Pedido por Eva: replicar la validación que ya existe en el programa de
+creación del lote de pagos (`LCL_GESTION_COBROS_TRANSF`, sobre
+`ZFI_T_R3SEG`) para evitar procesar dos veces la misma posición — por si
+viene repetida dentro del mismo `_DEV`, o si ya llegó en un fichero
+anterior.
+
+**Tabla propia `ZFI_T_R3SEG_DEV`** (copia de `ZFI_T_R3SEG` — decisión de
+Eva: no compartir la tabla entre los dos procesos, aunque no hay riesgo
+real de colisión de claves entre ellos). Clave: `MANDT`+`APUNT`+`ZUONR`+
+`BUKRS`+`BELNR`+`GJAHR`.
+
+La línea de 260 caracteres del `_DEV` (heredada tal cual del fichero
+bancario original, solo el concepto lo reescribe `ZFI_R_ECOFI_SPLIT`)
+resultó ser un **registro posicional real** (confirmado por depuración,
+mismos offsets que `LS_BODY` en `LCL_GESTION_COBROS_TRANSF`), no texto
+libre — así que `BUKRS`/`GJAHR`/`APUNT`/`ZUONR` se leen directos del
+fichero (`PARSE_DEV_LINES`), no se inventan:
+
+| Campo de la clave | Valor | Origen |
+|---|---|---|
+| `BUKRS` | `1239` (confirmado) | Real, offset 2 de la línea |
+| `GJAHR` | año real del apunte bancario | Real, offset 74 de la línea |
+| `APUNT` | constante en las pruebas vistas | Real, offset 256 de la línea |
+| `ZUONR` | `ANUP` (indicador de extorno, siempre igual en un `_DEV`) | Real, offset 46 de la línea |
+| `BELNR` | nº de documento SAP de 12 dígitos | **No** el nativo del offset 62 (eso es otra referencia del banco, no el documento) — es el `docnum` que ya extrae `PARSE_DEV_LINES` del concepto reescrito por `ZFI_R_ECOFI_SPLIT` |
+
+`FILTER_DUPLICATES` (llamado en `PROCESS_DEV_FILE` y en `EXECUTE_UPLOAD`,
+justo después de `PARSE_DEV_LINES`) descarta, por cada posición:
+1. Si ya salió antes **en el mismo fichero** (`line_exists` contra una
+   tabla en memoria que se va rellenando).
+2. Si ya está en `ZFI_T_R3SEG_DEV` **de un fichero anterior** (`SELECT
+   SINGLE COUNT(*)`).
+
+Igual que el programa de pagos, **el `MODIFY ZFI_T_R3SEG_DEV` solo se
+hace si el lote se llega a crear con éxito** — si `CREATE_LOT` falla, no
+se graba nada, para no marcar como "ya procesadas" posiciones de un
+fichero que al final no generó ningún lote.
+
+Si **todas** las posiciones de un fichero resultan duplicadas, se
+considera `PROCESADO` (no `ERROR`) y se mueve a la carpeta de
+procesados — no hay nada nuevo que contabilizar, no es un fallo.
+
+Mensajes nuevos en `ZFI_MC_001` (**hay que darlos de alta en `SE91`
+antes de activar**, con `&1` como único parámetro):
+- `184` (I): posición duplicada dentro del propio fichero.
+- `185` (I): posición ya registrada de un fichero anterior.
+
 ## Validación de posiciones y `ANZPO`
 
 `SELT1`='B'/`SELW1`=nº de documento es solo un **criterio de búsqueda**,
@@ -159,20 +208,23 @@ docs/
    includes (`_TOP`, `_EVE`, `_CLS`) con el contenido de `src/`.
 2. Crear los elementos de texto **`TEXT-001`** (título bloque `P_PATH`,
    p.ej. "Fichero `_DEV`") y **`TEXT-002`** (título bloque de modo).
-3. Dar de alta en **`ZFI_T_CONSTANTS`** las 3 filas que necesita el
+3. Crear en **`SE11`** la tabla **`ZFI_T_R3SEG_DEV`** (copia de
+   `ZFI_T_R3SEG` — ver "Validación de duplicados" más abajo) y dar de
+   alta en **`SE91`** los mensajes `184`/`185` de `ZFI_MC_001`.
+4. Dar de alta en **`ZFI_T_CONSTANTS`** las 3 filas que necesita el
    programa (sociedad, motivo, cta. compensación) — ya no son constantes
    ABAP hardcodeadas, se leen en tiempo de ejecución con el método
    `get_constants` de `ZFI_R_DEVOLUCIONES_CREA_CLS`. Claves y valores en
    la sección "Configuración (`ZFI_T_CONSTANTS`)" más abajo — **el
    programa no arranca si faltan** (aborta con mensaje "Faltan constantes
    en ZFI_T_CONSTANTS...").
-4. Activar.
-5. **Primera prueba: modo Upload**, con un `_DEV` de prueba (el que ya
+5. Activar.
+6. **Primera prueba: modo Upload**, con un `_DEV` de prueba (el que ya
    generó `zfi_r_ecofi_split`). **Ojo: no es una simulación** — crea el
    lote de verdad en el sistema donde se ejecute. El programa escribe en
    pantalla el nº de lote creado (`AAMMDDCDI11x`, ver "Nomenclatura del
    lote" más abajo) y el nº de posiciones, o el error, si lo hay.
-6. Solo cuando el paso 5 confirme que funciona bien end-to-end, probar el
+7. Solo cuando el paso 6 confirme que funciona bien end-to-end, probar el
    modo **Server** (escanea la carpeta física indicada en `RUTA_LOG_DEV` —
    ver "Pendiente" en `docs/DF_resumen.md`, la ruta física definitiva de
    producción todavía no está decidida/creada).
@@ -228,4 +280,8 @@ Ver `docs/DF_resumen.md` para el detalle completo. Resumen:
   "Configuración").
 - La ruta física definitiva de producción para `RUTA_LOG_DEV`/
   `RUTA_PROC_DEV` (modo Server) todavía no está decidida/creada.
+- **Crear `ZFI_T_R3SEG_DEV`** en `SE11` (copia de `ZFI_T_R3SEG`) y dar de
+  alta los mensajes `184`/`185` en `SE91` — ver "Validación de
+  duplicados" más arriba. Sin probar aún contra un `_DEV` real con
+  posiciones repetidas.
 - Alta del objeto en el sistema de transporte correspondiente al proyecto.

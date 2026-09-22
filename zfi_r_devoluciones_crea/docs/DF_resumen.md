@@ -616,6 +616,138 @@ en `ZFI_R_ECOFI_SPLIT`). Sin recorte especial más allá del truncamiento
 natural de un `CHAR40` — los nombres reales observados (`YFRECAU_1239_
 260827.140156_DEV.txt`, 34 caracteres) caben enteros.
 
+## Validación de duplicados (`ZFI_T_R3SEG_DEV`)
+
+Pedido por Eva (no viene del DF): "básicamente es replicar la validación
+que tenemos en el programa de crear lote de pagos para evitar duplicados
+(usando esta tabla `ZFI_T_R3SEG`). Por si esa posición viene repetida en
+el mismo fichero, o si ya nos ha llegado en otro fichero previo".
+
+### El programa de referencia (`LCL_GESTION_COBROS_TRANSF`)
+
+Analizando el `CLS` completo que pasó el usuario, la validación real
+(dentro de `METHOD execute`) es:
+
+1. Por cada línea del fichero de cobros (formato N43, 260 caracteres),
+   parsea la línea entera de forma **posicional** a una work area:
+   ```abap
+   DATA: BEGIN OF ls_body,
+           tipo(2), bukrs(4), rkont(10), tkont(10), bkont(20),
+           zuonr(16), belnr(12), gjahr(4), bldat(8), bschl(2),
+           dmbtr(13), waers(5), sgtxt(150), apunt(3), status_i(1),
+         END OF ls_body.
+   ls_body = <fs_data>.
+   ```
+   (`ls_body = <fs_data>.` es un `MOVE` posicional byte a byte según el
+   orden de los campos — no hay ningún parseo por substring/offset
+   explícito, es la propia declaración de la estructura la que define
+   los offsets).
+2. Arma la clave de negocio: `APUNT`+`ZUONR`+`BUKRS`+`BELNR`+`GJAHR`.
+3. Descarta la línea si esa clave **ya existe en la tabla en memoria de
+   este mismo fichero** (`line_exists( <fs_file>-lt_r3seg[ ... ] )`,
+   mensaje `141`) o **ya existe en `ZFI_T_R3SEG`** de un fichero anterior
+   (`SELECT SINGLE COUNT( * ) FROM zfi_t_r3seg WHERE ...`, mensaje `142`).
+4. Si no es duplicado, completa campos de auditoría (`ERSDA`/`ERZET`/
+   `ERNAM`/`STATUS`/`FILE_NAME`) y la acumula en memoria (`lt_r3seg`),
+   sin grabar todavía.
+5. **Solo si el `SUBMIT` de contabilización (`RFKKZE00`) termina bien**
+   (`sy-subrc = 0 AND lv_error_buchen IS INITIAL`), hace
+   `MODIFY zfi_t_r3seg FROM TABLE is_files-lt_r3seg.` — si falla, no se
+   graba nada, para no marcar como "ya procesadas" posiciones de un
+   fichero que al final no se contabilizó.
+
+### Decisión: tabla propia `ZFI_T_R3SEG_DEV`, no compartir `ZFI_T_R3SEG`
+
+Se planteó reutilizar literalmente `ZFI_T_R3SEG` (compartida entre los
+dos procesos) — Eva confirmó que no hay riesgo real de colisión de
+claves entre cobros y devoluciones, pero decidió igualmente usar una
+**tabla nueva, copia exacta de `ZFI_T_R3SEG`**, para no mezclar datos de
+dos procesos de negocio distintos en la misma tabla física. Nombre
+elegido (pedido explícito: "más intuitivo" que un sufijo de versión tipo
+`V2`): **`ZFI_T_R3SEG_DEV`**.
+
+### Mapeo de campos para una posición de devolución
+
+La estructura `ZFI_T_R3SEG`/`ZFI_T_R3SEG_DEV` (confirmada en `SE11`,
+tabla transparente "Movimientos de Cuenta Bancaria en SAP R3") tiene
+como clave `MANDT`+`APUNT`(`NUMC3`)+`ZUONR`(`CHAR16`)+`BUKRS`(`CHAR4`)+
+`BELNR`(`CHAR12`)+`GJAHR`(`NUMC4`).
+
+La duda inicial era si estos campos había que rellenarlos con valores
+inventados/fijos (no vienen "explícitos" como conceptos de negocio de
+devoluciones) o si, igual que en el programa de pagos, vienen ya en la
+propia línea del fichero. **Confirmado por depuración real** (`ls_body`
+contra una línea real del `_DEV`, ver captura): la línea de 260
+caracteres del `_DEV` (heredada tal cual del fichero bancario original —
+`ZFI_R_ECOFI_SPLIT` solo reescribe el concepto para las líneas de
+extorno) es el **mismo formato posicional** que `LCL_GESTION_COBROS_
+TRANSF`, offset por offset:
+
+```
+ls_body-tipo     = '02'
+ls_body-bukrs    = '1239'                  <- coincide con SOCIEDAD
+ls_body-rkont    = '4305500150'            <- coincide con CTA_COMPENSACION (!)
+ls_body-tkont    = '57288X910...'
+ls_body-bkont    = '21002931930200826108'
+ls_body-zuonr    = 'ANUP'                  <- el indicador de extorno de ZFI_R_ECOFI_SPLIT
+ls_body-belnr    = '1826033854'            <- NO es el nº de documento SAP (ver más abajo)
+ls_body-gjahr    = '2026'
+ls_body-bldat    = '20260401'
+ls_body-bschl    = '50'
+ls_body-dmbtr    = '6049'
+ls_body-waers    = 'EUR'
+ls_body-sgtxt    = '491000011392'          <- el nº de documento SAP (docnum ya extraído por PARSE_DEV_LINES)
+ls_body-apunt    = '002'
+ls_body-status_i = '0'
+```
+
+Dos hallazgos importantes de esta prueba:
+
+1. **`RKONT` coincide con `CTA_COMPENSACION`** (`4305500150`) — confirma
+   que el formato de línea es realmente compartido entre el fichero de
+   cobros/transferencias y el ECOFI, no una casualidad de longitud.
+2. **El `BELNR` nativo del offset 62 NO es el número de documento SAP**
+   que se está devolviendo — es otra referencia del banco (probablemente
+   su propio nº de movimiento). El número de documento real (el que ya
+   extrae `PARSE_DEV_LINES` desde dentro del bloque de 24 dígitos que
+   reescribe `ZFI_R_ECOFI_SPLIT`) aparece en el campo `SGTXT` (el
+   "concepto"), no en `BELNR`.
+
+**Mapeo final** (implementado en `PARSE_DEV_LINES`/`FILTER_DUPLICATES`):
+
+| Campo de la clave | Origen |
+|---|---|
+| `BUKRS` | Real, `ls_body-bukrs` (offset 2) |
+| `GJAHR` | Real, `ls_body-gjahr` (offset 74) |
+| `APUNT` | Real, `ls_body-apunt` (offset 256) — sale constante en las pruebas vistas, pero se lee del fichero igualmente, no se fija a mano |
+| `ZUONR` | Real, `ls_body-zuonr` (offset 46) — será siempre `ANUP` porque el `_DEV` solo contiene extornos, pero se lee del fichero, no se hardcodea |
+| `BELNR` | **No** el nativo del offset 62 — es `docnum`, el nº de documento SAP de 12 dígitos que ya extraía `PARSE_DEV_LINES` desde `SGTXT` |
+
+### Implementación
+
+- `PARSE_DEV_LINES` parsea también `ls_body` (misma estructura que el
+  programa de pagos) y añade `bukrs`/`gjahr`/`apunt`/`zuonr` a cada
+  `ty_s_item`, junto a `docnum`/`importe_cent` que ya calculaba.
+- Nuevo método privado `FILTER_DUPLICATES` (llamado en `PROCESS_DEV_FILE`
+  y en `EXECUTE_UPLOAD`, justo después de `PARSE_DEV_LINES`): mismo
+  mecanismo de dos pasos que `LCL_GESTION_COBROS_TRANSF` (duplicado en el
+  propio fichero vía `line_exists`, duplicado ya persistido vía `SELECT
+  SINGLE COUNT( * )`), mensajes nuevos `184`/`185` de `ZFI_MC_001` (hay
+  que darlos de alta en `SE91`).
+- El `MODIFY zfi_t_r3seg_dev FROM TABLE lt_r3seg_dev` solo se ejecuta si
+  `create_lot` termina con `ev_ok = abap_true` — mismo criterio que el
+  programa de pagos, para no marcar como "ya procesadas" posiciones de
+  un fichero que al final no generó ningún lote.
+- Si tras filtrar duplicados no queda ninguna posición (todas eran
+  repetidas), se considera `PROCESADO` (no `ERROR`) y se mueve a la
+  carpeta de procesados — igual que hace `LCL_GESTION_COBROS_TRANSF`
+  cuando todos los pagos de un fichero ya existían en el sistema.
+
+**Pendiente**: crear `ZFI_T_R3SEG_DEV` en `SE11` (copia de
+`ZFI_T_R3SEG`), dar de alta los mensajes `184`/`185` en `SE91`, y probar
+contra un `_DEV` real con posiciones repetidas (dentro del mismo fichero
+y contra un fichero ya procesado antes).
+
 ## El fichero SIEMPRE se mueve, se procese bien o mal
 
 Pedido por Eva (no viene del DF): a veces el fichero de entrada no se

@@ -107,8 +107,18 @@ CLASS lcl_devoluciones_crea DEFINITION.
       BEGIN OF ty_s_item,
         docnum        TYPE string,
         importe_cent  TYPE i,
+        " Resto de la clave de ZFI_T_R3SEG_DEV (validacion de duplicados,
+        " ver FILTER_DUPLICATES) - reales, del propio fichero (parseo
+        " posicional igual que LCL_GESTION_COBROS_TRANSF, ver
+        " PARSE_DEV_LINES), no inventados.
+        bukrs         TYPE zfi_t_r3seg_dev-bukrs,
+        gjahr         TYPE zfi_t_r3seg_dev-gjahr,
+        apunt         TYPE zfi_t_r3seg_dev-apunt,
+        zuonr         TYPE zfi_t_r3seg_dev-zuonr,
       END OF ty_s_item,
-      ty_t_item TYPE STANDARD TABLE OF ty_s_item WITH EMPTY KEY.
+      ty_t_item TYPE STANDARD TABLE OF ty_s_item WITH EMPTY KEY,
+
+      ty_t_r3seg_dev TYPE STANDARD TABLE OF zfi_t_r3seg_dev WITH EMPTY KEY.
 
     METHODS:
       constructor IMPORTING iv_path   TYPE string
@@ -159,6 +169,23 @@ CLASS lcl_devoluciones_crea DEFINITION.
 
       parse_dev_lines IMPORTING it_lines         TYPE string_table
                        RETURNING VALUE(rt_items) TYPE ty_t_item,
+
+      " Validacion pedida por Eva: replicar el mecanismo de
+      " LCL_GESTION_COBROS_TRANSF (programa de creacion del lote de
+      " pagos) contra ZFI_T_R3SEG - misma idea, tabla propia
+      " ZFI_T_R3SEG_DEV (copia de ZFI_T_R3SEG, decision de Eva: no
+      " compartir la tabla entre los dos procesos aunque no haya riesgo
+      " real de colision de claves). Descarta posiciones que vengan
+      " repetidas en el propio fichero o que ya se registraron con un
+      " fichero anterior; ET_R3SEG_DEV son las posiciones nuevas
+      " (todavia sin grabar) a persistir SOLO si el lote se llega a crear
+      " con exito (ver PROCESS_DEV_FILE) - igual que el programa de pagos
+      " solo graba en ZFI_T_R3SEG si el SUBMIT de contabilizacion tuvo
+      " exito.
+      filter_duplicates IMPORTING it_items     TYPE ty_t_item
+                                   iv_filename  TYPE string
+                         EXPORTING et_items     TYPE ty_t_item
+                                   et_r3seg_dev TYPE ty_t_r3seg_dev,
 
       cent_to_str IMPORTING iv_cent          TYPE i
                              iv_negative      TYPE abap_bool DEFAULT abap_false
@@ -308,13 +335,26 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
       RETURN.
     ENDIF.
 
+    DATA(lv_filename) = get_filename_from_path( gv_path ).
+
+    filter_duplicates( EXPORTING it_items     = lt_items
+                                  iv_filename  = lv_filename
+                        IMPORTING et_items     = lt_items
+                                  et_r3seg_dev = DATA(lt_r3seg_dev) ).
+
+    IF lt_items IS INITIAL.
+      MESSAGE 'Todas las posiciones del fichero ya estaban registradas.' TYPE 'I'.
+      RETURN.
+    ENDIF.
+
     create_lot( EXPORTING it_items    = lt_items
-                          iv_filename = get_filename_from_path( gv_path )
+                          iv_filename = lv_filename
                 IMPORTING ev_keyr1 = DATA(lv_keyr1)
                           ev_ok    = DATA(lv_ok)
                           ev_error = DATA(lv_error) ).
 
     IF lv_ok = abap_true.
+      MODIFY zfi_t_r3seg_dev FROM TABLE lt_r3seg_dev.
       WRITE: / 'Lote creado:', lv_keyr1, '(', lines( lt_items ), 'posiciones)'.
     ELSE.
       WRITE: / 'Error al crear el lote:', lv_error.
@@ -349,6 +389,26 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
       RETURN.
     ENDIF.
 
+    filter_duplicates( EXPORTING it_items     = lt_items
+                                  iv_filename  = iv_filename
+                        IMPORTING et_items     = lt_items
+                                  et_r3seg_dev = DATA(lt_r3seg_dev) ).
+
+    IF lt_items IS INITIAL.
+      " Todas las posiciones del fichero ya estaban registradas (en el
+      " propio fichero o en uno anterior) - igual que
+      " LCL_GESTION_COBROS_TRANSF, se considera PROCESADO (no hay nada
+      " nuevo que contabilizar), no ERROR.
+      ls_file_log-status = 'PROCESADO'.
+      ls_file_log-fecha_processo = sy-datum.
+      ls_file_log-hora_processo  = sy-uzeit.
+      ls_file_log-usuario        = sy-uname.
+      UPDATE zfi_t_file_log FROM ls_file_log.
+      transport_files( iv_filename = iv_filename iv_path = gv_backup_path ).
+      WRITE: / iv_filename, '-> todas las posiciones ya estaban registradas, no se crea lote'.
+      RETURN.
+    ENDIF.
+
     ls_file_log-nbr_lines_items = lines( lt_items ).
     DATA(lv_total_cent) = REDUCE i( INIT s = 0 FOR item IN lt_items NEXT s = s + item-importe_cent ).
     ls_file_log-importe = cent_to_str( lv_total_cent ).
@@ -369,6 +429,11 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
       " para dejar trazado el nº de lote de devoluciones creado.
       ls_file_log-file_name_header = lv_keyr1.
       UPDATE zfi_t_file_log FROM ls_file_log.
+      " Solo se graban las posiciones como "ya procesadas" si el lote se
+      " creo de verdad - igual que LCL_GESTION_COBROS_TRANSF con
+      " ZFI_T_R3SEG, para no marcar como vistas posiciones de un fichero
+      " que al final no genero ningun lote.
+      MODIFY zfi_t_r3seg_dev FROM TABLE lt_r3seg_dev.
       transport_files( iv_filename = iv_filename iv_path = gv_backup_path ).
       WRITE: / iv_filename, '-> lote', lv_keyr1, '(', lines( lt_items ), 'posiciones)'.
     ELSE.
@@ -460,6 +525,32 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
 
   METHOD parse_dev_lines.
 
+    " Parseo posicional de la linea bancaria completa (260 caracteres),
+    " igual estructura/offsets que LS_BODY en LCL_GESTION_COBROS_TRANSF
+    " (programa de creacion del lote de pagos) - confirmado por
+    " depuracion real contra una linea real del _DEV (ver
+    " docs/DF_resumen.md): BUKRS='1239', GJAHR/APUNT/ZUONR reales. Solo
+    " se usan estos 4 campos aqui; el resto se mantiene en la estructura
+    " unicamente para que los offsets de los que si nos hacen falta
+    " caigan en su sitio.
+    DATA: BEGIN OF ls_body,
+            tipo(2),
+            bukrs(4),
+            rkont(10),
+            tkont(10),
+            bkont(20),
+            zuonr(16),
+            belnr(12),
+            gjahr(4),
+            bldat(8),
+            bschl(2),
+            dmbtr(13),
+            waers(5),
+            sgtxt(150),
+            apunt(3),
+            status_i(1),
+          END OF ls_body.
+
     LOOP AT it_lines INTO DATA(lv_line).
 
       " Primera linea = cabecera del fichero ECOFI, no es un extorno
@@ -480,8 +571,72 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
       DATA(lv_docnum) = substring( val = lv_line off = lv_eur_off + 3 + 2 len = 12 ).
       CHECK lv_docnum CO '0123456789'.
 
+      CLEAR ls_body.
+      ls_body = lv_line.
+
       APPEND VALUE #( docnum       = lv_docnum
-                       importe_cent = lv_digits ) TO rt_items.
+                       importe_cent = lv_digits
+                       bukrs        = ls_body-bukrs
+                       gjahr        = ls_body-gjahr
+                       apunt        = ls_body-apunt
+                       zuonr        = ls_body-zuonr ) TO rt_items.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD filter_duplicates.
+
+    CLEAR: et_items, et_r3seg_dev.
+
+    LOOP AT it_items INTO DATA(ls_item).
+
+      DATA(ls_r3seg) = VALUE zfi_t_r3seg_dev( bukrs = ls_item-bukrs
+                                               belnr = ls_item-docnum
+                                               gjahr = ls_item-gjahr
+                                               apunt = ls_item-apunt
+                                               zuonr = ls_item-zuonr ).
+
+      " Duplicado dentro del propio fichero en proceso - igual que
+      " LCL_GESTION_COBROS_TRANSF contra ZFI_T_R3SEG.
+      IF line_exists( et_r3seg_dev[ apunt = ls_r3seg-apunt
+                                     zuonr = ls_r3seg-zuonr
+                                     bukrs = ls_r3seg-bukrs
+                                     belnr = ls_r3seg-belnr
+                                     gjahr = ls_r3seg-gjahr ] ).
+        go_msg_logs->append_messages(
+          iv_msg_type   = 'I'
+          iv_msg_class  = 'ZFI_MC_001'
+          iv_msg_number = '184'
+          iv_param_v1   = CONV #( ls_item-docnum ) ).
+        CONTINUE.
+      ENDIF.
+
+      " Duplicado ya registrado de un fichero anterior.
+      SELECT SINGLE COUNT( * )
+        FROM zfi_t_r3seg_dev
+       WHERE apunt EQ ls_r3seg-apunt
+         AND zuonr EQ ls_r3seg-zuonr
+         AND bukrs EQ ls_r3seg-bukrs
+         AND belnr EQ ls_r3seg-belnr
+         AND gjahr EQ ls_r3seg-gjahr.
+      IF sy-dbcnt <> 0.
+        go_msg_logs->append_messages(
+          iv_msg_type   = 'I'
+          iv_msg_class  = 'ZFI_MC_001'
+          iv_msg_number = '185'
+          iv_param_v1   = CONV #( ls_item-docnum ) ).
+        CONTINUE.
+      ENDIF.
+
+      ls_r3seg-ersda     = sy-datum.
+      ls_r3seg-erzet     = sy-uzeit.
+      ls_r3seg-ernam     = sy-uname.
+      ls_r3seg-status    = '01'.
+      ls_r3seg-file_name = iv_filename.
+
+      APPEND ls_r3seg TO et_r3seg_dev.
+      APPEND ls_item TO et_items.
 
     ENDLOOP.
 
