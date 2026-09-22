@@ -602,7 +602,20 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
     " (numero de documento SAP) para no traer de mas; la clave completa
     " se sigue comprobando en memoria con LINE_EXISTS, igual que el
     " duplicado dentro del propio fichero.
-    TYPES: BEGIN OF ty_belnr, belnr TYPE zfi_t_r3seg_dev-belnr, END OF ty_belnr,
+    "
+    " Rango (WHERE belnr IN lt_r_belnr), no FOR ALL ENTRIES: mismo
+    " resultado sin sus dos inconvenientes - un rango vacio no trae nada
+    " (FOR ALL ENTRIES con la tabla conductora vacia trae TODA la tabla
+    " si no se guarda aparte con un IF) y no depende de como arme el
+    " motor la condicion interna a partir de una tabla de filas
+    " completas. El LOOP para deduplicar SI hace falta (no vale usar
+    " IT_ITEMS directamente): FOR ALL ENTRIES/un rango deduplican por
+    " DOCNUM, que es justo el campo que queremos deduplicar - si se
+    " dedujera por fila completa de IT_ITEMS (que trae ademas importe y
+    " el resto de la clave), dos posiciones con el mismo DOCNUM pero
+    " distinto importe (un extorno partido en dos lineas contra el mismo
+    " documento) no se tratarian como equivalentes para esto.
+    TYPES: ty_r_belnr TYPE RANGE OF zfi_t_r3seg_dev-belnr,
       " Solo los 5 campos que se comparan despues con LINE_EXISTS - un
       " SELECT * traeria tambien SGTXT (150 caracteres), fechas, importe,
       " etc. sin necesidad.
@@ -613,21 +626,20 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
         belnr TYPE zfi_t_r3seg_dev-belnr,
         gjahr TYPE zfi_t_r3seg_dev-gjahr,
       END OF ty_key.
-    DATA: lt_belnr    TYPE STANDARD TABLE OF ty_belnr,
+    DATA: lt_r_belnr  TYPE ty_r_belnr,
           lt_existing TYPE STANDARD TABLE OF ty_key.
 
     LOOP AT it_items INTO DATA(ls_item_key).
-      APPEND VALUE #( belnr = ls_item_key-docnum ) TO lt_belnr.
+      APPEND VALUE #( sign = 'I' option = 'EQ' low = ls_item_key-docnum ) TO lt_r_belnr.
     ENDLOOP.
-    SORT lt_belnr.
-    DELETE ADJACENT DUPLICATES FROM lt_belnr.
+    SORT lt_r_belnr.
+    DELETE ADJACENT DUPLICATES FROM lt_r_belnr.
 
-    IF lt_belnr IS NOT INITIAL.
+    IF lt_r_belnr IS NOT INITIAL.
       SELECT apunt zuonr bukrs belnr gjahr
         FROM zfi_t_r3seg_dev
         INTO TABLE lt_existing
-        FOR ALL ENTRIES IN lt_belnr
-       WHERE belnr = lt_belnr-belnr.
+       WHERE belnr IN lt_r_belnr.
     ENDIF.
 
     LOOP AT it_items INTO DATA(ls_item).

@@ -738,13 +738,27 @@ Dos hallazgos importantes de esta prueba:
   - `185` (I): `Posición &1 ya registrada de un fichero anterior, se descarta`
 - **Rendimiento**: a diferencia de `LCL_GESTION_COBROS_TRANSF` (que hace
   un `SELECT SINGLE COUNT( * )` **por línea**, dentro del bucle),
-  `FILTER_DUPLICATES` trae **una sola vez, antes del bucle**, todos los
-  registros de `ZFI_T_R3SEG_DEV` cuyo `BELNR` coincida con algún
-  documento del fichero (`SELECT ... FOR ALL ENTRIES IN lt_belnr WHERE
-  belnr = lt_belnr-belnr`, con la lista de documentos ya deduplicada por
-  `SORT`+`DELETE ADJACENT DUPLICATES`) y comprueba la clave completa en
-  memoria con `line_exists` — evita un acceso a BD por cada posición
-  (ficheros de 72 posiciones ya vistos en pruebas anteriores).
+  `FILTER_DUPLICATES` trae **una sola vez, antes del bucle**, solo los 5
+  campos de la clave (no `SELECT *`, que traería también `SGTXT` de 150
+  caracteres, fechas, importe...) de los registros de `ZFI_T_R3SEG_DEV`
+  cuyo `BELNR` coincida con algún documento del fichero — y comprueba la
+  clave completa en memoria con `line_exists`. Evita un acceso a BD por
+  cada posición (ficheros de 72 posiciones ya vistos en pruebas
+  anteriores).
+  - **`WHERE belnr IN lt_r_belnr` (rango), no `FOR ALL ENTRIES`**: mismo
+    resultado sin sus dos inconvenientes — un rango vacío no trae nada
+    (`FOR ALL ENTRIES` con la tabla conductora vacía trae **toda** la
+    tabla si no se guarda aparte con un `IF`), y no depende de cómo arme
+    el motor la condición interna a partir de una tabla de filas
+    completas.
+  - **El `LOOP` para deduplicar antes de construir el rango sí hace
+    falta** — no vale construirlo directamente a partir de `it_items`:
+    tanto un rango como `FOR ALL ENTRIES` deduplican por el campo usado
+    en el `WHERE` (`docnum`), que es justo lo que interesa; si se
+    dedujera por fila completa de `it_items` (que además trae importe y
+    el resto de la clave), dos posiciones con el mismo `docnum` pero
+    distinto importe (un extorno partido en dos líneas contra el mismo
+    documento) no se tratarían como equivalentes a este efecto.
 - **Bug real corregido** (probado con la tabla `ZFI_T_R3SEG_DEV` vacía y
   aun así todas las posiciones salían como duplicadas): la consulta de
   duplicado contra BD, copiada tal cual del programa de pagos
