@@ -220,6 +220,28 @@ después de la llamada cuyo resultado importa, antes de ejecutar
 cualquier otra cosa (incluido cualquier `MESSAGE`) que pueda
 sobrescribirlo.
 
+## `SELECT SINGLE COUNT( * )` sin `INTO`: no fiarse de `SY-DBCNT` después
+
+`SELECT SINGLE COUNT( * ) FROM tabla WHERE ...` sin cláusula `INTO`
+**activa sin error** y no lanza ningún dump, pero el resultado del
+conteo no se deja en ningún sitio fiable — comprobar después
+`sy-dbcnt <> 0` para saber si había algún registro es una apuesta: si
+antes de este `SELECT` hubo **cualquier otra operación de base de
+datos** en el programa (otro `SELECT`, un `INSERT`/`UPDATE` de una clase
+reutilizada, etc.), `sy-dbcnt` puede venir con el valor **residual de
+esa otra operación**, no con el conteo real de esta consulta. Real: con
+la tabla de verdad **vacía**, todas las líneas salían como "ya
+registradas" porque `sy-dbcnt` arrastraba un `1` de un `INSERT` anterior
+en el mismo método (`go_file_log->create_log`).
+
+**Regla:** usar siempre un `INTO` explícito para el conteo:
+
+```abap
+DATA: lv_count TYPE i.
+SELECT SINGLE COUNT( * ) FROM tabla INTO lv_count WHERE ...
+IF lv_count <> 0.
+```
+
 ## Si GitHub falla
 
 Si la web de GitHub da error (incidencia de su lado, no del repo — se

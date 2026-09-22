@@ -736,6 +736,16 @@ Dos hallazgos importantes de esta prueba:
   alta en `SE91`, `&1` = documento, `&2` = fichero):
   - `184` (I): `Posición &1 duplicada en el propio fichero &2, se descarta`
   - `185` (I): `Posición &1 ya registrada de un fichero anterior, se descarta`
+- **Bug real corregido** (probado con la tabla `ZFI_T_R3SEG_DEV` vacía y
+  aun así todas las posiciones salían como duplicadas): la consulta de
+  duplicado contra BD, copiada tal cual del programa de pagos
+  (`SELECT SINGLE COUNT( * ) FROM zfi_t_r3seg_dev WHERE ...` sin
+  `INTO`), no tiene dónde dejar el resultado del conteo — comprobar
+  después `sy-dbcnt <> 0` es una apuesta: venía con un `1` residual de
+  la operación de BD anterior en el mismo método
+  (`go_file_log->create_log`), no con el conteo real (`0`, tabla
+  vacía). Fix: `INTO lv_count` explícito + `IF lv_count <> 0` (ver
+  `CLAUDE.md`).
 - El `MODIFY zfi_t_r3seg_dev FROM TABLE lt_r3seg_dev` solo se ejecuta si
   `create_lot` termina con `ev_ok = abap_true` — mismo criterio que el
   programa de pagos, para no marcar como "ya procesadas" posiciones de

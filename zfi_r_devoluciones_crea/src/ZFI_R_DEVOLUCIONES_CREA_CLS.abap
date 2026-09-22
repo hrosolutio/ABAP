@@ -614,14 +614,21 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
       ENDIF.
 
       " Duplicado ya registrado de un fichero anterior.
+      " OJO: COUNT(*) sin INTO no tiene donde dejar el resultado -
+      " SY-DBCNT despues puede venir de OTRA operacion de BD anterior en
+      " el programa (p.ej. GO_FILE_LOG->CREATE_LOG), no del conteo real
+      " de esta consulta. Hace falta un INTO explicito.
+      DATA: lv_count TYPE i.
+      CLEAR lv_count.
       SELECT SINGLE COUNT( * )
         FROM zfi_t_r3seg_dev
+        INTO lv_count
        WHERE apunt EQ ls_r3seg-apunt
          AND zuonr EQ ls_r3seg-zuonr
          AND bukrs EQ ls_r3seg-bukrs
          AND belnr EQ ls_r3seg-belnr
          AND gjahr EQ ls_r3seg-gjahr.
-      IF sy-dbcnt <> 0.
+      IF lv_count <> 0.
         go_msg_logs->append_messages(
           iv_msg_type   = 'I'
           iv_msg_class  = 'ZFI_MC_001'
