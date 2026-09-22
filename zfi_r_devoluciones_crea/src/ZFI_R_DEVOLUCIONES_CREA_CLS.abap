@@ -608,7 +608,8 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
           iv_msg_type   = 'I'
           iv_msg_class  = 'ZFI_MC_001'
           iv_msg_number = '184'
-          iv_param_v1   = CONV #( ls_item-docnum ) ).
+          iv_param_v1   = CONV #( ls_item-docnum )
+          iv_param_v2   = CONV #( iv_filename ) ).
         CONTINUE.
       ENDIF.
 
@@ -625,7 +626,8 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
           iv_msg_type   = 'I'
           iv_msg_class  = 'ZFI_MC_001'
           iv_msg_number = '185'
-          iv_param_v1   = CONV #( ls_item-docnum ) ).
+          iv_param_v1   = CONV #( ls_item-docnum )
+          iv_param_v2   = CONV #( iv_filename ) ).
         CONTINUE.
       ENDIF.
 

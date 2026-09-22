@@ -150,8 +150,10 @@ procesados — no hay nada nuevo que contabilizar, no es un fallo.
 
 Mensajes nuevos en `ZFI_MC_001` (**hay que darlos de alta en `SE91`
 antes de activar**, con `&1` como único parámetro):
-- `184` (I): posición duplicada dentro del propio fichero.
-- `185` (I): posición ya registrada de un fichero anterior.
+- `184` (I): `Posición &1 duplicada en el propio fichero &2, se descarta`
+- `185` (I): `Posición &1 ya registrada de un fichero anterior, se descarta`
+
+(`&1` = número de documento, `&2` = nombre del fichero `_DEV` actual).
 
 ## Validación de posiciones y `ANZPO`
 

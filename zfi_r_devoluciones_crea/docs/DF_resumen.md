@@ -732,8 +732,10 @@ Dos hallazgos importantes de esta prueba:
   y en `EXECUTE_UPLOAD`, justo después de `PARSE_DEV_LINES`): mismo
   mecanismo de dos pasos que `LCL_GESTION_COBROS_TRANSF` (duplicado en el
   propio fichero vía `line_exists`, duplicado ya persistido vía `SELECT
-  SINGLE COUNT( * )`), mensajes nuevos `184`/`185` de `ZFI_MC_001` (hay
-  que darlos de alta en `SE91`).
+  SINGLE COUNT( * )`), mensajes nuevos de `ZFI_MC_001` (hay que darlos de
+  alta en `SE91`, `&1` = documento, `&2` = fichero):
+  - `184` (I): `Posición &1 duplicada en el propio fichero &2, se descarta`
+  - `185` (I): `Posición &1 ya registrada de un fichero anterior, se descarta`
 - El `MODIFY zfi_t_r3seg_dev FROM TABLE lt_r3seg_dev` solo se ejecuta si
   `create_lot` termina con `ev_ok = abap_true` — mismo criterio que el
   programa de pagos, para no marcar como "ya procesadas" posiciones de
