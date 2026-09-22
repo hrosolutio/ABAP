@@ -602,9 +602,19 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
     " (numero de documento SAP) para no traer de mas; la clave completa
     " se sigue comprobando en memoria con LINE_EXISTS, igual que el
     " duplicado dentro del propio fichero.
-    TYPES: BEGIN OF ty_belnr, belnr TYPE zfi_t_r3seg_dev-belnr, END OF ty_belnr.
+    TYPES: BEGIN OF ty_belnr, belnr TYPE zfi_t_r3seg_dev-belnr, END OF ty_belnr,
+      " Solo los 5 campos que se comparan despues con LINE_EXISTS - un
+      " SELECT * traeria tambien SGTXT (150 caracteres), fechas, importe,
+      " etc. sin necesidad.
+      BEGIN OF ty_key,
+        apunt TYPE zfi_t_r3seg_dev-apunt,
+        zuonr TYPE zfi_t_r3seg_dev-zuonr,
+        bukrs TYPE zfi_t_r3seg_dev-bukrs,
+        belnr TYPE zfi_t_r3seg_dev-belnr,
+        gjahr TYPE zfi_t_r3seg_dev-gjahr,
+      END OF ty_key.
     DATA: lt_belnr    TYPE STANDARD TABLE OF ty_belnr,
-          lt_existing TYPE STANDARD TABLE OF zfi_t_r3seg_dev.
+          lt_existing TYPE STANDARD TABLE OF ty_key.
 
     LOOP AT it_items INTO DATA(ls_item_key).
       APPEND VALUE #( belnr = ls_item_key-docnum ) TO lt_belnr.
@@ -613,7 +623,7 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
     DELETE ADJACENT DUPLICATES FROM lt_belnr.
 
     IF lt_belnr IS NOT INITIAL.
-      SELECT *
+      SELECT apunt zuonr bukrs belnr gjahr
         FROM zfi_t_r3seg_dev
         INTO TABLE lt_existing
         FOR ALL ENTRIES IN lt_belnr
@@ -645,7 +655,7 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
       ENDIF.
 
       " Duplicado ya registrado de un fichero anterior - contra
-      " LT_EXISTING, ya traida entera antes del bucle.
+      " LT_EXISTING, ya traida antes del bucle (solo la clave).
       IF line_exists( lt_existing[ apunt = ls_r3seg-apunt
                                     zuonr = ls_r3seg-zuonr
                                     bukrs = ls_r3seg-bukrs
