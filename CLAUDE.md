@@ -264,6 +264,32 @@ con `VALUE(nombre)` — fuerza el paso por valor (una copia propia), así no
 puede pisar la entrada aunque el llamador reutilice la misma variable
 para los dos parámetros.
 
+## `SUBMIT ... AND RETURN` no evita la pantalla de lista por sí solo
+
+`AND RETURN` significa "cuando el report termine y se cierre su
+pantalla de lista, vuelve a mi programa" — **no** significa "no muestres
+ninguna pantalla". Si el report llamado escribe algo con `WRITE` (o
+incluso si no escribe nada, según el contexto), `SUBMIT ... AND RETURN`
+puede dejar una pantalla de lista esperando a que se cierre — en una
+llamada real por RFC (sin GUI) esto puede colgar la llamada; probándolo
+desde SE37 (que sí tiene un contexto de diálogo real), literalmente se
+queda "parado" ahí sin ningún breakpoint de por medio.
+
+**Regla:** si el `SUBMIT` es desde un módulo de función (RFC) y no
+interesa ver la lista del report llamado, usar `EXPORTING LIST TO
+MEMORY`:
+
+```abap
+SUBMIT programa
+  WITH SELECTION-TABLE lt_rspar
+  EXPORTING LIST TO MEMORY
+  AND RETURN.
+```
+
+Esto redirige la lista a memoria en vez de a pantalla — el `SUBMIT`
+nunca abre nada, se pueda o no descartar después esa lista (con
+`LIST_FROM_MEMORY`/`LIST_FREE_MEMORY` si hiciera falta leerla).
+
 ## Si GitHub falla
 
 Si la web de GitHub da error (incidencia de su lado, no del repo — se

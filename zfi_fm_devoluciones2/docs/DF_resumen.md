@@ -41,10 +41,29 @@ sintaxis simple (`WITH s_keyr1 = ...` solo admite un valor). Para pasar
 varios lotes (`IT_KEYR1`) a la vez, hace falta construir una tabla de
 selección estándar (`RSPARAMS`: `SELNAME`/`KIND`/`SIGN`/`OPTION`/`LOW`/
 `HIGH`) con una fila por cada `KEYR1` (`KIND = 'S'`, `SIGN = 'I'`,
-`OPTION = 'EQ'`), y llamar con
-`SUBMIT zfi_r_devoluciones2 WITH SELECTION-TABLE lt_rspar AND RETURN.`
+`OPTION = 'EQ'`).
 `RSPARAMS` es una estructura estándar de SAP, no hace falta crear nada
 nuevo para esto.
+
+**`EXPORTING LIST TO MEMORY` (no solo `AND RETURN`)**: bug real detectado
+depurando/probando en SE37 — sin `EXPORTING LIST TO MEMORY`, la llamada
+se quedaba "parada" al llegar al `SUBMIT`, sin ningún breakpoint de por
+medio. `AND RETURN` por sí solo no evita que se muestre la pantalla de
+lista del report al terminar (solo dice "vuelve a mi programa después de
+cerrar esa pantalla") — con un contexto de diálogo real (como al probar
+en SE37) se queda esperando a que se cierre. Fix, mismo patrón que
+`SUBMIT rfkkze00` en `LCL_GESTION_COBROS_TRANSF` (programa de pagos):
+
+```abap
+SUBMIT zfi_r_devoluciones2
+  WITH SELECTION-TABLE lt_rspar
+  EXPORTING LIST TO MEMORY
+  AND RETURN.
+```
+
+Redirige la lista a memoria en vez de a pantalla — el `SUBMIT` no abre
+nada, la use o no luego el llamador (aquí no se lee, se descarta). Ver
+`CLAUDE.md`.
 
 **Sin fila `P_SIMU`, a propósito**: no se rellena ninguna fila para
 `P_SIMU` en `lt_rspar`, así que el report toma su propio valor por

@@ -37,6 +37,16 @@ Se decidió así (en vez de extraer la lógica a una clase global
 compartida) para no tocar código ya probado en DES: el report se queda
 exactamente igual, y este RFC es una capa fina por encima.
 
+**`SUBMIT ... EXPORTING LIST TO MEMORY AND RETURN`** (no solo
+`AND RETURN`): bug real — sin `EXPORTING LIST TO MEMORY`, la llamada se
+quedaba "parada" al llegar al `SUBMIT`, sin ningún breakpoint de por
+medio (`AND RETURN` por sí solo no evita que se muestre la pantalla de
+lista del report, solo dice "vuelve a mi después de cerrarla" — en un
+contexto de diálogo real, como probar en SE37, se queda esperando a que
+se cierre). Mismo patrón que `SUBMIT rfkkze00` en
+`LCL_GESTION_COBROS_TRANSF` (programa de pagos) — ver
+`docs/DF_resumen.md`.
+
 **Detalle de error tipo FP09**: cuando algún lote no llega a
 contabilizarse, además del `STARS` resultante, `ES_ERROR` incluye una
 fila por cada mensaje del desglose por documento que muestra la FP09

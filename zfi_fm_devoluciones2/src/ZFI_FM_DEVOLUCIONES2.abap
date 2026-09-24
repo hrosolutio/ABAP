@@ -112,8 +112,15 @@ FUNCTION zfi_fm_devoluciones2.
   ls_rspar-low     = abap_true.
   APPEND ls_rspar TO lt_rspar.
 
+  " EXPORTING LIST TO MEMORY (no solo AND RETURN): AND RETURN por si solo
+  " no evita que se muestre la pantalla de lista del report al terminar
+  " - solo dice "vuelve a mi despues" de cerrarla. Sin esto, un RFC/
+  " prueba en SE37 se queda esperando a que se cierre esa pantalla.
+  " Mismo patron que SUBMIT rfkkze00 en LCL_GESTION_COBROS_TRANSF
+  " (programa de pagos, ver docs/DF_resumen.md).
   SUBMIT zfi_r_devoluciones2
     WITH SELECTION-TABLE lt_rspar
+    EXPORTING LIST TO MEMORY
     AND RETURN.
 
   IMPORT gt_post_errors = lt_post_errors FROM MEMORY ID 'ZFI_DEVOL2_ERRORS'.
