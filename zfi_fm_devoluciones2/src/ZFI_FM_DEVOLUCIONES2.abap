@@ -5,7 +5,7 @@ FUNCTION zfi_fm_devoluciones2.
 *"     VALUE(IT_KEYR1) TYPE  ZFI_T_KEYR1
 *"  EXPORTING
 *"     VALUE(E_RESULT) TYPE  CHAR3
-*"     VALUE(ES_ERROR) TYPE  ZFI_DE_XX_WS_ERROR
+*"     VALUE(ET_ERROR) TYPE  ZFI_T_XX_WS_ERROR
 *"----------------------------------------------------------------------
 * RU_03 (CDI_11) como servicio RFC. El DF pedía originalmente un
 * "servicio" para el cierre/contabilización del lote de devoluciones;
@@ -29,16 +29,17 @@ FUNCTION zfi_fm_devoluciones2.
 * quita para no dar pie a que un consumidor externo dispare una
 * llamada en modo simulación sin querer.
 *
-* E_RESULT/ES_ERROR siguen el mismo patrón que ZFI_FM_PAYLOT_REVERSE/
-* ZFI_FM_PAYMENT_LOT_CLARIFY2 (CHAR3 'OK'/'NOK' + ZFI_DE_XX_WS_ERROR).
-* Como IT_KEYR1 admite varios lotes a la vez (a diferencia de esos dos
-* RFCs, que procesan un único elemento), E_RESULT es un resultado
-* GLOBAL de la llamada: 'OK' solo si TODOS los lotes de IT_KEYR1
-* terminaron contabilizados (STARS = CO_STARS_POSTED); si no, 'NOK' y
-* ES_ERROR-DESCRIPTION lista qué lote(s) no llegaron a contabilizarse
-* y por qué (no hace falta una tabla de resultado aparte: con E_RESULT
-* = 'OK' ya se sabe que todo se contabilizó, y con 'NOK' el detalle
-* está en ES_ERROR).
+* E_RESULT/ET_ERROR siguen el mismo espiritu que ZFI_FM_PAYLOT_REVERSE/
+* ZFI_FM_PAYMENT_LOT_CLARIFY2 (CHAR3 'OK'/'NOK' + estructura de error
+* ZFI_DE_XX_WS_ERROR), pero aqui ET_ERROR es una TABLA (ZFI_T_XX_WS_ERROR,
+* linea = ZFI_DE_XX_WS_ERROR) en vez de una unica estructura - IT_KEYR1
+* admite varios lotes a la vez, y con el detalle de error tipo FP09 (ver
+* mas abajo) puede haber muchos mensajes reales por lote, que no caben
+* en el campo DESCRIPTION (CHAR75) de una unica estructura. Cada mensaje
+* (el resumen del lote y cada linea de detalle FP09) es una fila propia,
+* asi ninguno se trunca por ir concatenado con los demas. 'OK' solo si
+* TODOS los lotes de IT_KEYR1 terminaron contabilizados (STARS =
+* CO_STARS_POSTED) y ET_ERROR queda vacia; si no, 'NOK'.
 *
 * Detalle de error tipo FP09: además de STARS, ZFI_R_DEVOLUCIONES2_CLS
 * captura (cuando FKK_RLS_POST_LOT falla) el mismo detalle de mensajes
@@ -51,12 +52,18 @@ FUNCTION zfi_fm_devoluciones2.
 * podemos leer ahí los datos globales de SAPLFKKTRACE directamente
 * (por eso el report hace el trabajo y nos deja el resultado ya
 * montado en memoria ABAP, que sí cruza esa frontera) - lo importamos
-* aquí y lo añadimos a ES_ERROR-DESCRIPTION junto al STARS de cada lote.
+* aquí y añadimos una fila a ET_ERROR por cada línea de detalle, junto
+* al resumen de STARS de cada lote.
 * TY_POST_ERROR se declara igual (misma estructura, no hace falta que
 * sea el mismo tipo con nombre) que la de ZFI_R_DEVOLUCIONES2_CLS.
 * El nombre 'GT_POST_ERRORS' en EXPORT/IMPORT es la clave del dato
 * dentro de la memoria ABAP (no el nombre de la variable en cada lado,
 * que puede ser distinto) - tiene que coincidir en ambos.
+*
+* OJO: DESCRIPTION sigue siendo CHAR75 por fila - un mensaje individual
+* de FP09 mas largo que eso se truncaria igualmente, pero es un caso
+* mucho mas raro que el problema original (perder TODO el detalle al
+* concatenarlo en una unica fila).
 
   TYPES:
     BEGIN OF ty_post_error,
@@ -66,17 +73,15 @@ FUNCTION zfi_fm_devoluciones2.
 
   DATA: lt_rspar       TYPE STANDARD TABLE OF rsparams,
         ls_rspar       TYPE rsparams,
-        lv_fail_count  TYPE i,
-        lv_fail_desc   TYPE string,
         lv_stars       TYPE dfkkrk-stars,
         lt_post_errors TYPE STANDARD TABLE OF ty_post_error.
 
-  CLEAR: e_result, es_error.
+  CLEAR: e_result, et_error.
 
   IF it_keyr1 IS INITIAL.
-    e_result             = 'NOK'.
-    es_error-code        = 'PARAM_MISSING'.
-    es_error-description = 'IT_KEYR1 es obligatorio (al menos un lote)'.
+    e_result = 'NOK'.
+    APPEND VALUE #( code        = 'PARAM_MISSING'
+                    description = 'IT_KEYR1 es obligatorio (al menos un lote)' ) TO et_error.
     RETURN.
   ENDIF.
 
@@ -117,25 +122,27 @@ FUNCTION zfi_fm_devoluciones2.
       WHERE keyr1 = ls_keyr1_out-keyr1.
 
     IF sy-subrc <> 0.
-      lv_fail_count = lv_fail_count + 1.
-      lv_fail_desc  = lv_fail_desc && |Lote { ls_keyr1_out-keyr1 }: no existe en DFKKRK. |.
+      APPEND VALUE #( code        = 'LOTES_INCOMPLETOS'
+                      description = |Lote { ls_keyr1_out-keyr1 }: no existe en DFKKRK.| ) TO et_error.
     ELSEIF lv_stars <> co_stars_posted.
-      lv_fail_count = lv_fail_count + 1.
-      lv_fail_desc  = lv_fail_desc && |Lote { ls_keyr1_out-keyr1 }: STARS={ lv_stars } (no contabilizado). |.
+      APPEND VALUE #( code        = 'LOTES_INCOMPLETOS'
+                      description = |Lote { ls_keyr1_out-keyr1 }: STARS={ lv_stars } (no contabilizado).| ) TO et_error.
 
+      " Una fila por cada linea de detalle FP09 de este lote - no se
+      " concatenan entre si ni con el resumen de arriba, para que
+      " ninguna se trunque (ver cabecera del include).
       LOOP AT lt_post_errors INTO DATA(ls_post_error) WHERE keyr1 = ls_keyr1_out-keyr1.
-        lv_fail_desc = lv_fail_desc && |{ ls_post_error-message }. |.
+        APPEND VALUE #( code        = 'LOTES_INCOMPLETOS'
+                        description = ls_post_error-message ) TO et_error.
       ENDLOOP.
     ENDIF.
 
   ENDLOOP.
 
-  IF lv_fail_count = 0.
+  IF et_error IS INITIAL.
     e_result = 'OK'.
   ELSE.
-    e_result             = 'NOK'.
-    es_error-code        = 'LOTES_INCOMPLETOS'.
-    es_error-description = lv_fail_desc.
+    e_result = 'NOK'.
   ENDIF.
 
 ENDFUNCTION.

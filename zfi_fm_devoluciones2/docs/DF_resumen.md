@@ -65,34 +65,39 @@ parsear ese texto (frágil: depende del wording exacto de los mensajes
 (`CO_STARS_POSTED = '5'`, ver el código de `ZFI_R_DEVOLUCIONES2_CLS`),
 así que es una fuente de verdad ya validada, no una interpretación nueva.
 
-### `E_RESULT`/`ES_ERROR`: mismo patrón que los otros RFCs, adaptado a varios lotes
+### `E_RESULT`/`ET_ERROR`: mismo patrón que los otros RFCs, adaptado a varios lotes
 
-Se pidió que este RFC devolviera `E_RESULT` (`CHAR3`, `OK`/`NOK`) y
-`ES_ERROR` (`ZFI_DE_XX_WS_ERROR`, `CODE`/`DESCRIPTION`), igual que
-`ZFI_FM_PAYLOT_REVERSE`/`ZFI_FM_PAYMENT_LOT_CLARIFY2`. Diferencia
-importante: esos dos RFCs procesan un único elemento por llamada
-(`I_DOCUMENTID`, o `I_KEYZ1`+`I_POSZA`), así que su `E_RESULT` es
-directamente el resultado de ese único elemento. Este RFC acepta
-`IT_KEYR1` con **varios** lotes a la vez (pedido explícitamente, ver
-más abajo) — un único `E_RESULT`/`ES_ERROR` no puede decir "cuál" de
-varios lotes falló, así que:
+Se pidió que este RFC devolviera `E_RESULT` (`CHAR3`, `OK`/`NOK`) y un
+error con la misma estructura `ZFI_DE_XX_WS_ERROR` (`CODE`/`DESCRIPTION`)
+que ya usan `ZFI_FM_PAYLOT_REVERSE`/`ZFI_FM_PAYMENT_LOT_CLARIFY2`.
+Diferencia importante: esos dos RFCs procesan un único elemento por
+llamada (`I_DOCUMENTID`, o `I_KEYZ1`+`I_POSZA`), así que su `E_RESULT` es
+directamente el resultado de ese único elemento y su error cabe en una
+única estructura `ES_ERROR`. Este RFC acepta `IT_KEYR1` con **varios**
+lotes a la vez (pedido explícitamente, ver más abajo) — un único
+`E_RESULT`/`ES_ERROR` no puede decir "cuál" de varios lotes falló, así
+que:
 
-- `E_RESULT` pasa a ser el resultado **global** de la llamada: `OK`
-  solo si todos los lotes de `IT_KEYR1` terminaron contabilizados
+- `E_RESULT` es el resultado **global** de la llamada: `OK` solo si
+  todos los lotes de `IT_KEYR1` terminaron contabilizados
   (`DFKKRK-STARS = '5'`, ya que esta RFC siempre se ejecuta en real —
-  ver más arriba); `NOK` si al menos uno no.
-- `ES_ERROR-DESCRIPTION`, cuando `E_RESULT = NOK` por lotes
-  incompletos (`CODE = 'LOTES_INCOMPLETOS'`), concatena una línea por
-  cada lote que falló (con su `KEYR1` y el motivo: `STARS` actual, o
-  que no existe en `DFKKRK`) — no es un texto fijo como en los otros
-  RFCs, porque aquí puede haber más de un fallo por llamada.
+  ver más arriba) y no se generó ningún error; `NOK` si al menos uno no.
+- **`ET_ERROR` es una tabla** (`ZFI_T_XX_WS_ERROR`, línea
+  `ZFI_DE_XX_WS_ERROR`), no una única estructura `ES_ERROR` — una fila
+  por cada lote que falló (`CODE = 'LOTES_INCOMPLETOS'`, con su `KEYR1`
+  y el motivo: `STARS` actual, o que no existe en `DFKKRK`). Ver más
+  abajo ("Por qué tabla y no una única estructura") el motivo real de
+  este cambio — no fue la decisión original.
 
 **Se descartó una tabla de resultado aparte** (`ET_RESULTADO`, con una
-fila `KEYR1`/`STARS` por lote): con `E_RESULT`/`ES_ERROR` cubriendo el
-global y el detalle de qué falló, esa tabla no aportaba nada que no
-estuviera ya ahí — se quitó por redundante (con `'OK'` ya se sabe que
-todo se contabilizó; con `'NOK'` el detalle está en
-`ES_ERROR-DESCRIPTION`).
+fila `KEYR1`/`STARS` por lote) **en el diseño original** — en ese
+momento, antes de añadir el detalle tipo FP09, con `E_RESULT`/`ES_ERROR`
+cubriendo el global y el detalle de qué falló en una única estructura
+bastaba. Esa decisión quedó obsoleta en cuanto se añadió el detalle FP09
+(ver más abajo) — el error SÍ tuvo que acabar siendo una tabla, aunque
+por un motivo distinto al que se había descartado entonces (aquí no es
+por lote, es porque un único campo de texto no da para todos los
+mensajes reales que puede haber).
 
 ### Detalle de error tipo FP09 (petición posterior de Eva)
 
@@ -129,12 +134,38 @@ IMPORT gt_post_errors = lt_post_errors FROM MEMORY ID 'ZFI_DEVOL2_ERRORS'.
 FREE MEMORY ID 'ZFI_DEVOL2_ERRORS'.
 ```
 
-y añade el texto de cada línea (`KEYR1` + mensaje) que corresponda a
-cada lote fallido dentro de `ES_ERROR-DESCRIPTION`, a continuación del
-`STARS` resultante. Nótese que el nombre `gt_post_errors` a la
-izquierda del `=` es la **clave del dato** en memoria (tiene que
-coincidir con el `EXPORT` del report), no el nombre de la variable
-local `lt_post_errors` que recibe el valor aquí.
+y añade una fila a `ET_ERROR` por cada línea (`KEYR1` + mensaje) que
+corresponda a cada lote fallido, además del resumen de `STARS`. Nótese
+que el nombre `gt_post_errors` a la izquierda del `=` es la **clave del
+dato** en memoria (tiene que coincidir con el `EXPORT` del report), no
+el nombre de la variable local `lt_post_errors` que recibe el valor
+aquí.
+
+### Por qué tabla y no una única estructura (`ET_ERROR` en vez de `ES_ERROR`)
+
+Diseño original (antes de esta corrección): el detalle FP09 se
+concatenaba entero (resumen de `STARS` + cada línea de mensaje, de
+todos los lotes) dentro de `ES_ERROR-DESCRIPTION`, una única estructura
+con ese campo `CHAR75`. **Fallo real detectado en revisión** (no en
+prueba — se vio leyendo el código): con las pruebas ya hechas, un solo
+lote con problemas podía generar **decenas** de mensajes reales de FI-CA
+(39 en una de las pruebas de `zfi_r_devoluciones2`) — concatenados todos
+en un campo de 75 caracteres, se truncaban en el primer mensaje (a
+veces ni eso), perdiendo prácticamente todo el detalle que costó tanto
+conseguir capturar.
+
+Fix: `ES_ERROR` (estructura) pasa a **`ET_ERROR`** (tabla
+`ZFI_T_XX_WS_ERROR`, línea = la misma estructura `ZFI_DE_XX_WS_ERROR` de
+siempre — no hace falta un tipo de línea nuevo, la estructura no cambia,
+solo se repite en varias filas). Cada mensaje (el resumen de `STARS` de
+un lote, y cada línea de detalle FP09 de ese lote) se añade como su
+**propia fila** con `APPEND VALUE #( code = ... description = ... ) TO
+et_error`, en vez de concatenarse con `&&` dentro de una variable
+`string` que luego se asigna entera a un único campo `DESCRIPTION`.
+`DESCRIPTION` sigue siendo `CHAR75` **por fila** — un mensaje individual
+de FP09 más largo que eso todavía se truncaría, pero es un caso mucho
+más raro que el problema original (perder *todo* el detalle por ir todo
+junto).
 
 ### Señal `P_RFC`: exportar solo cuando hace falta
 
@@ -168,22 +199,29 @@ defecto, así que el report no exporta nada.
 Mismo patrón ya usado en `ZFI_FM_PAYMENT_LOT_CLARIFY2` (`ZFI_T_XBLNR`):
 el Function Builder no admite un `TYPES` de programa como tipo de
 referencia de un parámetro de import/export de un módulo de función,
-tiene que ser un objeto DDIC real. Se crean 2 objetos nuevos, triviales
+tiene que ser un objeto DDIC real. Se crean 3 objetos nuevos, triviales
 (sin lógica de negocio propia):
 
 | Objeto | Tipo | Campos |
 |---|---|---|
 | `ZFI_S_KEYR1` | Estructura | `KEYR1` (`DFKKRK-KEYR1`) |
 | `ZFI_T_KEYR1` | Tabla estándar | Línea `ZFI_S_KEYR1` |
+| `ZFI_T_XX_WS_ERROR` | Tabla estándar | Línea `ZFI_DE_XX_WS_ERROR` (la estructura ya existente `CODE`/`DESCRIPTION`) |
 
-`ZFI_DE_XX_WS_ERROR` (`ES_ERROR`) **no es nuevo** — ya existe, reutilizado
-de `ZFI_FM_PAYLOT_REVERSE`/`ZFI_FM_PAYMENT_LOT_CLARIFY2`.
+`ZFI_DE_XX_WS_ERROR` (línea de `ET_ERROR`) **no es nuevo** — ya existe,
+reutilizado de `ZFI_FM_PAYLOT_REVERSE`/`ZFI_FM_PAYMENT_LOT_CLARIFY2`, sin
+ningún cambio: solo se usa como tipo de línea de una tabla nueva.
 
 ## Pendiente / a definir con el cliente
 
-- Probar en SE37 contra uno o varios lotes reales, ahora ya con el
-  detalle tipo FP09 en `ES_ERROR-DESCRIPTION` (aún no ejecutado) —
-  **ojo, no hay simulación: la llamada cierra/contabiliza de verdad**.
+- **Crear `ZFI_T_XX_WS_ERROR` en SE11** (tabla estándar, línea
+  `ZFI_DE_XX_WS_ERROR`) y cambiar el parámetro `ES_ERROR` del módulo de
+  función a `ET_ERROR` (tipo `ZFI_T_XX_WS_ERROR`) en SE37 — cambio de
+  interfaz, aún no aplicado en el sistema tras la corrección del `CHAR75`
+  (ver "Por qué tabla y no una única estructura" más arriba).
+- Volver a probar en SE37 contra uno o varios lotes reales, ahora con
+  `ET_ERROR` como tabla (una fila por mensaje, sin truncar) — **ojo, no
+  hay simulación: la llamada cierra/contabiliza de verdad**.
 - Autorización RFC del usuario técnico sobre `ZFI_FG_DEVOL2`.
 - Alta del objeto en el sistema de transporte correspondiente al
-  proyecto (junto con los 2 objetos DDIC nuevos).
+  proyecto (junto con los 3 objetos DDIC nuevos).

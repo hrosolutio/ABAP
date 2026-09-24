@@ -38,10 +38,12 @@ compartida) para no tocar código ya probado en DES: el report se queda
 exactamente igual, y este RFC es una capa fina por encima.
 
 **Detalle de error tipo FP09**: cuando algún lote no llega a
-contabilizarse, además del `STARS` resultante, `ES_ERROR-DESCRIPTION`
-incluye el mismo desglose de mensajes por documento que muestra la FP09
-(ej. *"El documento 484000019565 no existe. Corrija la entrada"*). Ese
-detalle lo captura `ZFI_R_DEVOLUCIONES2_CLS` en el momento de llamar a
+contabilizarse, además del `STARS` resultante, `ET_ERROR` incluye una
+fila por cada mensaje del desglose por documento que muestra la FP09
+(ej. *"El documento 484000019565 no existe. Corrija la entrada"*) — una
+fila por mensaje, no todo concatenado en un único campo (ver "Interfaz
+del servicio" más abajo, motivo real de por qué `ET_ERROR` es tabla).
+Ese detalle lo captura `ZFI_R_DEVOLUCIONES2_CLS` en el momento de llamar a
 `FKK_RLS_POST_LOT` (ver
 [`zfi_r_devoluciones2/docs/DF_resumen.md`](../zfi_r_devoluciones2/docs/DF_resumen.md)
 para la investigación completa y la técnica usada — sin tocar código
@@ -54,25 +56,32 @@ directamente desde aquí).
 
 ## Interfaz del servicio
 
-`E_RESULT`/`ES_ERROR` siguen el mismo patrón que
+`E_RESULT` sigue el mismo patrón que
 [`ZFI_FM_PAYLOT_REVERSE`](../zfi_fm_paylot_reverse/README.md) y
 [`ZFI_FM_PAYMENT_LOT_CLARIFY2`](../zfi_fm_payment_lot_clarify2/README.md)
-(`CHAR3` `OK`/`NOK` + estructura `ZFI_DE_XX_WS_ERROR` con `CODE`/
-`DESCRIPTION`). A diferencia de esos dos RFCs (que procesan un único
-elemento por llamada), `IT_KEYR1` admite varios lotes a la vez — por eso
-`E_RESULT` es el resultado **global** de la llamada: no hace falta una
-tabla de resultado aparte, porque con `E_RESULT = 'OK'` ya se sabe que
-todos los lotes quedaron contabilizados, y con `'NOK'` el detalle de
-cuáles no está en `ES_ERROR-DESCRIPTION`.
+(`CHAR3` `OK`/`NOK`), pero **`ET_ERROR` es una tabla** (`ZFI_T_XX_WS_ERROR`,
+línea = la misma estructura `ZFI_DE_XX_WS_ERROR` de esos dos RFCs —
+`CODE`/`DESCRIPTION`), no una única estructura como en ellos. Dos motivos:
+`IT_KEYR1` admite varios lotes a la vez (a diferencia de esos dos RFCs,
+que procesan un único elemento), y con el detalle de error tipo FP09 (ver
+arriba) puede haber **muchos** mensajes reales por lote — no caben
+concatenados en el campo `DESCRIPTION` (`CHAR75`) de una única fila sin
+truncarse. Cada mensaje (el resumen de `STARS` de cada lote, y cada línea
+de detalle FP09) es su propia fila.
 
 | Parámetro | Dirección | Tipo | Obligatorio | Descripción |
 |---|---|---|---|---|
 | `IT_KEYR1` | Import | `ZFI_T_KEYR1` (tipo de tabla DDIC, ver instalación) | Sí | Lote(s) a cerrar/contabilizar |
-| `E_RESULT` | Export | `CHAR3` | — | `OK` solo si **todos** los lotes de `IT_KEYR1` terminaron contabilizados (`DFKKRK-STARS = '5'`); `NOK` si al menos uno no |
-| `ES_ERROR` | Export | `ZFI_DE_XX_WS_ERROR` (`CODE`, `DESCRIPTION`) | — | Si `E_RESULT = NOK`: `CODE = 'PARAM_MISSING'` (`IT_KEYR1` vacío) o `CODE = 'LOTES_INCOMPLETOS'` (`DESCRIPTION` lista, lote a lote, cuáles no se contabilizaron, el `STARS` actual (o que no existe en `DFKKRK`), y el detalle de mensajes por documento tipo FP09 si `FKK_RLS_POST_LOT` llegó a fallar) |
+| `E_RESULT` | Export | `CHAR3` | — | `OK` solo si **todos** los lotes de `IT_KEYR1` terminaron contabilizados (`DFKKRK-STARS = '5'`) y `ET_ERROR` queda vacía; `NOK` si al menos uno no |
+| `ET_ERROR` | Export | `ZFI_T_XX_WS_ERROR` (tabla, línea `CODE`/`DESCRIPTION`) | — | Vacía si `E_RESULT = OK`. Si `NOK`: una fila con `CODE = 'PARAM_MISSING'` (`IT_KEYR1` vacío), o varias filas con `CODE = 'LOTES_INCOMPLETOS'` — una por lote con el `STARS` actual (o que no existe en `DFKKRK`), más una fila adicional por cada línea de detalle tipo FP09 si `FKK_RLS_POST_LOT` llegó a fallar |
 
-Si `IT_KEYR1` viene vacío, `E_RESULT = 'NOK'` con
-`ES_ERROR-CODE = 'PARAM_MISSING'` (no se hace ningún `SUBMIT`).
+Si `IT_KEYR1` viene vacío, `E_RESULT = 'NOK'` con una fila
+`CODE = 'PARAM_MISSING'` en `ET_ERROR` (no se hace ningún `SUBMIT`).
+
+**Ojo**: `DESCRIPTION` sigue siendo `CHAR75` por fila — un único mensaje
+de FP09 más largo que eso se truncaría igual, pero es un caso mucho más
+raro que el problema original (perder todo el detalle al ir todo
+concatenado en una sola fila).
 
 ## Contenido del repositorio
 
@@ -95,19 +104,25 @@ docs/
      `DFKKRK-KEYR1`.
    - Tipo de tabla **`ZFI_T_KEYR1`**, `Category` = tabla estándar,
      `Line type` = `ZFI_S_KEYR1`.
-2. Crear el grupo de función **`ZFI_FG_DEVOL2`** (SE80 → Grupo de
+2. **Crear en SE11 el tipo de tabla para `ET_ERROR`** — no hace falta
+   estructura nueva, reutiliza la que ya existe:
+   - Tipo de tabla **`ZFI_T_XX_WS_ERROR`**, `Category` = tabla estándar,
+     `Line type` = `ZFI_DE_XX_WS_ERROR` (la misma estructura `CODE`/
+     `DESCRIPTION` que ya usan `ZFI_FM_PAYLOT_REVERSE`/
+     `ZFI_FM_PAYMENT_LOT_CLARIFY2` para su `ES_ERROR`).
+3. Crear el grupo de función **`ZFI_FG_DEVOL2`** (SE80 → Grupo de
    función → Crear).
-3. Sustituir el contenido del include TOP del grupo
+4. Sustituir el contenido del include TOP del grupo
    (`LZFI_FG_DEVOL2TOP`) por `src/LZFI_FG_DEVOL2TOP.abap`.
-4. Crear el módulo de función **`ZFI_FM_DEVOLUCIONES2`** dentro del
+5. Crear el módulo de función **`ZFI_FM_DEVOLUCIONES2`** dentro del
    grupo:
    - Atributos: marcar **"Módulo de función remoto"** (RFC).
    - Pestaña *Import*: `IT_KEYR1` (obligatorio, tipo de referencia
      `ZFI_T_KEYR1`).
-   - Pestaña *Export*: `E_RESULT` (tipo `CHAR3`), `ES_ERROR` (tipo DDIC
-     `ZFI_DE_XX_WS_ERROR`).
+   - Pestaña *Export*: `E_RESULT` (tipo `CHAR3`), `ET_ERROR` (tipo DDIC
+     `ZFI_T_XX_WS_ERROR`).
    - Pestaña *Código fuente*: pegar `src/ZFI_FM_DEVOLUCIONES2.abap`.
-5. Activar y probar en SE37 contra uno o varios lotes reales ya creados
+6. Activar y probar en SE37 contra uno o varios lotes reales ya creados
    por `ZFI_R_DEVOLUCIONES_CREA` — **ojo, no hay simulación: la llamada
    cierra/contabiliza de verdad**.
 
