@@ -65,7 +65,7 @@ parsear ese texto (frágil: depende del wording exacto de los mensajes
 (`CO_STARS_POSTED = '5'`, ver el código de `ZFI_R_DEVOLUCIONES2_CLS`),
 así que es una fuente de verdad ya validada, no una interpretación nueva.
 
-### `E_RESULT`/`ET_ERROR`: mismo patrón que los otros RFCs, adaptado a varios lotes
+### `E_RESULT`/`ES_ERROR`: mismo patrón que los otros RFCs, adaptado a varios lotes
 
 Se pidió que este RFC devolviera `E_RESULT` (`CHAR3`, `OK`/`NOK`) y un
 error con la misma estructura `ZFI_DE_XX_WS_ERROR` (`CODE`/`DESCRIPTION`)
@@ -75,19 +75,21 @@ llamada (`I_DOCUMENTID`, o `I_KEYZ1`+`I_POSZA`), así que su `E_RESULT` es
 directamente el resultado de ese único elemento y su error cabe en una
 única estructura `ES_ERROR`. Este RFC acepta `IT_KEYR1` con **varios**
 lotes a la vez (pedido explícitamente, ver más abajo) — un único
-`E_RESULT`/`ES_ERROR` no puede decir "cuál" de varios lotes falló, así
-que:
+`E_RESULT`/`ES_ERROR` de una sola fila no puede decir "cuál" de varios
+lotes falló, así que:
 
 - `E_RESULT` es el resultado **global** de la llamada: `OK` solo si
   todos los lotes de `IT_KEYR1` terminaron contabilizados
   (`DFKKRK-STARS = '5'`, ya que esta RFC siempre se ejecuta en real —
   ver más arriba) y no se generó ningún error; `NOK` si al menos uno no.
-- **`ET_ERROR` es una tabla** (`ZFI_T_XX_WS_ERROR`, línea
-  `ZFI_DE_XX_WS_ERROR`), no una única estructura `ES_ERROR` — una fila
-  por cada lote que falló (`CODE = 'LOTES_INCOMPLETOS'`, con su `KEYR1`
-  y el motivo: `STARS` actual, o que no existe en `DFKKRK`). Ver más
-  abajo ("Por qué tabla y no una única estructura") el motivo real de
-  este cambio — no fue la decisión original.
+- **`ES_ERROR` es una tabla** (mismo nombre de parámetro que en los otros
+  RFCs, pero retipado a `ZFI_TT_XX_WS_ERROR`, línea `ZFI_DE_XX_WS_ERROR`)
+  en vez de una única estructura — una fila por cada lote que falló, con
+  su `KEYR1` y el motivo (`STARS` actual, o que no existe en `DFKKRK`).
+  `CODE` vale siempre `'102'` en todas las filas (decisión de negocio, no
+  se distingue por código de situación); el detalle real va en
+  `DESCRIPTION`. Ver más abajo ("Por qué tabla y no una única estructura")
+  el motivo real de este cambio — no fue la decisión original.
 
 **Se descartó una tabla de resultado aparte** (`ET_RESULTADO`, con una
 fila `KEYR1`/`STARS` por lote) **en el diseño original** — en ese
@@ -134,14 +136,14 @@ IMPORT gt_post_errors = lt_post_errors FROM MEMORY ID 'ZFI_DEVOL2_ERRORS'.
 FREE MEMORY ID 'ZFI_DEVOL2_ERRORS'.
 ```
 
-y añade una fila a `ET_ERROR` por cada línea (`KEYR1` + mensaje) que
+y añade una fila a `ES_ERROR` por cada línea (`KEYR1` + mensaje) que
 corresponda a cada lote fallido, además del resumen de `STARS`. Nótese
 que el nombre `gt_post_errors` a la izquierda del `=` es la **clave del
 dato** en memoria (tiene que coincidir con el `EXPORT` del report), no
 el nombre de la variable local `lt_post_errors` que recibe el valor
 aquí.
 
-### Por qué tabla y no una única estructura (`ET_ERROR` en vez de `ES_ERROR`)
+### Por qué tabla y no una única estructura (`ES_ERROR` retipado)
 
 Diseño original (antes de esta corrección): el detalle FP09 se
 concatenaba entero (resumen de `STARS` + cada línea de mensaje, de
@@ -154,18 +156,19 @@ en un campo de 75 caracteres, se truncaban en el primer mensaje (a
 veces ni eso), perdiendo prácticamente todo el detalle que costó tanto
 conseguir capturar.
 
-Fix: `ES_ERROR` (estructura) pasa a **`ET_ERROR`** (tabla
-`ZFI_T_XX_WS_ERROR`, línea = la misma estructura `ZFI_DE_XX_WS_ERROR` de
-siempre — no hace falta un tipo de línea nuevo, la estructura no cambia,
-solo se repite en varias filas). Cada mensaje (el resumen de `STARS` de
-un lote, y cada línea de detalle FP09 de ese lote) se añade como su
-**propia fila** con `APPEND VALUE #( code = ... description = ... ) TO
-et_error`, en vez de concatenarse con `&&` dentro de una variable
-`string` que luego se asigna entera a un único campo `DESCRIPTION`.
-`DESCRIPTION` sigue siendo `CHAR75` **por fila** — un mensaje individual
-de FP09 más largo que eso todavía se truncaría, pero es un caso mucho
-más raro que el problema original (perder *todo* el detalle por ir todo
-junto).
+Fix: **`ES_ERROR` mantiene el nombre**, pero cambia de tipo — de la
+estructura única `ZFI_DE_XX_WS_ERROR` a la tabla nueva
+`ZFI_TT_XX_WS_ERROR` (línea = la misma estructura `ZFI_DE_XX_WS_ERROR` de
+siempre, sin cambios en ella — solo se repite en varias filas). Cada
+mensaje (el resumen de `STARS` de un lote, y cada línea de detalle FP09
+de ese lote) se añade como su **propia fila** con `APPEND VALUE #( code
+= '102' description = ... ) TO es_error`, en vez de concatenarse con
+`&&` dentro de una variable `string` que luego se asigna entera a un
+único campo `DESCRIPTION`. `CODE` se fija a `'102'` en todas las filas
+(decisión de negocio). `DESCRIPTION` sigue siendo `CHAR75` **por fila**
+— un mensaje individual de FP09 más largo que eso todavía se truncaría,
+pero es un caso mucho más raro que el problema original (perder *todo*
+el detalle por ir todo junto).
 
 ### Señal `P_RFC`: exportar solo cuando hace falta
 
@@ -206,21 +209,18 @@ tiene que ser un objeto DDIC real. Se crean 3 objetos nuevos, triviales
 |---|---|---|
 | `ZFI_S_KEYR1` | Estructura | `KEYR1` (`DFKKRK-KEYR1`) |
 | `ZFI_T_KEYR1` | Tabla estándar | Línea `ZFI_S_KEYR1` |
-| `ZFI_T_XX_WS_ERROR` | Tabla estándar | Línea `ZFI_DE_XX_WS_ERROR` (la estructura ya existente `CODE`/`DESCRIPTION`) |
+| `ZFI_TT_XX_WS_ERROR` | Tabla estándar | Línea `ZFI_DE_XX_WS_ERROR` (la estructura ya existente `CODE`/`DESCRIPTION`) |
 
-`ZFI_DE_XX_WS_ERROR` (línea de `ET_ERROR`) **no es nuevo** — ya existe,
+`ZFI_DE_XX_WS_ERROR` (línea de `ES_ERROR`) **no es nuevo** — ya existe,
 reutilizado de `ZFI_FM_PAYLOT_REVERSE`/`ZFI_FM_PAYMENT_LOT_CLARIFY2`, sin
 ningún cambio: solo se usa como tipo de línea de una tabla nueva.
 
 ## Pendiente / a definir con el cliente
 
-- **Crear `ZFI_T_XX_WS_ERROR` en SE11** (tabla estándar, línea
-  `ZFI_DE_XX_WS_ERROR`) y cambiar el parámetro `ES_ERROR` del módulo de
-  función a `ET_ERROR` (tipo `ZFI_T_XX_WS_ERROR`) en SE37 — cambio de
-  interfaz, aún no aplicado en el sistema tras la corrección del `CHAR75`
-  (ver "Por qué tabla y no una única estructura" más arriba).
+- **`ZFI_TT_XX_WS_ERROR` ya creada en SE11** y el parámetro `ES_ERROR`
+  del módulo de función ya retipado a ella en SE37 (24/09/2026).
 - Volver a probar en SE37 contra uno o varios lotes reales, ahora con
-  `ET_ERROR` como tabla (una fila por mensaje, sin truncar) — **ojo, no
+  `ES_ERROR` como tabla (una fila por mensaje, sin truncar) — **ojo, no
   hay simulación: la llamada cierra/contabiliza de verdad**.
 - Autorización RFC del usuario técnico sobre `ZFI_FG_DEVOL2`.
 - Alta del objeto en el sistema de transporte correspondiente al
