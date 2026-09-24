@@ -75,14 +75,14 @@ línea de cabecera) y, línea a línea, se reconstruye el texto final con
 `ID`/`TY`/`NR`/`V1-V4` de cada línea (`TYPE dfkktracep`, estructura DDIC
 real, no un tipo local invisible).
 
-El resultado (`KEYR1` + texto) se muestra también **en pantalla**
-(`show_log_msg`, con `WRITE` directo — son mensajes dinámicos de FI-CA
-reconstruidos en tiempo real, no un número de mensaje fijo de
-`ZFI_MC_001`, así que no se puede montar con `append_messages`) y,
+El resultado (`KEYR1` + texto) se muestra también **en pantalla, solo en
+ejecución manual** (`show_log_msg`, con `WRITE` directo — son mensajes
+dinámicos de FI-CA reconstruidos en tiempo real, no un número de mensaje
+fijo de `ZFI_MC_001`, así que no se puede montar con `append_messages`) y,
 **solo si la llamada viene de `ZFI_FM_DEVOLUCIONES2`**, se deja además
 en memoria ABAP (`MEMORY ID 'ZFI_DEVOL2_ERRORS'`) al terminar `EXECUTE`
 para que esa RFC lo importe después de su `SUBMIT ... AND RETURN` (ver
-ese README) y lo añada a `ES_ERROR-DESCRIPTION`.
+ese README) y lo añada a `ES_ERROR`.
 
 Esa condición se resuelve con un parámetro de pantalla **`P_RFC`**
 (`NO-DISPLAY`, no sale en la pantalla de selección): la RFC rellena esa
@@ -91,6 +91,12 @@ manual (SE38) queda en blanco y no se exporta nada. (Se probó primero
 con `SY-CALLD`, pensado para lo mismo, pero se descartó: el propio
 "Ejecutar" de SE38 también deja `SY-CALLD = 'X'`, así que no distinguía
 lo que necesitábamos.)
+
+**Los `WRITE` de `show_log_msg` se saltan cuando `P_RFC = 'X'`**: cuando
+llama la RFC nadie va a leer nunca esa lista (llamada remota, sin
+pantalla) — no hace daño generarla (`SUBMIT ... AND RETURN` nunca la
+muestra al que llama), pero es trabajo de más sin ningún consumidor, así
+que se reutiliza el mismo flag para no generarla.
 
 ## Mensajes (`ZFI_MC_001`)
 

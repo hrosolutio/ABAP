@@ -263,18 +263,24 @@ CLASS lcl_devoluciones2 IMPLEMENTATION.
 
     DATA(lt_msg_logs) = go_msg_logs->get_messages( ).
 
-    LOOP AT lt_msg_logs ASSIGNING FIELD-SYMBOL(<fs_log>).
-      WRITE / <fs_log>-message.
-    ENDLOOP.
+    " Los WRITE solo tienen sentido si alguien va a ver la lista - en
+    " ejecucion manual (SE38). Si llama ZFI_FM_DEVOLUCIONES2 (P_RFC='X'),
+    " nadie va a leer nunca esta lista (es una llamada remota, sin
+    " pantalla) y generarla es trabajo de mas.
+    IF p_rfc IS INITIAL.
+      LOOP AT lt_msg_logs ASSIGNING FIELD-SYMBOL(<fs_log>).
+        WRITE / <fs_log>-message.
+      ENDLOOP.
 
-    " Detalle de error tipo FP09 (ver GET_POST_LOT_ERRORS): son mensajes
-    " dinamicos de FI-CA reconstruidos con MESSAGE...INTO, no mensajes
-    " propios via ZFI_MC_001 (no hay un numero de mensaje fijo posible
-    " para "cualquier texto que devuelva FKK_RLS_POST_LOT"), por eso van
-    " con WRITE directo en vez de por GO_MSG_LOGS.
-    LOOP AT gt_post_errors ASSIGNING FIELD-SYMBOL(<fs_post_error>).
-      WRITE / |{ <fs_post_error>-keyr1 }: { <fs_post_error>-message }|.
-    ENDLOOP.
+      " Detalle de error tipo FP09 (ver GET_POST_LOT_ERRORS): son mensajes
+      " dinamicos de FI-CA reconstruidos con MESSAGE...INTO, no mensajes
+      " propios via ZFI_MC_001 (no hay un numero de mensaje fijo posible
+      " para "cualquier texto que devuelva FKK_RLS_POST_LOT"), por eso van
+      " con WRITE directo en vez de por GO_MSG_LOGS.
+      LOOP AT gt_post_errors ASSIGNING FIELD-SYMBOL(<fs_post_error>).
+        WRITE / |{ <fs_post_error>-keyr1 }: { <fs_post_error>-message }|.
+      ENDLOOP.
+    ENDIF.
 
     go_msg_logs->clear_messages( ).
 

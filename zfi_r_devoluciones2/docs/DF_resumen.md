@@ -244,12 +244,22 @@ ambiguo); en ejecución manual (SE38) queda en blanco por defecto y
 `ZFI_R_DEVOLUCIONES2_CLS` (mismo programa, include `_CLS`) lo lee
 directamente, sin que haga falta pasarlo por ningún método.
 
-El resultado también se muestra **en pantalla** (`show_log_msg`, con
-`WRITE` directo, no vía `go_msg_logs->append_messages`): son mensajes
-dinámicos reconstruidos en tiempo real a partir de lo que devuelve
-FI-CA, no un número de mensaje fijo de `ZFI_MC_001` — no hay forma de
-darlos de alta como mensaje propio de antemano porque el texto (y su
-clase/número reales) varían según qué haya fallado.
+El resultado también se muestra **en pantalla, solo en ejecución
+manual** (`show_log_msg`, con `WRITE` directo, no vía
+`go_msg_logs->append_messages`): son mensajes dinámicos reconstruidos en
+tiempo real a partir de lo que devuelve FI-CA, no un número de mensaje
+fijo de `ZFI_MC_001` — no hay forma de darlos de alta como mensaje
+propio de antemano porque el texto (y su clase/número reales) varían
+según qué haya fallado.
+
+**Los `WRITE` se saltan si `P_RFC = 'X'`** (reutilizando el mismo flag,
+`IF p_rfc IS INITIAL.` alrededor de los dos `LOOP`+`WRITE` de
+`show_log_msg`): detectado depurando la llamada por RFC — no es que el
+`WRITE` bloquee ni haga daño (`SUBMIT ... AND RETURN` nunca muestra esa
+lista al que llama por RFC, la genera y la descarta sin más), pero
+nadie la va a leer nunca en ese caso, así que generarla es trabajo de
+más. `go_msg_logs->clear_messages( )` sigue ejecutándose siempre,
+solo se salta la parte de `WRITE`.
 
 Nótese además que, dentro de un método de clase, `EXPORT variable TO
 MEMORY ID` (forma corta) da error de sintaxis — hace falta la forma con
