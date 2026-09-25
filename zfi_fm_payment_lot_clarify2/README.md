@@ -24,6 +24,15 @@ se corrigió en esa misma prueba el `BLART` del documento generado, que
 debe ser `'2T'` (no `'2C'` como se había fijado inicialmente por
 observación de depuración).
 
+**SEXTA VERSIÓN**: la consultora funcional reportó que, tras clarificar
+por el RFC, la posición seguía apareciendo en el listado de FPCPL (al
+intentar clarificarla de nuevo por la transacción, SAP avisaba de que ya
+estaba clarificada y entonces sí desaparecía — confirmando que
+`DFKKZP-XKLAE` quedaba correcto, pero el listado no se refrescaba).
+Localizado por **traza SQL (ST05)** sobre una clarificación real por
+FPCPL: faltaban dos actualizaciones que el código no hacía. Ver el punto
+8 de "Lógica implementada" para el detalle.
+
 El propio DF advierte que el módulo de función estándar
 `FKK_PAYMENT_BATCH_CLARIFY_ITEM` **no se puede utilizar directamente**.
 Por depuración de la transacción FPCPL se confirmó el motivo: es un
@@ -175,7 +184,26 @@ docs/
    aquí se usa directamente `DFKKZP-AUGRD` de la posición).
 7. Actualiza `DFKKZP` (`XKLAE`/`KLAEB`) a mano, replicando lo que hace
    `BUCHG_ZAHLUNGEN_BEARBEITEN` en el flujo real (el motor no lo hace
-   por sí solo), y hace `COMMIT WORK AND WAIT`.
+   por sí solo).
+8. **Desde la sexta versión**: actualiza también `DFKKCFZST-STATE = '03'`
+   y `DFKKZK-STAZS/AENAM/AEDAT/AETIM`, y hace `COMMIT WORK AND WAIT`.
+   Localizado por traza SQL (ST05) sobre una clarificación real por
+   FPCPL (no se hacía antes, por eso la posición seguía apareciendo en
+   el listado de FPCPL pese a que `DFKKZP` quedaba correcta):
+   - `DFKKCFZST` es la tabla de estado del worklist de FPCPL. Su
+     `SELECT` de listado excluye explícitamente `STATE <> '03'`
+     (verificado en la traza). La progresión real observada es `'02'`
+     (posición bloqueada en edición) → `'01'` (guardada) → `'03'`
+     (clarificada de verdad, momento en que desaparece del listado).
+     Como el RFC no pasa por edición interactiva, se pone directamente
+     a `'03'`.
+   - `DFKKZK` (cabecera del lote): se localizó el `UPDATE` real
+     (`STAZS = '4'`, `AENAM`/`AEDAT`/`AETIM` = usuario/fecha/hora
+     actuales), ejecutado tras contabilizar cada posición,
+     independientemente de si el lote queda completo del todo.
+     Replicado literalmente — `STAZS` se vio siempre a `'4'` en la
+     traza, no se ha verificado qué significan otros valores posibles
+     de ese campo.
 
 El usuario que queda registrado en las clarificaciones es el usuario
 técnico con el que MuleSoft se conecta a SAP, en el campo `DFKKZP-AENAM`
@@ -228,6 +256,12 @@ tras la corrección de la quinta versión.
   `FKK_CREATE_DOC_MASS_AND_CLEAR`.
 - Contemplar el caso de clarificaciones parciales/múltiples sobre la
   misma posición (tabla `DFKKZPT`), no cubierto en esta versión.
+- Confirmar el significado de `DFKKZK-STAZS` y si `'4'` es siempre el
+  valor correcto — en la traza SQL usada para la sexta versión solo se
+  vio ese valor (incluida la clarificación de la última posición de un
+  lote), pero no se ha probado un caso donde clarificar la posición deje
+  el lote entero como "completado" para saber si `STAZS` cambiaría a
+  otro valor en ese caso.
 - Autorización RFC del usuario `COMMUSER` (o el que corresponda) sobre el
   grupo de función.
 - Alta del objeto en el sistema de transporte correspondiente al proyecto.
