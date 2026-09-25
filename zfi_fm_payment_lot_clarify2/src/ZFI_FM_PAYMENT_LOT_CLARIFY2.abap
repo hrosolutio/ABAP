@@ -13,15 +13,8 @@ FUNCTION zfi_fm_payment_lot_clarify2.
 * Clarificación de transferencias pendientes de contabilizar en SAP
 * (equivalente a FPCPL)
 *
-* ESTADO: SEXTA VERSIÓN. Probado end-to-end con éxito a través de este
+* ESTADO: QUINTA VERSIÓN. Probado end-to-end con éxito a través de este
 * propio RFC, tanto con 1 factura como con 2 facturas (ver más abajo).
-*
-* SEXTA VERSIÓN (reportado por la consultora funcional: la posición
-* clarificada por el RFC seguía apareciendo en el listado de FPCPL).
-* Localizado por traza SQL (ST05) sobre una clarificación real por
-* FPCPL: faltaba actualizar DFKKCFZST-STATE (el worklist de FPCPL
-* excluye explícitamente STATE <> '03') y DFKKZK-STAZS/AENAM/AEDAT/
-* AETIM (cabecera del lote). Ver paso 8 más abajo.
 *
 * QUINTA VERSIÓN (cambios pedidos por la consultora funcional tras
 * prueba real con 2 facturas):
@@ -479,40 +472,6 @@ FUNCTION zfi_fm_payment_lot_clarify2.
         klaed = lv_budat_new
     WHERE keyz1 = i_keyz1
       AND posza = i_posza.
-
-*----------------------------------------------------------------------*
-* 8. Actualizar DFKKCFZST (tabla de estado del worklist de FPCPL) y
-*    DFKKZK (cabecera del lote), localizado por traza SQL (ST05) sobre
-*    una clarificación real por FPCPL — sin esto la posición seguía
-*    apareciendo en el listado de FPCPL aunque DFKKZP quedara correcta
-*    (reportado por la consultora funcional).
-*
-*    DFKKCFZST-STATE: el SELECT que arma el worklist de FPCPL excluye
-*    explícitamente STATE <> '03' (verificado en la traza). La
-*    progresión real observada es '02' (bloqueada en edición) -> '01'
-*    (guardada) -> '03' (clarificada de verdad, momento en que
-*    desaparece del listado). Aquí no pasamos por los estados
-*    intermedios (no hay edición interactiva en el RFC): se pone
-*    directamente a '03'.
-*
-*    DFKKZK-STAZS/AENAM/AEDAT/AETIM: localizado el UPDATE real
-*    (UPDATE dfkkzk SET stazs = '4', aenam = <usuario>, aedat = <fecha>,
-*    aetim = <hora> WHERE keyz1 = ...), ejecutado tras contabilizar
-*    cada posición, independientemente de si el lote queda completo.
-*    Replicado literalmente (STAZS se vio siempre a '4' en la traza, no
-*    se ha verificado qué significan otros valores posibles).
-*----------------------------------------------------------------------*
-  UPDATE dfkkcfzst
-    SET state = '03'
-    WHERE keyz1 = i_keyz1
-      AND posza = i_posza.
-
-  UPDATE dfkkzk
-    SET stazs = '4'
-        aenam = sy-uname
-        aedat = sy-datum
-        aetim = sy-uzeit
-    WHERE keyz1 = i_keyz1.
 
   COMMIT WORK AND WAIT.
 
