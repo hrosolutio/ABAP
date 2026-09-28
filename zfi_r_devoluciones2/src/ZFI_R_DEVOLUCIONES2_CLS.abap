@@ -210,16 +210,19 @@ CLASS lcl_devoluciones2 IMPLEMENTATION.
       RETURN.
     ENDIF.
 
-    " FKK_RLS_UNLOCK justo despues del LOCK, antes de contabilizar - el
-    " FKK_RLS_LOCK de arriba (por si solo) NO arreglaba el falso "ya ha
-    " sido contabilizada": en el codigo real de FP09N (metodo SCHEDULE)
-    " el lote se bloquea, se libera con FKK_RLS_UNLOCK a continuacion
-    " (justo despues de FKJO_JC_PLAN_JOB_ST, que solo se usa ahi para
-    " recoger parametros) y SOLO ENTONCES se llama a FKK_RLS_POST_LOT -
-    " se contabiliza con el lote ya DESBLOQUEADO. Nuestro codigo dejaba
-    " el lote bloqueado y nunca lo liberaba antes de postear, justo al
-    " reves. EXCEPTIONS OTHERS = 0 tal cual en el original - no se trata
-    " como error fatal, es una liberacion de bloqueo.
+    " FKK_RLS_UNLOCK justo despues del LOCK, replicando el orden exacto
+    " de FP09N (metodo SCHEDULE): LOCK -> ... -> UNLOCK -> ... -> POST_LOT.
+    " CONFIRMADO POR PRUEBA REAL: este LOCK+UNLOCK por si solo NO arregla
+    " el falso "ya ha sido contabilizada" - entre LOCK y UNLOCK, FP09N no
+    " hace nada relevante (solo un SAVE opcional y FKJO_JC_PLAN_JOB_ST,
+    " que el propio comentario del codigo estandar dice que ahi es solo
+    " para recoger parametros), asi que un ENQUEUE+DEQUEUE sin nada real
+    " en medio no deja ningun efecto persistido en BD. El candidato real
+    " es el bloque que FP09N ejecuta DESPUES de este UNLOCK y ANTES de
+    " FKK_RLS_POST_LOT (FKK_RLS_HDR_STARS_SET/FKK_RLS_PROPERTY_SET/UPDATE
+    " DFKKRK SET flags/COMMIT WORK - ver docs/DF_resumen.md), que aun NO
+    " esta implementado aqui. Se deja este LOCK/UNLOCK porque replica la
+    " estructura real y no hace daño, pero no se le atribuye el arreglo.
     CALL FUNCTION 'FKK_RLS_UNLOCK'
       EXPORTING
         i_keyr1 = lv_keyr1

@@ -44,23 +44,25 @@ Por cada `KEYR1` indicado que exista realmente en `DFKKRK`:
    también al detalle capturado tipo FP09, ver más abajo) — **sin
    reintento ni corrección automática** en ningún caso.
 
-**`FKK_RLS_LOCK` + `FKK_RLS_UNLOCK` antes de contabilizar (bug real
-corregido)**: sin estas dos llamadas, un lote que `FP09N` contabilizaba
-bien podía dar en nuestro programa el error falso *"La devolución ya ha
-sido contabilizada"* — reproducible con nuestro propio programa (dos
+**Error falso "ya ha sido contabilizada" — investigación en curso
+(no resuelto todavía)**: un lote que `FP09N` contabilizaba bien podía
+dar en nuestro programa el error falso *"La devolución ya ha sido
+contabilizada"* — reproducible con nuestro propio programa (dos
 ejecuciones seguidas, mismo error las dos veces), pero desaparecía si
-antes se había intentado una vez por `FP09N`. Añadir solo
-`FKK_RLS_LOCK` **no bastaba** (se probó y seguía dando el mismo error):
-revisando el código real del método `SCHEDULE` de `FP09N`, la secuencia
-real es `FKK_RLS_LOCK` → (guardar cambios, si procede) →
-`FKJO_JC_PLAN_JOB_ST` (solo para recoger parámetros) →
-**`FKK_RLS_UNLOCK`** → ... → `FKK_RLS_POST_LOT` — el lote se contabiliza
-ya **desbloqueado**. Nuestro código dejaba el lote bloqueado y nunca lo
-liberaba antes de postear, justo al revés. Con `FKK_RLS_UNLOCK` (solo
-`I_KEYR1`, `EXCEPTIONS OTHERS = 0` igual que en el original — no es un
-error fatal) justo después del `LOCK` y antes de `FKK_RLS_POST_LOT`
-queda arreglado. Pendiente de confirmar con una prueba real de punta a
-punta (lote nuevo, no tocado antes por `FP09N` ni por nuestro programa).
+antes se había intentado una vez por `FP09N` (algo quedaba persistido
+en BD que nuestro código no replicaba). Se probó `FKK_RLS_LOCK` solo
+(no bastaba) y luego `FKK_RLS_LOCK` + `FKK_RLS_UNLOCK` justo antes de
+`FKK_RLS_POST_LOT`, replicando el orden exacto de `FP09N` (método
+`SCHEDULE`) — **tampoco basta, confirmado por prueba real**: entre
+`LOCK` y `UNLOCK`, `FP09N` no hace nada que deje huella en BD, así que
+un `ENQUEUE`+`DEQUEUE` sin nada real en medio no cambia nada. Se deja
+el `LOCK`/`UNLOCK` en el código porque replica la estructura real sin
+coste, pero no es la causa del efecto observado. El candidato real,
+pendiente de implementar, es el bloque que va justo *después* del
+`UNLOCK` en el código real (`FKK_RLS_HDR_STARS_SET`/
+`FKK_RLS_PROPERTY_SET` + `UPDATE DFKKRK SET flags` + `COMMIT WORK`) —
+ver `docs/DF_resumen.md` para el detalle y lo que falta por confirmar
+antes de escribirlo (nombres de campo reales, firmas por SE37).
 
 Parámetros de selección: **`S_KEYR1`** (obligatorio — nº de lote(s) a
 tratar) y **`P_SIMU`** (checkbox — si se marca, el programa solo escribe
@@ -150,12 +152,12 @@ docs/
   (`ES_ERROR-DESCRIPTION`) igual que lo haría `FP09N` a mano — la técnica
   (`PERFORM retrieve_data` + `ASSIGN` dinámico + `MESSAGE...INTO`) queda
   validada de punta a punta, no solo en debug aislado.
-- **`FKK_RLS_LOCK` + `FKK_RLS_UNLOCK` añadidos (28/09/2026)** — corrigen
-  un error falso ("La devolución ya ha sido contabilizada" con un lote
-  que no lo estaba) que `FP09N` no daba. Solo `LOCK` no era suficiente;
-  hacía falta además `UNLOCK` justo antes de contabilizar, replicando la
-  secuencia real de `FP09N` (método `SCHEDULE`). Ver "Detalle de error
-  tipo FP09" más arriba y `docs/DF_resumen.md` para la investigación
-  completa. Pendiente de volver a probar con un lote nuevo, de principio
-  a fin.
+- **Error falso "ya ha sido contabilizada" — sin resolver (28/09/2026)**:
+  ni `FKK_RLS_LOCK` solo ni `FKK_RLS_LOCK`+`FKK_RLS_UNLOCK` (probados
+  ambos con lotes nuevos reales) arreglan el error. Candidato siguiente,
+  aún sin implementar: replicar también el bloque
+  `FKK_RLS_HDR_STARS_SET`/`FKK_RLS_PROPERTY_SET`/`UPDATE DFKKRK SET
+  flags`/`COMMIT WORK` que el código real de `FP09N` ejecuta antes de
+  `FKK_RLS_POST_LOT`. Ver "Detalle de error tipo FP09" más arriba y
+  `docs/DF_resumen.md` para la investigación completa.
 - Alta del objeto en el sistema de transporte correspondiente al proyecto.

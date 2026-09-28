@@ -172,15 +172,43 @@ CALL FUNCTION 'FKK_RLS_UNLOCK'
     OTHERS  = 0.
 ```
 
-Pendiente de volver a probar con un lote nuevo (no tocado antes por
-`FP09N` ni por nuestro programa) para confirmar que el `UNLOCK` resuelve
-definitivamente el error falso. Si no bastara, candidatos siguientes a
-probar (por orden de probabilidad, viendo la secuencia real de arriba):
-`I_XFULL_TRACE = '2'` en vez de `abap_true`/blanco (ambos ya probados,
-mismo error los dos — pero `'2'` en concreto no se ha probado todavía);
-`FKK_RLS_OPERATION_ALLOWED` como comprobación previa;
-`FKK_RLS_HDR_STARS_SET`/`FKK_RLS_PROPERTY_SET` + `UPDATE DFKKRK SET
-flags` + `COMMIT WORK` antes de contabilizar.
+**Descartado por prueba real (28/09/2026)**: el `LOCK`+`UNLOCK` por sí
+solo **no arregla** el error falso — probado con un lote nuevo, mismo
+error de siempre. Tiene sentido a posteriori: entre `LOCK` y `UNLOCK`,
+`FP09N` no hace nada que deje huella real en BD (solo un `SAVE` opcional,
+que en nuestro flujo no aplica, y `FKJO_JC_PLAN_JOB_ST`, que el propio
+comentario del código estándar dice que ahí es solo para recoger
+parámetros) — un `ENQUEUE`+`DEQUEUE` sin nada relevante en medio no deja
+ningún estado persistido distinto de no haber bloqueado nunca. Se deja
+el `LOCK`/`UNLOCK` en el código porque replica la estructura real de
+`FP09N` sin coste, pero **no es la causa del efecto observado**
+(que ejecutar `FP09N` una vez "arregle" las ejecuciones posteriores de
+nuestro programa).
+
+El candidato real, todavía sin implementar ni probar, es el bloque que
+va **después** del `UNLOCK` y **antes** de `FKK_RLS_POST_LOT` en la
+secuencia real:
+
+```
+IF stars < 2. FKK_RLS_HDR_STARS_SET. ENDIF.
+FKK_RLS_PROPERTY_SET
+UPDATE dfkkrk SET flags ...
+COMMIT WORK
+```
+
+Este sí deja cambios reales en `DFKKRK` confirmados con `COMMIT WORK` —
+mucho más candidato a explicar la persistencia observada. **Pendiente
+antes de implementarlo**: no tenemos guardado el texto exacto de ese
+fragmento (los nombres de campo reales del `UPDATE ... SET flags`, ni
+las firmas de `FKK_RLS_HDR_STARS_SET`/`FKK_RLS_PROPERTY_SET` por
+SE37) — hace falta volver a consultar el código real de `SCHEDULE` (o
+SE37 de esas dos FMs) antes de escribir nada, para no adivinar nombres
+de campo ni parámetros.
+
+Otros candidatos, de menor prioridad: `I_XFULL_TRACE = '2'` en vez de
+`abap_true`/blanco (ambos ya probados, mismo error los dos — pero `'2'`
+en concreto no se ha probado todavía); `FKK_RLS_OPERATION_ALLOWED` como
+comprobación previa.
 
 ### Contabilizar → `FKK_RLS_POST_LOT`
 
