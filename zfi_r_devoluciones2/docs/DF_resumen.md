@@ -76,7 +76,7 @@ hace falta pasarlo). **Probado con éxito real**: lote `260825CDI111`,
 `sy-subrc = 0`, `FP09` mostró después "Ya no se pueden modificar
 devoluciones" (cerrado).
 
-### Bloquear (antes de contabilizar) → `FKK_RLS_LOCK`
+### Bloquear y liberar (antes de contabilizar) → `FKK_RLS_LOCK` + `FKK_RLS_UNLOCK`
 
 **Bug real encontrado (28/09/2026)**: un lote que `FP09N` contabilizaba
 bien podía dar en `ZFI_R_DEVOLUCIONES2` (y por tanto en
@@ -128,6 +128,59 @@ CALL FUNCTION 'FKK_RLS_LOCK'
 Añadido en `ZFI_R_DEVOLUCIONES2_CLS` (`process_lot`), justo antes de
 `FKK_RLS_POST_LOT`, con el mismo patrón de manejo de error (mensaje
 `180`) que `FKK_RLS_CLOSE`/`FKK_RLS_POST_LOT`.
+
+**`FKK_RLS_LOCK` por sí solo no bastaba** — probado, seguía dando el
+mismo error falso ("sigue dando el mismo error"). Sin el código real de
+`FP09N` a la vista era imposible saber qué faltaba, así que se depuró
+`FP09N` con un breakpoint en el módulo de función hasta encontrar el
+`CALL` y navegar la pila de llamadas hasta el método real que lo
+invoca, `SCHEDULE`. Su código real (obtenido así, no de memoria/
+documentación) muestra la secuencia completa:
+
+```abap
+" (resumen del metodo SCHEDULE real de FP09N, orden de llamadas)
+FKK_RLS_OPERATION_ALLOWED   " comprobacion previa, puede mostrar popup
+FKK_RLS_LOCK                " bloquea el lote
+" ... SAVE opcional si hay cambios pendientes ...
+FKJO_JC_PLAN_JOB_ST         " solo se usa aqui para recoger parametros,
+                            " comentario del propio codigo estandar
+FKK_RLS_UNLOCK              " <-- libera el lote AQUI, antes de postear
+IF stars < 2.
+  FKK_RLS_HDR_STARS_SET
+ENDIF.
+FKK_RLS_PROPERTY_SET
+UPDATE dfkkrk SET flags ...
+COMMIT WORK
+" PERFORM mode_trace_on - confirmado no-op, no aporta nada
+FKK_RLS_POST_LOT( i_xfull_trace = '2' )   " <-- lote YA DESBLOQUEADO
+FKK_RLS_HDR_READ
+```
+
+La diferencia real con nuestro código: `FP09N` bloquea, libera el
+bloqueo, y **solo entonces** contabiliza — nuestro código bloqueaba y
+dejaba el lote bloqueado hasta `FKK_RLS_POST_LOT`, justo al revés.
+Añadido `FKK_RLS_UNLOCK` justo después del bloque `FKK_RLS_LOCK` (antes
+de `FKK_RLS_POST_LOT`), con la misma interfaz mínima que usa `FP09N`
+(solo `I_KEYR1`, `EXCEPTIONS OTHERS = 0` — no es un error fatal, es una
+liberación de bloqueo):
+
+```abap
+CALL FUNCTION 'FKK_RLS_UNLOCK'
+  EXPORTING
+    i_keyr1 = lv_keyr1
+  EXCEPTIONS
+    OTHERS  = 0.
+```
+
+Pendiente de volver a probar con un lote nuevo (no tocado antes por
+`FP09N` ni por nuestro programa) para confirmar que el `UNLOCK` resuelve
+definitivamente el error falso. Si no bastara, candidatos siguientes a
+probar (por orden de probabilidad, viendo la secuencia real de arriba):
+`I_XFULL_TRACE = '2'` en vez de `abap_true`/blanco (ambos ya probados,
+mismo error los dos — pero `'2'` en concreto no se ha probado todavía);
+`FKK_RLS_OPERATION_ALLOWED` como comprobación previa;
+`FKK_RLS_HDR_STARS_SET`/`FKK_RLS_PROPERTY_SET` + `UPDATE DFKKRK SET
+flags` + `COMMIT WORK` antes de contabilizar.
 
 ### Contabilizar → `FKK_RLS_POST_LOT`
 

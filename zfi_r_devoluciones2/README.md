@@ -44,16 +44,23 @@ Por cada `KEYR1` indicado que exista realmente en `DFKKRK`:
    también al detalle capturado tipo FP09, ver más abajo) — **sin
    reintento ni corrección automática** en ningún caso.
 
-**`FKK_RLS_LOCK` antes de contabilizar (bug real corregido)**: sin esta
-llamada, un lote que `FP09N` contabilizaba bien podía dar en nuestro
-programa el error falso *"La devolución ya ha sido contabilizada"*
-— reproducible con nuestro propio programa (dos ejecuciones seguidas,
-mismo error las dos veces), pero desaparecía si antes se había
-intentado una vez por `FP09N`. `FP09N` (método `SCHEDULE`) llama a
-`FKK_RLS_LOCK` antes de `FKK_RLS_POST_LOT`, y nuestro código no lo
-hacía — con solo `I_KEYR1` (el resto de parámetros ya son los valores
-por defecto de la propia FM: bloquea el lote entero, con bloqueo de
-escritura) queda arreglado.
+**`FKK_RLS_LOCK` + `FKK_RLS_UNLOCK` antes de contabilizar (bug real
+corregido)**: sin estas dos llamadas, un lote que `FP09N` contabilizaba
+bien podía dar en nuestro programa el error falso *"La devolución ya ha
+sido contabilizada"* — reproducible con nuestro propio programa (dos
+ejecuciones seguidas, mismo error las dos veces), pero desaparecía si
+antes se había intentado una vez por `FP09N`. Añadir solo
+`FKK_RLS_LOCK` **no bastaba** (se probó y seguía dando el mismo error):
+revisando el código real del método `SCHEDULE` de `FP09N`, la secuencia
+real es `FKK_RLS_LOCK` → (guardar cambios, si procede) →
+`FKJO_JC_PLAN_JOB_ST` (solo para recoger parámetros) →
+**`FKK_RLS_UNLOCK`** → ... → `FKK_RLS_POST_LOT` — el lote se contabiliza
+ya **desbloqueado**. Nuestro código dejaba el lote bloqueado y nunca lo
+liberaba antes de postear, justo al revés. Con `FKK_RLS_UNLOCK` (solo
+`I_KEYR1`, `EXCEPTIONS OTHERS = 0` igual que en el original — no es un
+error fatal) justo después del `LOCK` y antes de `FKK_RLS_POST_LOT`
+queda arreglado. Pendiente de confirmar con una prueba real de punta a
+punta (lote nuevo, no tocado antes por `FP09N` ni por nuestro programa).
 
 Parámetros de selección: **`S_KEYR1`** (obligatorio — nº de lote(s) a
 tratar) y **`P_SIMU`** (checkbox — si se marca, el programa solo escribe
@@ -143,9 +150,12 @@ docs/
   (`ES_ERROR-DESCRIPTION`) igual que lo haría `FP09N` a mano — la técnica
   (`PERFORM retrieve_data` + `ASSIGN` dinámico + `MESSAGE...INTO`) queda
   validada de punta a punta, no solo en debug aislado.
-- **`FKK_RLS_LOCK` añadido (28/09/2026)** — corrige un error falso
-  ("La devolución ya ha sido contabilizada" con un lote que no lo
-  estaba) que `FP09N` no daba, ver "Detalle de error tipo FP09" más
-  arriba y `docs/DF_resumen.md` para la investigación completa.
-  Pendiente de volver a probar con un lote nuevo, de principio a fin.
+- **`FKK_RLS_LOCK` + `FKK_RLS_UNLOCK` añadidos (28/09/2026)** — corrigen
+  un error falso ("La devolución ya ha sido contabilizada" con un lote
+  que no lo estaba) que `FP09N` no daba. Solo `LOCK` no era suficiente;
+  hacía falta además `UNLOCK` justo antes de contabilizar, replicando la
+  secuencia real de `FP09N` (método `SCHEDULE`). Ver "Detalle de error
+  tipo FP09" más arriba y `docs/DF_resumen.md` para la investigación
+  completa. Pendiente de volver a probar con un lote nuevo, de principio
+  a fin.
 - Alta del objeto en el sistema de transporte correspondiente al proyecto.

@@ -14,12 +14,18 @@
 *   FKK_RLS_CLOSE    -> cierra el lote (solo con KEYR1)
 *   FKK_RLS_LOCK     -> bloquea el lote antes de contabilizar (solo con
 *                       KEYR1 - el resto de parametros son valores por
-*                       defecto de la propia FM). Imprescindible: sin
-*                       ella, FKK_RLS_POST_LOT puede dar un error falso
-*                       ("La devolucion ya ha sido contabilizada" con un
-*                       lote que ni FP09N ni nosotros habiamos llegado a
-*                       contabilizar) - ver docs/DF_resumen.md.
-*   FKK_RLS_POST_LOT -> contabiliza el lote (solo con KEYR1)
+*                       defecto de la propia FM).
+*   FKK_RLS_UNLOCK   -> libera el lote justo despues del LOCK, antes de
+*                       contabilizar (igual que hace FP09N en su metodo
+*                       SCHEDULE - lock, luego unlock, y solo entonces
+*                       postea). Imprescindible junto con el LOCK
+*                       anterior: solo con LOCK (sin UNLOCK antes de
+*                       postear) FKK_RLS_POST_LOT puede dar un error
+*                       falso ("La devolucion ya ha sido contabilizada"
+*                       con un lote que ni FP09N ni nosotros habiamos
+*                       llegado a contabilizar) - ver docs/DF_resumen.md.
+*   FKK_RLS_POST_LOT -> contabiliza el lote, ya desbloqueado (solo con
+*                       KEYR1)
 *
 * DFKKRK-STARS es el estado real del lote y la fuente de verdad para
 * decidir que hacer con cada uno:
@@ -203,6 +209,22 @@ CLASS lcl_devoluciones2 IMPLEMENTATION.
         iv_param_v3   = |{ sy-subrc }| ).
       RETURN.
     ENDIF.
+
+    " FKK_RLS_UNLOCK justo despues del LOCK, antes de contabilizar - el
+    " FKK_RLS_LOCK de arriba (por si solo) NO arreglaba el falso "ya ha
+    " sido contabilizada": en el codigo real de FP09N (metodo SCHEDULE)
+    " el lote se bloquea, se libera con FKK_RLS_UNLOCK a continuacion
+    " (justo despues de FKJO_JC_PLAN_JOB_ST, que solo se usa ahi para
+    " recoger parametros) y SOLO ENTONCES se llama a FKK_RLS_POST_LOT -
+    " se contabiliza con el lote ya DESBLOQUEADO. Nuestro codigo dejaba
+    " el lote bloqueado y nunca lo liberaba antes de postear, justo al
+    " reves. EXCEPTIONS OTHERS = 0 tal cual en el original - no se trata
+    " como error fatal, es una liberacion de bloqueo.
+    CALL FUNCTION 'FKK_RLS_UNLOCK'
+      EXPORTING
+        i_keyr1 = lv_keyr1
+      EXCEPTIONS
+        OTHERS  = 0.
 
     " No se filtra por STARS antes de contabilizar (cerrado o no): se
     " deja que FKK_RLS_POST_LOT decida si el lote es valido y devuelva
