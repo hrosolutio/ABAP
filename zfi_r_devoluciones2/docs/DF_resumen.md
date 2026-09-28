@@ -232,10 +232,141 @@ parece guardar, por posición de lote, los mensajes de error de
 contabilización — candidata a ser el sitio donde queda persistido el
 estado que hace que, tras un intento de `FP09N`, las ejecuciones
 posteriores (nuestras o de `FP09N`) ya no repitan el mismo error.
-Pendiente: comprobar si esta tabla se escribe en el intento que falla
-(nuestro programa) y/o se lee dentro de `FKK_RLS_POST_LOT` antes de
-decidir "ya contabilizada", y si su contenido cambia entre un intento
-con `FP09N` y uno con nuestro programa sobre el mismo lote.
+**Aclarado más abajo** ("Causa real encontrada y corregida"): `DFKKRPE`
+es la tabla donde `FKR2_PROT_ADD_ENTRY` escribe el log de protocolo
+(mensajes 507/510 vistos en el código real de `FKK_RLS_POST_LOT`) — no
+es la causa del bug ni algo que haya que leer para decidir nada, solo un
+registro de lo ocurrido. Se mantiene aquí documentada por si sirve para
+depurar otros casos futuros.
+
+### Causa real encontrada y corregida (28/09/2026)
+
+Depurando con `step into` desde `FKK_RLS_POST_LOT`, el flujo real (código
+`SAPLFKKR2`/`LFKR2U10`) es:
+
+```abap
+* can lot be used for postings??
+CALL FUNCTION 'FKK_RLS_USABLE'
+  EXPORTING
+    I_DFKKRK      = P_DFKKRK
+  EXCEPTIONS
+    CLOSED        = 3
+    RUNNING       = 4
+    POSTED        = 5
+    CANCELLED     = 6
+    IN_EDIT_MODE  = 7
+    OTHERS        = 8.
+IF SY-SUBRC <> 0.
+  RC = SY-SUBRC.
+  $PUSH.
+  IF RC = 5.
+    SY-MSGNO = 510.
+    CALL FUNCTION 'FKR2_PROT_ADD_ENTRY' ... " log en DFKKRPE
+  ELSE.
+    SY-MSGNO = 507.
+    CALL FUNCTION 'FKR2_PROT_ADD_ENTRY' ... " log en DFKKRPE (I_PARM1='Buchen')
+  ENDIF.
+  ...
+  $POP.
+  IF SY-MSGNO = 507.
+    $EMESSAGE '>2' 507 TEXT-035 ... NOT_VALID.
+  ELSE.
+    $EMESSAGE '>2' 510 ... NOT_VALID.
+  ENDIF.
+  ...
+ENDIF.
+```
+
+**Confirmado por depuración real, con nuestro propio lote de prueba**:
+
+- `FKK_RLS_USABLE` devuelve `SY-SUBRC = 3` → excepción `CLOSED`.
+- `SY-MSGNO`, tanto antes como después de llamar a `FKK_RLS_USABLE`, vale
+  `140` — un valor **residual, sin relación alguna** con `507`/`510`. Como
+  `140 <> 507`, el `IF SY-MSGNO = 507` de la línea 228 (que en realidad
+  comprueba el valor restaurado por `$POP`, es decir, el que había *antes*
+  de entrar en este bloque de manejo de error — no el `507`/`510` que el
+  propio código acababa de asignar para el log en `DFKKRPE`) cae siempre
+  en el `ELSE`, componiendo el mensaje con el número `510`. **El texto
+  "La devolución ya ha sido contabilizada" (asociado a `510`) es un
+  efecto colateral de ese residuo de `SY-MSGNO`, sin ninguna relación con
+  el motivo real del fallo** — no hay que interpretarlo literalmente.
+- La excepción real, `CLOSED`, viene del código fuente de `FKK_RLS_USABLE`
+  (confirmado, no de memoria):
+
+  ```abap
+  * Lots can be posted in planned or incomplete state only. If you wanna
+  * do an external call use FKK_RLS_PLAN_JOB to start, if you want to
+  * do online posting set stars to the corresponding value via
+  * FKK_RLS_HDR_STARS_SET
+  IF I_DFKKRK-STARS CA '234'.
+    " okay, usable
+  ELSE.
+    CASE I_DFKKRK-STARS.
+      WHEN '1'.        " is closed but not planned yet; a call to
+                        " FKK_RLS_PLAN_JOB would be helpful
+        RAISE CLOSED.
+      WHEN '5' OR '9'.  " ready or in archive
+        RAISE POSTED.
+      WHEN '6'.  " automated creation cancelled
+        RAISE CANCELLED.
+      WHEN OTHERS.  " still in edit mode
+        RAISE IN_EDIT_MODE.
+    ENDCASE.
+  ENDIF.
+  ```
+
+  `FKK_RLS_POST_LOT` **solo admite lotes con `STARS` en `'2'`/`'3'`/`'4'`**
+  (planificado/incompleto). Con `STARS = '1'` (recién cerrado, sin
+  contabilizar aún — nuestro caso exacto) siempre da `CLOSED`, sea cual
+  sea el estado real de bloqueo/existencia del documento. El propio
+  comentario da la solución explícita: para "online posting", poner
+  `STARS` con `FKK_RLS_HDR_STARS_SET` — exactamente lo que hace `FP09N`
+  en `SCHEDULE` (`IF stars < 2. FKK_RLS_HDR_STARS_SET. ENDIF.`) y que no
+  estábamos haciendo.
+
+**Interfaz real de `FKK_RLS_HDR_STARS_SET`** (confirmada por `SE37`):
+
+```
+IMPORTING
+  I_KEYR1        LIKE DFKKRK-KEYR1     Schlüssel, falls keiner en C_DFKKRK
+  I_XEDITABLE    TYPE C                RLS kann bearbeitet werden       (STARS editable/blanco)
+  I_XCLOSED      TYPE C                RLS kann nicht mehr bearbeitet werden (STARS=1)
+  I_XPLANNED     TYPE C                RLS ist eingeplant für Buchen    (STARS=2 - este)
+  I_XINCOMPLETE  TYPE C                RLS ist nicht vollständig gebucht (STARS=3)
+  I_POSTED       TYPE C                RLS ist vollständig gebucht      (STARS=5)
+CHANGING
+  C_DFKKRK       LIKE DFKKRK           (alternativa a I_KEYR1, no se usa aquí)
+EXCEPTIONS
+  NOT_FOUND      Header nicht gefunden
+```
+
+Cada parámetro `I_X...`/`I_...` es un flag booleano que indica a qué
+estado mover el lote — solo se indica uno. `I_XPLANNED = 'X'` (además de
+`I_KEYR1`) es el que corresponde a "planificado para contabilizar"
+(`STARS = '2'`), el estado que pide el comentario de `FKK_RLS_USABLE`
+para contabilización online.
+
+**Fix aplicado** en `ZFI_R_DEVOLUCIONES2_CLS` (`process_lot`), justo
+antes de `FKK_RLS_POST_LOT`:
+
+```abap
+IF lv_stars < '2'.
+  CALL FUNCTION 'FKK_RLS_HDR_STARS_SET'
+    EXPORTING
+      i_keyr1    = lv_keyr1
+      i_xplanned = abap_true
+    EXCEPTIONS
+      not_found  = 1
+      OTHERS     = 2.
+  ...
+ENDIF.
+```
+
+Se mantiene el `FKK_RLS_LOCK`/`FKK_RLS_UNLOCK` de más arriba (no hace
+daño y replica la estructura real de `FP09N`), aunque quedó confirmado
+que por sí solo no era la causa. **Pendiente de confirmar con un lote
+nuevo, de principio a fin**, que este `FKK_RLS_HDR_STARS_SET` resuelve
+definitivamente el error falso.
 
 ### Contabilizar → `FKK_RLS_POST_LOT`
 

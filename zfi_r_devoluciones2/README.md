@@ -37,32 +37,46 @@ Por cada `KEYR1` indicado que exista realmente en `DFKKRK`:
 3. Si está abierto (`STARS` en blanco) → `FKK_RLS_CLOSE`.
 4. Cualquier otro caso (recién cerrado en el paso anterior, ya estaba
    cerrado sin contabilizar, o cualquier estado intermedio/con
-   incidencias) → `FKK_RLS_LOCK` (bloquea el lote — imprescindible,
-   ver más abajo) y luego `FKK_RLS_POST_LOT` — **no se filtra por
-   `STARS` antes**, se deja que el propio FM decida si el lote es
-   válido y devuelva su error estándar si no lo es (así ese error llega
-   también al detalle capturado tipo FP09, ver más abajo) — **sin
-   reintento ni corrección automática** en ningún caso.
+   incidencias) → `FKK_RLS_LOCK`/`FKK_RLS_UNLOCK`, `FKK_RLS_HDR_STARS_SET`
+   si `STARS < '2'` (imprescindible, ver más abajo) y luego
+   `FKK_RLS_POST_LOT` — **no se filtra por `STARS` antes de intentar
+   contabilizar**, se deja que el propio FM decida si el lote es válido
+   y devuelva su error estándar si no lo es (así ese error llega también
+   al detalle capturado tipo FP09, ver más abajo) — **sin reintento ni
+   corrección automática** en ningún caso.
 
-**Error falso "ya ha sido contabilizada" — investigación en curso
-(no resuelto todavía)**: un lote que `FP09N` contabilizaba bien podía
-dar en nuestro programa el error falso *"La devolución ya ha sido
+**Error falso "ya ha sido contabilizada" — causa real encontrada
+(28/09/2026)**: un lote que `FP09N` contabilizaba bien podía dar en
+nuestro programa el error falso *"La devolución ya ha sido
 contabilizada"* — reproducible con nuestro propio programa (dos
 ejecuciones seguidas, mismo error las dos veces), pero desaparecía si
-antes se había intentado una vez por `FP09N` (algo quedaba persistido
-en BD que nuestro código no replicaba). Se probó `FKK_RLS_LOCK` solo
-(no bastaba) y luego `FKK_RLS_LOCK` + `FKK_RLS_UNLOCK` justo antes de
-`FKK_RLS_POST_LOT`, replicando el orden exacto de `FP09N` (método
-`SCHEDULE`) — **tampoco basta, confirmado por prueba real**: entre
-`LOCK` y `UNLOCK`, `FP09N` no hace nada que deje huella en BD, así que
-un `ENQUEUE`+`DEQUEUE` sin nada real en medio no cambia nada. Se deja
-el `LOCK`/`UNLOCK` en el código porque replica la estructura real sin
-coste, pero no es la causa del efecto observado. El candidato real,
-pendiente de implementar, es el bloque que va justo *después* del
-`UNLOCK` en el código real (`FKK_RLS_HDR_STARS_SET`/
-`FKK_RLS_PROPERTY_SET` + `UPDATE DFKKRK SET flags` + `COMMIT WORK`) —
-ver `docs/DF_resumen.md` para el detalle y lo que falta por confirmar
-antes de escribirlo (nombres de campo reales, firmas por SE37).
+antes se había intentado una vez por `FP09N`. Se probaron `FKK_RLS_LOCK`
+solo y `FKK_RLS_LOCK`+`FKK_RLS_UNLOCK` (replicando el orden de `FP09N`)
+— **ninguno de los dos bastaba**, confirmado por prueba real.
+
+La causa real se encontró depurando **dentro** de `FKK_RLS_POST_LOT` →
+`FKK_RLS_USABLE` (código estándar real, no de memoria): esta última FM
+solo considera un lote utilizable para contabilizar si
+`DFKKRK-STARS` está en `'2'`/`'3'`/`'4'` (`IF I_DFKKRK-STARS CA '234'`).
+Con `STARS = '1'` (recién cerrado, sin contabilizar todavía) devuelve la
+excepción `CLOSED` ("Stapel ist zwar geschlossen, aber nicht geplant" =
+cerrado pero no planificado) — y el texto *"ya ha sido contabilizada"*
+que se ve en pantalla resultó ser un **residuo de `SY-MSGNO`** de una
+comprobación anterior sin relación con la causa real (confirmado
+depurando paso a paso, ver `docs/DF_resumen.md`), no un reflejo fiel del
+motivo del fallo.
+
+El propio comentario del código estándar de `FKK_RLS_USABLE` da la
+solución: *"if you want to do online posting set stars to the
+corresponding value via `FKK_RLS_HDR_STARS_SET`"* — exactamente lo que
+hace `FP09N` (`IF stars < 2. FKK_RLS_HDR_STARS_SET. ENDIF.`) y nosotros
+no hacíamos. Añadido: si `STARS < '2'`, se llama a
+`FKK_RLS_HDR_STARS_SET` con `I_XPLANNED = 'X'` (interfaz real confirmada
+por `SE37`: pone `STARS = '2'`, "planificado para contabilizar") justo
+antes de `FKK_RLS_POST_LOT`. Se mantienen también `FKK_RLS_LOCK`/
+`FKK_RLS_UNLOCK` (replican la estructura real de `FP09N`, aunque por sí
+solos no arreglaban nada). Pendiente de confirmar con una prueba real de
+punta a punta (lote nuevo).
 
 Parámetros de selección: **`S_KEYR1`** (obligatorio — nº de lote(s) a
 tratar) y **`P_SIMU`** (checkbox — si se marca, el programa solo escribe
@@ -152,12 +166,13 @@ docs/
   (`ES_ERROR-DESCRIPTION`) igual que lo haría `FP09N` a mano — la técnica
   (`PERFORM retrieve_data` + `ASSIGN` dinámico + `MESSAGE...INTO`) queda
   validada de punta a punta, no solo en debug aislado.
-- **Error falso "ya ha sido contabilizada" — sin resolver (28/09/2026)**:
-  ni `FKK_RLS_LOCK` solo ni `FKK_RLS_LOCK`+`FKK_RLS_UNLOCK` (probados
-  ambos con lotes nuevos reales) arreglan el error. Candidato siguiente,
-  aún sin implementar: replicar también el bloque
-  `FKK_RLS_HDR_STARS_SET`/`FKK_RLS_PROPERTY_SET`/`UPDATE DFKKRK SET
-  flags`/`COMMIT WORK` que el código real de `FP09N` ejecuta antes de
-  `FKK_RLS_POST_LOT`. Ver "Detalle de error tipo FP09" más arriba y
-  `docs/DF_resumen.md` para la investigación completa.
+- **Error falso "ya ha sido contabilizada" — causa real encontrada y
+  corregida (28/09/2026)**: `FKK_RLS_HDR_STARS_SET` (`I_XPLANNED = 'X'`)
+  añadido antes de `FKK_RLS_POST_LOT` cuando `STARS < '2'` — causa real
+  confirmada depurando dentro de `FKK_RLS_POST_LOT` → `FKK_RLS_USABLE`
+  (ver "Detalle de error tipo FP09" más arriba y `docs/DF_resumen.md`
+  para la investigación completa, incluida la pista falsa de
+  `FKK_RLS_LOCK`/`FKK_RLS_UNLOCK`, que por sí solos no bastaban).
+  **Pendiente de confirmar con una prueba real de punta a punta** (lote
+  nuevo, no tocado antes por `FP09N` ni por nuestro programa).
 - Alta del objeto en el sistema de transporte correspondiente al proyecto.
