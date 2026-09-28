@@ -12,6 +12,13 @@
 * Cadena real (localizada depurando FP09 con breakpoints de modulo de
 * funcion sobre lotes reales, ver docs/DF_resumen.md) - no RFKKKA00:
 *   FKK_RLS_CLOSE    -> cierra el lote (solo con KEYR1)
+*   FKK_RLS_LOCK     -> bloquea el lote antes de contabilizar (solo con
+*                       KEYR1 - el resto de parametros son valores por
+*                       defecto de la propia FM). Imprescindible: sin
+*                       ella, FKK_RLS_POST_LOT puede dar un error falso
+*                       ("La devolucion ya ha sido contabilizada" con un
+*                       lote que ni FP09N ni nosotros habiamos llegado a
+*                       contabilizar) - ver docs/DF_resumen.md.
 *   FKK_RLS_POST_LOT -> contabiliza el lote (solo con KEYR1)
 *
 * DFKKRK-STARS es el estado real del lote y la fuente de verdad para
@@ -168,6 +175,33 @@ CLASS lcl_devoluciones2 IMPLEMENTATION.
           iv_param_v3   = |{ sy-subrc }| ).
         RETURN.
       ENDIF.
+    ENDIF.
+
+    " FKK_RLS_LOCK antes de contabilizar - lo llama FP09N (metodo
+    " SCHEDULE) y nosotros no lo haciamos. Real: sin esto, un lote
+    " contabilizaba bien a mano en FP09N pero con nuestro codigo daba
+    " "La devolucion ya ha sido contabilizada" (falso) en el primer
+    " intento - repetible solo con nuestro programa (dos ejecuciones
+    " seguidas, mismo error las dos), pero se "arreglaba" si antes se
+    " habia intentado una vez por FP09N. I_POSRA=0/I_X_WRITELOCK='X'/
+    " I_X_READLOCK=espacio son los valores por defecto de la propia FM
+    " (interfaz real, ver SE37) - bloquea el lote entero, no hace falta
+    " indicarlos.
+    CALL FUNCTION 'FKK_RLS_LOCK'
+      EXPORTING
+        i_keyr1 = lv_keyr1
+      EXCEPTIONS
+        failure = 1
+        OTHERS  = 2.
+    IF sy-subrc <> 0.
+      go_msg_logs->append_messages(
+        iv_msg_type   = 'E'
+        iv_msg_class  = 'ZFI_MC_001'
+        iv_msg_number = '180'
+        iv_param_v1   = CONV #( lv_keyr1 )
+        iv_param_v2   = `FKK_RLS_LOCK`
+        iv_param_v3   = |{ sy-subrc }| ).
+      RETURN.
     ENDIF.
 
     " No se filtra por STARS antes de contabilizar (cerrado o no): se

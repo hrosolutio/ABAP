@@ -1,6 +1,6 @@
 # ZFI_R_DEVOLUCIONES2 — Cierre y contabilización del lote de devolución de extornos (CDI_11)
 
-**Estado: reescrito sobre `FKK_RLS_CLOSE`/`FKK_RLS_POST_LOT`, circuito probado en DES — incluido el detalle de error tipo FP09, confirmado en real.**
+**Estado: reescrito sobre `FKK_RLS_CLOSE`/`FKK_RLS_LOCK`/`FKK_RLS_POST_LOT`, circuito probado en DES — incluido el detalle de error tipo FP09, confirmado en real.**
 Ya no es la copia de `ZFI_R_DEVOLUCIONES` — igual que pasó con el desarrollo 2
 (`zfi_r_devoluciones_crea/`), la sugerencia original de EVA de reutilizar el
 motor `RFKKKA00` resultó ser una lectura incorrecta del DF. Depurando `FP09`
@@ -37,11 +37,23 @@ Por cada `KEYR1` indicado que exista realmente en `DFKKRK`:
 3. Si está abierto (`STARS` en blanco) → `FKK_RLS_CLOSE`.
 4. Cualquier otro caso (recién cerrado en el paso anterior, ya estaba
    cerrado sin contabilizar, o cualquier estado intermedio/con
-   incidencias) → se llama a `FKK_RLS_POST_LOT` igualmente — **no se
-   filtra por `STARS` antes**, se deja que el propio FM decida si el
-   lote es válido y devuelva su error estándar si no lo es (así ese
-   error llega también al detalle capturado tipo FP09, ver más abajo) —
-   **sin reintento ni corrección automática** en ningún caso.
+   incidencias) → `FKK_RLS_LOCK` (bloquea el lote — imprescindible,
+   ver más abajo) y luego `FKK_RLS_POST_LOT` — **no se filtra por
+   `STARS` antes**, se deja que el propio FM decida si el lote es
+   válido y devuelva su error estándar si no lo es (así ese error llega
+   también al detalle capturado tipo FP09, ver más abajo) — **sin
+   reintento ni corrección automática** en ningún caso.
+
+**`FKK_RLS_LOCK` antes de contabilizar (bug real corregido)**: sin esta
+llamada, un lote que `FP09N` contabilizaba bien podía dar en nuestro
+programa el error falso *"La devolución ya ha sido contabilizada"*
+— reproducible con nuestro propio programa (dos ejecuciones seguidas,
+mismo error las dos veces), pero desaparecía si antes se había
+intentado una vez por `FP09N`. `FP09N` (método `SCHEDULE`) llama a
+`FKK_RLS_LOCK` antes de `FKK_RLS_POST_LOT`, y nuestro código no lo
+hacía — con solo `I_KEYR1` (el resto de parámetros ya son los valores
+por defecto de la propia FM: bloquea el lote entero, con bloqueo de
+escritura) queda arreglado.
 
 Parámetros de selección: **`S_KEYR1`** (obligatorio — nº de lote(s) a
 tratar) y **`P_SIMU`** (checkbox — si se marca, el programa solo escribe
@@ -119,7 +131,7 @@ src/
   ZFI_R_DEVOLUCIONES2.abap        Programa principal (REPORT)
   ZFI_R_DEVOLUCIONES2_TOP.abap    Include TOP (TABLES dfkkrk, para S_KEYR1)
   ZFI_R_DEVOLUCIONES2_EVE.abap    Include EVE (S_KEYR1 + P_SIMU)
-  ZFI_R_DEVOLUCIONES2_CLS.abap    Include CLS (clase lcl_devoluciones2) — sobre FKK_RLS_CLOSE/FKK_RLS_POST_LOT
+  ZFI_R_DEVOLUCIONES2_CLS.abap    Include CLS (clase lcl_devoluciones2) — sobre FKK_RLS_CLOSE/FKK_RLS_LOCK/FKK_RLS_POST_LOT
 docs/
   DF_resumen.md                   Resumen del Diseño Funcional + cadena real de FMs confirmada por depuración
 ```
@@ -131,4 +143,9 @@ docs/
   (`ES_ERROR-DESCRIPTION`) igual que lo haría `FP09N` a mano — la técnica
   (`PERFORM retrieve_data` + `ASSIGN` dinámico + `MESSAGE...INTO`) queda
   validada de punta a punta, no solo en debug aislado.
+- **`FKK_RLS_LOCK` añadido (28/09/2026)** — corrige un error falso
+  ("La devolución ya ha sido contabilizada" con un lote que no lo
+  estaba) que `FP09N` no daba, ver "Detalle de error tipo FP09" más
+  arriba y `docs/DF_resumen.md` para la investigación completa.
+  Pendiente de volver a probar con un lote nuevo, de principio a fin.
 - Alta del objeto en el sistema de transporte correspondiente al proyecto.

@@ -76,6 +76,59 @@ hace falta pasarlo). **Probado con éxito real**: lote `260825CDI111`,
 `sy-subrc = 0`, `FP09` mostró después "Ya no se pueden modificar
 devoluciones" (cerrado).
 
+### Bloquear (antes de contabilizar) → `FKK_RLS_LOCK`
+
+**Bug real encontrado (28/09/2026)**: un lote que `FP09N` contabilizaba
+bien podía dar en `ZFI_R_DEVOLUCIONES2` (y por tanto en
+`ZFI_FM_DEVOLUCIONES2`) el error falso *"La devolución ya ha sido
+contabilizada"* (`FKK_RLS_POST_LOT`, `sy-subrc = 1`) — con un lote que
+en realidad **no** estaba contabilizado (`DFKKRK-STARS = 1`, cerrado sin
+contabilizar). Investigación paso a paso:
+
+- Se descartó que fuera un duplicado con otro lote (`DFKKRP-SELW1` del
+  mismo documento en otro `KEYR1` ya `STARS=5`) — no había otro lote.
+- Se descartó que el documento ya estuviera compensado por otra vía
+  (`DFKKOP-AUGBL`/`AUGDT`) — el documento **ni siquiera existía** en
+  `DFKKOP`.
+- Se descartó que fuera `I_XFULL_TRACE` (se probó sin él, mismo error).
+- Se descartó que fuera "el primer intento siempre falla, el segundo no"
+  como comportamiento general de SAP: ejecutar **nuestro propio
+  programa dos veces seguidas** sobre un lote nuevo daba el mismo error
+  las dos veces — no se autocorregía solo.
+- **Confirmado**: ejecutar `FP09N` una vez (aunque fallase) y luego
+  ejecutar nuestro programa sobre el mismo lote **sí** daba ya el
+  resultado correcto. Es decir, `FP09N` deja algo persistido en BD que
+  nuestro código no dejaba.
+
+`FP09N` (método `SCHEDULE`, ver más abajo) llama a `FKK_RLS_LOCK` antes
+de `FKK_RLS_POST_LOT` — nuestro código nunca la llamaba. Interfaz real
+(confirmada en `SE37`, no de memoria):
+
+```
+I_KEYR1        LIKE DFKKRK-KEYR1                  Schlüssel des zu sperrenden Stapels
+I_POSRA        LIKE DFKKRP-POSRA       DEFAULT 0   Nr einer zu sperrenden Position
+I_X_WRITELOCK  TYPE C                  DEFAULT 'X' Schreibsperre setzen
+I_X_READLOCK   TYPE C                              Lesesperre setzen
+EXCEPTIONS
+  FAILURE   Fehler beim Sperren
+```
+
+Con los valores por defecto (`I_POSRA = 0` → bloquea el lote entero, no
+una posición concreta; `I_X_WRITELOCK = 'X'`) basta pasar `I_KEYR1`:
+
+```abap
+CALL FUNCTION 'FKK_RLS_LOCK'
+  EXPORTING
+    i_keyr1 = lv_keyr1
+  EXCEPTIONS
+    failure = 1
+    OTHERS  = 2.
+```
+
+Añadido en `ZFI_R_DEVOLUCIONES2_CLS` (`process_lot`), justo antes de
+`FKK_RLS_POST_LOT`, con el mismo patrón de manejo de error (mensaje
+`180`) que `FKK_RLS_CLOSE`/`FKK_RLS_POST_LOT`.
+
 ### Contabilizar → `FKK_RLS_POST_LOT`
 
 ```abap
