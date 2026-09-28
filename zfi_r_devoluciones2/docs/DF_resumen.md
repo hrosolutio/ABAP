@@ -210,6 +210,33 @@ Otros candidatos, de menor prioridad: `I_XFULL_TRACE = '2'` en vez de
 en concreto no se ha probado todavía); `FKK_RLS_OPERATION_ALLOWED` como
 comprobación previa.
 
+**Cambio de metodología (28/09/2026)**: dos intentos seguidos basados en
+"imitar por fuera la secuencia de `SCHEDULE`" han fallado — seguimos sin
+saber qué condición real comprueba `FKK_RLS_POST_LOT` para decidir "ya
+contabilizada". Se abandona seguir adivinando qué llamada previa "deja
+algo guardado" y se pasa a depurar **dentro** de `FKK_RLS_POST_LOT`
+(breakpoint de sesión en la FM, `step into`) para encontrar la condición
+exacta (`IF`/campo/tabla) justo antes del `MESSAGE`/`RAISE NOT_VALID`, y
+comparar su valor en una ejecución que falla (nuestro programa) contra
+una que funciona (`FP09N`) en ese mismo punto — en vez de replicar la
+secuencia de llamadas por analogía.
+
+**Tabla `DFKKRPE` encontrada durante esta depuración** (SE16, "Tabla a
+examinar" = `DFKKRPE`, descripción DDIC "Remesa de devoluciones: Mensaje
+de error para pos.devolución") — guardada aquí para referencia, **sin
+confirmar todavía si está relacionada con el bug**: registro real
+encontrado para el lote `260928CDI113` (columnas mostradas en SE16:
+`Lote devol.` = `260928CDI113`, `Pos.` = vacío, `ID mensaje` = `>2`,
+`Mens.` = `507`, `Variable` = `Cont.&&&`). Por el nombre de la tabla
+parece guardar, por posición de lote, los mensajes de error de
+contabilización — candidata a ser el sitio donde queda persistido el
+estado que hace que, tras un intento de `FP09N`, las ejecuciones
+posteriores (nuestras o de `FP09N`) ya no repitan el mismo error.
+Pendiente: comprobar si esta tabla se escribe en el intento que falla
+(nuestro programa) y/o se lee dentro de `FKK_RLS_POST_LOT` antes de
+decidir "ya contabilizada", y si su contenido cambia entre un intento
+con `FP09N` y uno con nuestro programa sobre el mismo lote.
+
 ### Contabilizar → `FKK_RLS_POST_LOT`
 
 ```abap
