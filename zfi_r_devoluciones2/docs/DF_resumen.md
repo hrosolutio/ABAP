@@ -364,9 +364,12 @@ ENDIF.
 
 Se mantiene el `FKK_RLS_LOCK`/`FKK_RLS_UNLOCK` de más arriba (no hace
 daño y replica la estructura real de `FP09N`), aunque quedó confirmado
-que por sí solo no era la causa. **Pendiente de confirmar con un lote
-nuevo, de principio a fin**, que este `FKK_RLS_HDR_STARS_SET` resuelve
-definitivamente el error falso.
+que por sí solo no era la causa.
+
+**Confirmado con prueba real de principio a fin (28/09/2026, lote
+nuevo)**: con `FKK_RLS_HDR_STARS_SET` añadido, el lote contabiliza
+correctamente — el error falso "ya ha sido contabilizada" no vuelve a
+aparecer. Investigación cerrada.
 
 ### Contabilizar → `FKK_RLS_POST_LOT`
 

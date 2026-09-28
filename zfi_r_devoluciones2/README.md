@@ -1,6 +1,6 @@
 # ZFI_R_DEVOLUCIONES2 — Cierre y contabilización del lote de devolución de extornos (CDI_11)
 
-**Estado: reescrito sobre `FKK_RLS_CLOSE`/`FKK_RLS_LOCK`/`FKK_RLS_POST_LOT`, circuito probado en DES — incluido el detalle de error tipo FP09, confirmado en real.**
+**Estado: reescrito sobre `FKK_RLS_CLOSE`/`FKK_RLS_LOCK`/`FKK_RLS_HDR_STARS_SET`/`FKK_RLS_POST_LOT`, circuito probado en DES de principio a fin — incluido el detalle de error tipo FP09, confirmado en real.**
 Ya no es la copia de `ZFI_R_DEVOLUCIONES` — igual que pasó con el desarrollo 2
 (`zfi_r_devoluciones_crea/`), la sugerencia original de EVA de reutilizar el
 motor `RFKKKA00` resultó ser una lectura incorrecta del DF. Depurando `FP09`
@@ -45,8 +45,9 @@ Por cada `KEYR1` indicado que exista realmente en `DFKKRK`:
    al detalle capturado tipo FP09, ver más abajo) — **sin reintento ni
    corrección automática** en ningún caso.
 
-**Error falso "ya ha sido contabilizada" — causa real encontrada
-(28/09/2026)**: un lote que `FP09N` contabilizaba bien podía dar en
+**Error falso "ya ha sido contabilizada" — causa real encontrada y
+corregida, confirmado con prueba real de punta a punta (28/09/2026)**:
+un lote que `FP09N` contabilizaba bien podía dar en
 nuestro programa el error falso *"La devolución ya ha sido
 contabilizada"* — reproducible con nuestro propio programa (dos
 ejecuciones seguidas, mismo error las dos veces), pero desaparecía si
@@ -75,8 +76,8 @@ no hacíamos. Añadido: si `STARS < '2'`, se llama a
 por `SE37`: pone `STARS = '2'`, "planificado para contabilizar") justo
 antes de `FKK_RLS_POST_LOT`. Se mantienen también `FKK_RLS_LOCK`/
 `FKK_RLS_UNLOCK` (replican la estructura real de `FP09N`, aunque por sí
-solos no arreglaban nada). Pendiente de confirmar con una prueba real de
-punta a punta (lote nuevo).
+solos no arreglaban nada). **Confirmado con un lote nuevo, de principio
+a fin: contabiliza correctamente, sin el error falso.**
 
 Parámetros de selección: **`S_KEYR1`** (obligatorio — nº de lote(s) a
 tratar) y **`P_SIMU`** (checkbox — si se marca, el programa solo escribe
@@ -166,13 +167,12 @@ docs/
   (`ES_ERROR-DESCRIPTION`) igual que lo haría `FP09N` a mano — la técnica
   (`PERFORM retrieve_data` + `ASSIGN` dinámico + `MESSAGE...INTO`) queda
   validada de punta a punta, no solo en debug aislado.
-- **Error falso "ya ha sido contabilizada" — causa real encontrada y
-  corregida (28/09/2026)**: `FKK_RLS_HDR_STARS_SET` (`I_XPLANNED = 'X'`)
+- **Error falso "ya ha sido contabilizada" — resuelto y confirmado en
+  real (28/09/2026)**: `FKK_RLS_HDR_STARS_SET` (`I_XPLANNED = 'X'`)
   añadido antes de `FKK_RLS_POST_LOT` cuando `STARS < '2'` — causa real
   confirmada depurando dentro de `FKK_RLS_POST_LOT` → `FKK_RLS_USABLE`
   (ver "Detalle de error tipo FP09" más arriba y `docs/DF_resumen.md`
   para la investigación completa, incluida la pista falsa de
   `FKK_RLS_LOCK`/`FKK_RLS_UNLOCK`, que por sí solos no bastaban).
-  **Pendiente de confirmar con una prueba real de punta a punta** (lote
-  nuevo, no tocado antes por `FP09N` ni por nuestro programa).
+  **Probado con un lote nuevo de principio a fin: contabiliza bien.**
 - Alta del objeto en el sistema de transporte correspondiente al proyecto.
