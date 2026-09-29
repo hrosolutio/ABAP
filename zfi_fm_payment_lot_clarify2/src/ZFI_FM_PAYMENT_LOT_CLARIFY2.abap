@@ -13,8 +13,20 @@ FUNCTION zfi_fm_payment_lot_clarify2.
 * Clarificación de transferencias pendientes de contabilizar en SAP
 * (equivalente a FPCPL)
 *
-* ESTADO: QUINTA VERSIÓN. Probado end-to-end con éxito a través de este
+* ESTADO: SEXTA VERSIÓN. Probado end-to-end con éxito a través de este
 * propio RFC, tanto con 1 factura como con 2 facturas (ver más abajo).
+*
+* SEXTA VERSIÓN (reportado por la consultora funcional: la posición
+* clarificada por el RFC seguía apareciendo en el listado de FPCPL).
+* Localizado por traza SQL (ST05) + lectura del código fuente real de
+* los FORMs responsables: faltaba actualizar DFKKCFZST-STATE (el
+* worklist de FPCPL excluye explícitamente STATE <> '03') y
+* DFKKZK-STAZS/AENAM/AEDAT/AETIM (cabecera del lote). Ver paso 8 más
+* abajo para el detalle de por qué se hace con UPDATE directo en vez
+* de invocar los FORMs reales (PERFORM IN PROGRAM se descartó tras
+* comprobar que dependen de variables globales del pool de funciones
+* que este RFC no tiene pobladas). PENDIENTE DE PROBAR end-to-end con
+* este cambio.
 *
 * QUINTA VERSIÓN (cambios pedidos por la consultora funcional tras
 * prueba real con 2 facturas):
@@ -132,7 +144,9 @@ FUNCTION zfi_fm_payment_lot_clarify2.
         lv_tolgr_clear  TYPE tolgr_clear_gen,
         lv_comrq        TYPE flag,
         lv_opbel_new    TYPE opbel_kk,
-        lv_budat_new    LIKE ls_dfkkzp-budat.
+        lv_budat_new    LIKE ls_dfkkzp-budat,
+        lv_stazs        TYPE dfkkzk-stazs,
+        lv_klaeb_chk    TYPE dfkkzp-klaeb.
 
   CLEAR: e_result, es_error, e_opbel.
 
@@ -472,6 +486,81 @@ FUNCTION zfi_fm_payment_lot_clarify2.
         klaed = lv_budat_new
     WHERE keyz1 = i_keyz1
       AND posza = i_posza.
+
+*----------------------------------------------------------------------*
+* 8. Actualizar DFKKCFZST (worklist de FPCPL) y DFKKZK (cabecera del
+*    lote) — reportado por la consultora funcional: la posición
+*    clarificada por el RFC seguía apareciendo en el listado de FPCPL
+*    aunque DFKKZP quedara correcta.
+*
+*    Localizado por traza SQL (ST05) qué tocaba el sistema real, y
+*    después el código fuente de los dos FORMs responsables:
+*
+*    - DFKKCFZST-STATE: el SELECT que arma el worklist de FPCPL excluye
+*      explícitamente STATE <> '03' (verificado en la traza). El FORM
+*      real, UPDATE_CLARIFY_LOT_ON_DB (SAPLFKKCFPS), resultó ser un
+*      simple MODIFY sobre una tabla interna global del pool de
+*      funciones (sin ninguna lógica adicional) — replicarlo con
+*      PERFORM IN PROGRAM no aporta nada frente a hacer el UPDATE
+*      nosotros mismos, así que se hace directo.
+*
+*    - DFKKZK-STAZS: el FORM real, STATUS_STAPEL_AKTUALISIEREN
+*      (SAPLFKZ0), sí tiene lógica real de cálculo, pero depende de
+*      variables globales del pool de funciones que este RFC no tiene
+*      pobladas (además de una rama para un mecanismo de "propuesta ML"
+*      no aplicable aquí) — no es seguro invocarlo tal cual desde fuera.
+*      Se replica solo la parte de cálculo verificada, que consulta
+*      DFKKZP en vivo sin depender de nada global:
+*        a) si queda alguna posición del lote sin documento
+*           (OPBEL en blanco)                              -> STAZS '3'
+*        b) si no, si queda alguna posición pendiente de clarificar
+*           (XKLAE = 'X' sin KLAED)                         -> STAZS '4'
+*        c) si no, el lote está completo                     -> STAZS '5'
+*      Si STAZS = '5', el flujo real cierra el FIKEY llamando al FM
+*      independiente FKK_FIKEY_CLOSE (verificado en el propio FORM);
+*      se replica igual aquí. FIKEY = KEYZ1 para este tipo de
+*      contabilización, confirmado en la traza SQL real.
+*----------------------------------------------------------------------*
+  UPDATE dfkkcfzst
+    SET state = '03'
+    WHERE keyz1 = i_keyz1
+      AND posza = i_posza.
+
+  CLEAR lv_stazs.
+
+  SELECT SINGLE klaeb FROM dfkkzp INTO lv_klaeb_chk
+    WHERE keyz1 = i_keyz1
+      AND opbel = space.
+  IF sy-subrc = 0.
+    lv_stazs = '3'.
+  ENDIF.
+
+  IF lv_stazs IS INITIAL.
+    SELECT SINGLE klaeb FROM dfkkzp INTO lv_klaeb_chk
+      WHERE keyz1 = i_keyz1
+        AND xklae = 'X'
+        AND ( klaed <= '00000000' OR klaed IS NULL ).
+    IF sy-subrc = 0.
+      lv_stazs = '4'.
+    ELSE.
+      lv_stazs = '5'.
+    ENDIF.
+  ENDIF.
+
+  UPDATE dfkkzk
+    SET stazs = lv_stazs
+        aenam = sy-uname
+        aedat = sy-datum
+        aetim = sy-uzeit
+    WHERE keyz1 = i_keyz1.
+
+  IF lv_stazs = '5'.
+    CALL FUNCTION 'FKK_FIKEY_CLOSE'
+      EXPORTING
+        i_fikey = i_keyz1
+      EXCEPTIONS
+        OTHERS  = 0.
+  ENDIF.
 
   COMMIT WORK AND WAIT.
 

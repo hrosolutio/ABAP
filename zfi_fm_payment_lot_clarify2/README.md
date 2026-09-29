@@ -24,6 +24,19 @@ se corrigió en esa misma prueba el `BLART` del documento generado, que
 debe ser `'2T'` (no `'2C'` como se había fijado inicialmente por
 observación de depuración).
 
+**SEXTA VERSIÓN**: la consultora funcional reportó que, tras clarificar
+por el RFC, la posición seguía apareciendo en el listado de FPCPL (al
+intentar clarificarla de nuevo por la transacción, SAP avisaba de que ya
+estaba clarificada y entonces sí desaparecía — confirmando que
+`DFKKZP-XKLAE` quedaba correcto, pero el listado no se refrescaba).
+Localizado por **traza SQL (ST05)** sobre una clarificación real por
+FPCPL, y después leyendo el código fuente real de los dos FORMs
+responsables (pedido en SE38, tras confirmar por Where-Used List que no
+existe ningún FM/BAPI independiente para esto). Ver el punto 8 de
+"Lógica implementada" para el detalle completo, incluida la razón por la
+que se optó por un `UPDATE` directo en vez de invocar los FORMs reales.
+**PENDIENTE DE PROBAR end-to-end con este cambio.**
+
 El propio DF advierte que el módulo de función estándar
 `FKK_PAYMENT_BATCH_CLARIFY_ITEM` **no se puede utilizar directamente**.
 Por depuración de la transacción FPCPL se confirmó el motivo: es un
@@ -175,19 +188,52 @@ docs/
    aquí se usa directamente `DFKKZP-AUGRD` de la posición).
 7. Actualiza `DFKKZP` (`XKLAE`/`KLAEB`) a mano, replicando lo que hace
    `BUCHG_ZAHLUNGEN_BEARBEITEN` en el flujo real (el motor no lo hace
-   por sí solo), y hace `COMMIT WORK AND WAIT`.
+   por sí solo).
+8. **Desde la sexta versión**: actualiza también `DFKKCFZST-STATE` y
+   `DFKKZK-STAZS`/`AENAM`/`AEDAT`/`AETIM`, y hace `COMMIT WORK AND WAIT`.
+   No se hace vía `PERFORM ... IN PROGRAM` (invocar los FORMs reales)
+   porque, revisando su código fuente:
+   - `UPDATE_CLARIFY_LOT_ON_DB` (`SAPLFKKCFPS`, quien escribe
+     `DFKKCFZST`) resultó ser un simple `MODIFY` sobre una tabla interna
+     **global** del pool de funciones, sin ninguna lógica adicional —
+     invocarlo no aporta nada frente a hacer el `UPDATE` nosotros
+     mismos. Se pone `STATE = '03'` directamente: el `SELECT` que arma
+     el worklist de FPCPL excluye explícitamente `STATE <> '03'`
+     (verificado en la traza SQL).
+   - `STATUS_STAPEL_AKTUALISIEREN` (`SAPLFKZ0`, quien escribe `DFKKZK`)
+     sí tiene lógica real, pero depende de múltiples variables globales
+     del pool de funciones que este RFC no tiene pobladas (además de
+     una rama para un mecanismo de "propuesta ML" no aplicable aquí) —
+     no es seguro invocarlo tal cual desde fuera de su flujo normal. Se
+     replica solo la parte de cálculo de `STAZS`, verificada en el
+     código fuente real y que no depende de nada global (consulta
+     `DFKKZP` en vivo, filtrando por `KEYZ1`):
+     - si queda alguna posición del lote sin documento (`OPBEL` en
+       blanco) → `STAZS = '3'`;
+     - si no, si queda alguna posición pendiente de clarificar
+       (`XKLAE = 'X'` sin `KLAED`) → `STAZS = '4'`;
+     - si no, el lote está completo → `STAZS = '5'`, y en ese caso se
+       cierra el `FIKEY` llamando al FM independiente y seguro
+       `FKK_FIKEY_CLOSE` (`I_FIKEY = I_KEYZ1`, confirmado en la traza
+       SQL que `DFKKZK-FIKEY = DFKKZK-KEYZ1` para este tipo de
+       contabilización), igual que hace el FORM real.
 
 El usuario que queda registrado en las clarificaciones es el usuario
 técnico con el que MuleSoft se conecta a SAP, en el campo `DFKKZP-AENAM`
 (actualmente `COMMUSER`).
 
-## Prueba end-to-end real: superada (1 y 2 facturas)
+## Prueba end-to-end real: superada (1 y 2 facturas); pendiente repetir con la sexta versión
 
 Ejecutada en SE37 (F8) contra una posición de lote real pendiente de
 clarificar, a través de este módulo de función (no simulada dentro de
 FPCPL): `E_RESULT = 'OK'`, `E_OPBEL = 414500000010` (caso de 1 factura).
 Repetida con éxito con 2 facturas cuya suma coincide con la posición,
 tras la corrección de la quinta versión.
+
+El añadido de la sexta versión (punto 8, `DFKKCFZST`/`DFKKZK`) todavía
+no se ha probado end-to-end — falta confirmar que, tras clarificar por
+el RFC, la posición desaparece del listado de FPCPL y que `DFKKZK`
+queda con la fecha/hora/usuario correctos.
 
 ## Instalación en SAP (SE11 / SE80 / SE37)
 
@@ -228,6 +274,11 @@ tras la corrección de la quinta versión.
   `FKK_CREATE_DOC_MASS_AND_CLEAR`.
 - Contemplar el caso de clarificaciones parciales/múltiples sobre la
   misma posición (tabla `DFKKZPT`), no cubierto en esta versión.
+- Probar end-to-end el añadido de la sexta versión (`DFKKCFZST`/
+  `DFKKZK`): confirmar que la posición desaparece del listado de FPCPL
+  tras clarificar por el RFC, y que `FKK_FIKEY_CLOSE` no da ningún
+  problema cuando el lote queda completo (`STAZS = '5'`) — este camino
+  concreto (cierre del lote entero) no se ha probado todavía.
 - Autorización RFC del usuario `COMMUSER` (o el que corresponda) sobre el
   grupo de función.
 - Alta del objeto en el sistema de transporte correspondiente al proyecto.
