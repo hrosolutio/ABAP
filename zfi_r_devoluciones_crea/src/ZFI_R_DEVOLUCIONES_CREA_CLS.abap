@@ -319,7 +319,14 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
     " OJO: a diferencia del borrador anterior (que solo generaba ficheros
     " de prueba), este modo YA CREA EL LOTE DE VERDAD en el sistema donde
     " se ejecute - no es una simulacion. Pensado para probar rapido con un
-    " _DEV local sin pasar por AL11. Sin traza en ZFI_T_FILE_LOG.
+    " _DEV local sin pasar por AL11.
+    "
+    " Deja traza en ZFI_T_FILE_LOG igual que el modo Server (antes no lo
+    " hacia - real: Eva penso que un lote contabilizado en Upload era un
+    " bug porque no aparecia en la tabla, ver README). No se llama a
+    " TRANSPORT_FILES en ningun punto (a diferencia de PROCESS_DEV_FILE):
+    " el fichero es local, en el PC de quien ejecuta, no hay nada que
+    " mover en el servidor.
     DATA: lt_lines TYPE string_table.
 
     cl_gui_frontend_services=>gui_upload(
@@ -333,14 +340,27 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
       RETURN.
     ENDIF.
 
+    DATA(lv_filename) = get_filename_from_path( gv_path ).
+
+    TRY.
+        go_file_log->create_log( EXPORTING iv_filename = CONV #( lv_filename )
+                                  IMPORTING es_file_log = DATA(ls_file_log) ).
+      CATCH zfi_cl_cx.
+        WRITE: / 'No se ha podido registrar en ZFI_T_FILE_LOG:', lv_filename.
+        RETURN.
+    ENDTRY.
+
     DATA(lt_items) = parse_dev_lines( lt_lines ).
 
     IF lt_items IS INITIAL.
+      ls_file_log-status = 'ERROR'.
+      ls_file_log-fecha_processo = sy-datum.
+      ls_file_log-hora_processo  = sy-uzeit.
+      ls_file_log-usuario        = sy-uname.
+      UPDATE zfi_t_file_log FROM ls_file_log.
       MESSAGE 'El fichero no contiene líneas de extorno reconocibles.' TYPE 'E'.
       RETURN.
     ENDIF.
-
-    DATA(lv_filename) = get_filename_from_path( gv_path ).
 
     filter_duplicates( EXPORTING it_items     = lt_items
                                   iv_filename  = lv_filename
@@ -348,9 +368,18 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
                                   et_r3seg_dev = DATA(lt_r3seg_dev) ).
 
     IF lt_items IS INITIAL.
+      ls_file_log-status = 'PROCESADO'.
+      ls_file_log-fecha_processo = sy-datum.
+      ls_file_log-hora_processo  = sy-uzeit.
+      ls_file_log-usuario        = sy-uname.
+      UPDATE zfi_t_file_log FROM ls_file_log.
       MESSAGE 'Todas las posiciones del fichero ya estaban registradas.' TYPE 'I'.
       RETURN.
     ENDIF.
+
+    ls_file_log-nbr_lines_items = lines( lt_items ).
+    DATA(lv_total_cent) = REDUCE i( INIT s = 0 FOR item IN lt_items NEXT s = s + item-importe_cent ).
+    ls_file_log-importe = cent_to_str( lv_total_cent ).
 
     create_lot( EXPORTING it_items    = lt_items
                           iv_filename = lv_filename
@@ -358,10 +387,22 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
                           ev_ok    = DATA(lv_ok)
                           ev_error = DATA(lv_error) ).
 
+    ls_file_log-fecha_processo = sy-datum.
+    ls_file_log-hora_processo  = sy-uzeit.
+    ls_file_log-usuario        = sy-uname.
+
     IF lv_ok = abap_true.
+      ls_file_log-status = 'PROCESADO'.
+      " Reutilizamos este campo (no hay uno dedicado en ZFI_T_FILE_LOG)
+      " para dejar trazado el nº de lote de devoluciones creado - igual
+      " que PROCESS_DEV_FILE.
+      ls_file_log-file_name_header = lv_keyr1.
+      UPDATE zfi_t_file_log FROM ls_file_log.
       MODIFY zfi_t_r3seg_dev FROM TABLE lt_r3seg_dev.
       WRITE: / 'Lote creado:', lv_keyr1, '(', lines( lt_items ), 'posiciones)'.
     ELSE.
+      ls_file_log-status = 'ERROR'.
+      UPDATE zfi_t_file_log FROM ls_file_log.
       WRITE: / 'Error al crear el lote:', lv_error.
     ENDIF.
 
