@@ -616,6 +616,50 @@ en `ZFI_R_ECOFI_SPLIT`). Sin recorte especial más allá del truncamiento
 natural de un `CHAR40` — los nombres reales observados (`YFRECAU_1239_
 260827.140156_DEV.txt`, 34 caracteres) caben enteros.
 
+## Banco propio/ID cuenta (`DFKKRK-HBKID`/`HKTID`) vía `TFK012` (30/09/2026)
+
+Eva encontró (probando `FP09` a mano) que, al indicar la cuenta de
+compensación (`RLSKO`) en la pantalla "Devoluciones: Datos prefijados y
+status tratar", se rellenan solos dos campos más en el bloque "Cta.
+compensación": **"Banco propio"** y **"ID cuenta"**. Comprobado que los
+lotes creados por `ZFI_R_DEVOLUCIONES_CREA` se quedaban con esos dos
+campos vacíos en `DFKKRK` — el relleno automático es lógica de la propia
+pantalla de `FP09`, `FKK_RLS_HDR_PREPARE` no lo deriva.
+
+**Campos técnicos reales** (confirmados por Eva, doble clic sobre cada
+campo en la pantalla de `FP09` → información técnica): `DFKKRK-HBKID`
+(banco propio) y `DFKKRK-HKTID` (ID cuenta).
+
+**Tabla origen real** (confirmada por Eva vía `SE16` — la misma tabla que
+consulta `FP09` para ese relleno automático): **`TFK012`**, clave
+`MANDT`+`BUKRS`+`BVRKO` (cuenta de compensación — mismo valor que
+`DFKKRK-RLSKO`), con columnas `HBKID`/`HKTID`/`GPARK` y varios flags
+(`XBVRZS`/`XBVRRL`/`XBVRSS`/`XBVRCR`/`XBVRZAU`/`XBVROL`/`XBVRVT`/
+`XBVRPDC`/`XBVRPBL`) y `DECRE`, no usados aquí. Ejemplo real visto en
+`SE16` (sociedad `1239`): fila `BVRKO = 4305500150` → `HBKID = CXB01`,
+`HKTID = CXB01`.
+
+**Decisión explícita de Eva: no meterlos como constantes nuevas en
+`ZFI_T_CONSTANTS`** (a diferencia de `SOCIEDAD`/`MOTIVO`/
+`CTA_COMPENSACION`/`MONEDA`) — ya viven en una tabla de customizing real
+de FI-CA, duplicarlos como constante propia sería una fuente de verdad
+adicional a mantener sincronizada sin necesidad.
+
+**Implementación**: `get_constants` (tras resolver `GV_CTA_COMP` desde
+`ZFI_T_CONSTANTS`) hace
+
+```abap
+SELECT SINGLE hbkid hktid FROM tfk012 INTO (gv_hbkid, gv_hktid)
+  WHERE bukrs = gv_sociedad AND bvrko = gv_cta_comp.
+```
+
+(sintaxis clásica sin `@`, ver `CLAUDE.md`) y `create_lot` los asigna a
+`ls_dfkkrk-hbkid`/`ls_dfkkrk-hktid` junto al resto de campos de cabecera,
+antes de `FKK_RLS_HDR_PREPARE`. Si `TFK012` no tiene fila para esa
+sociedad+cuenta, no es un error fatal — se deja un `WRITE` de aviso y el
+lote se sigue creando igual que antes de este fix (los dos campos quedan
+vacíos, igual que ya pasaba).
+
 ## Validación de duplicados (`ZFI_T_R3SEG_DEV`)
 
 Pedido por Eva (no viene del DF): "básicamente es replicar la validación

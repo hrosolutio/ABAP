@@ -87,6 +87,26 @@ fichero extraído de `P_PATH`. Sin ningún criterio especial de recorte si
 el nombre no cupiera en 40 caracteres (los nombres reales observados
 caben enteros).
 
+## Banco propio/ID cuenta (`DFKKRK-HBKID`/`HKTID`), vía `TFK012` (fix real, 30/09/2026)
+
+Eva detectó que, al crear una devolución a mano en `FP09` indicando la
+cuenta de compensación (`RLSKO`), la pantalla rellena sola dos campos
+más — "Banco propio" e "ID cuenta" — pero **los lotes creados por este
+programa se quedaban con esos dos campos vacíos**. Motivo: ese relleno
+es lógica de la propia pantalla de `FP09`, no de `FKK_RLS_HDR_PREPARE`
+(la FM no los deriva por su cuenta).
+
+**No se añaden como constantes nuevas en `ZFI_T_CONSTANTS`** (decisión
+explícita de Eva, para no duplicar un dato que ya vive en una tabla de
+customizing real): `create_lot` los lee de **`TFK012`** (tabla real de
+asignación banco propio/ID cuenta por sociedad + cuenta de compensación
+— confirmada por Eva vía `SE16` sobre la misma tabla que consulta `FP09`,
+clave `BUKRS`+`BVRKO`) con `GV_CTA_COMP` como cuenta, en `get_constants`
+junto al resto de configuración. Si `TFK012` no tiene fila para esa
+sociedad+cuenta, se deja un aviso (`WRITE`) pero **no bloquea la
+creación del lote** — se queda como estaba antes de este fix (campos
+vacíos), no se considera un error fatal.
+
 ## Modo Upload también deja traza en `ZFI_T_FILE_LOG` (fix real, 30/09/2026)
 
 Eva preguntó por qué un lote contabilizado ese día no aparecía en

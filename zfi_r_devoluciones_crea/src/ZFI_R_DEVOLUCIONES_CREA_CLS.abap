@@ -25,7 +25,13 @@
 * detalle completo de la depuracion y los campos confirmados.
 *
 * Campos minimos necesarios (confirmado con la prueba real, ver DF):
-*   Cabecera (DFKKRK): BUKRS, RLGRD, RLSKO, WAERS.
+*   Cabecera (DFKKRK): BUKRS, RLGRD, RLSKO, WAERS. Ademas HBKID/HKTID
+*   (banco propio/ID cuenta de la cuenta de compensacion) - FP09 los
+*   rellena solo al indicar RLSKO (logica de su pantalla, no de la FM:
+*   FKK_RLS_HDR_PREPARE no los deriva), asi que este programa los lee el
+*   de TFK012 (BUKRS+BVRKO) el mismo, ver GET_CONSTANTS/CREATE_LOT - real,
+*   pedido por Eva tras ver los lotes creados por este programa con esos
+*   dos campos vacios.
 *   Posicion (DFKKRP), por linea del _DEV: BETRR (importe, EN NEGATIVO -
 *   confirmado con el error real >4703 al meterlo en positivo), SELT1 = 'B',
 *   SELW1 = nº de documento SAP. El banco/IBAN del deudor (BANKL/BANKK/
@@ -148,7 +154,20 @@ CLASS lcl_devoluciones_crea DEFINITION.
       " STRING (no dfkkrk-waers) para que la busqueda del tag de moneda en
       " el fichero (FIND FIRST OCCURRENCE) no arrastre blancos de relleno
       " de un tipo de longitud fija - ver CLAUDE.md.
-      gv_moneda       TYPE string.
+      gv_moneda       TYPE string,
+
+      " Banco propio/ID cuenta asociados a la cuenta de compensacion
+      " (GV_CTA_COMP) - en FP09 se rellenan solos al indicar la cuenta,
+      " pero FKK_RLS_HDR_PREPARE no los deriva (es logica de pantalla de
+      " FP09, no de la FM): real, pedido por Eva, los lotes creados por
+      " este programa se quedaban con DFKKRK-HBKID/HKTID vacios. No son
+      " constantes en ZFI_T_CONSTANTS (decision explicita de Eva): se
+      " leen de TFK012 (tabla real de asignacion banco propio/ID cuenta
+      " por sociedad+cuenta de compensacion, confirmada por Eva via SE16
+      " sobre la propia tabla que usa FP09) con BUKRS+GV_CTA_COMP como
+      " clave, ver GET_CONSTANTS.
+      gv_hbkid        TYPE tfk012-hbkid,
+      gv_hktid        TYPE tfk012-hktid.
 
     METHODS:
       get_constants RETURNING VALUE(rv_ok) TYPE flag,
@@ -273,6 +292,17 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
        OR gv_ruta_dev IS INITIAL OR gv_ruta_dev_proc IS INITIAL OR gv_moneda IS INITIAL.
       WRITE: / 'Faltan constantes en ZFI_T_CONSTANTS para', co_application_id, co_process_id.
       RETURN.
+    ENDIF.
+
+    " Banco propio/ID cuenta de la cuenta de compensacion (ver comentario
+    " de GV_HBKID/GV_HKTID) - TFK012 tiene clave BUKRS+BVRKO. No fatal si
+    " no hay fila (aviso, no RETURN): el lote se sigue creando igual que
+    " antes de este cambio, solo que sin estos dos campos rellenos.
+    SELECT SINGLE hbkid hktid FROM tfk012 INTO (gv_hbkid, gv_hktid)
+      WHERE bukrs = gv_sociedad AND bvrko = gv_cta_comp.
+    IF sy-subrc <> 0.
+      WRITE: / 'Aviso: no se ha encontrado banco propio/ID cuenta en TFK012 para',
+               gv_sociedad, gv_cta_comp.
     ENDIF.
 
     rv_ok = abap_true.
@@ -799,6 +829,11 @@ CLASS lcl_devoluciones_crea IMPLEMENTATION.
     ls_dfkkrk-rlgrd = gv_motivo.
     ls_dfkkrk-rlsko = gv_cta_comp.
     ls_dfkkrk-waers = gv_moneda.
+    " Banco propio/ID cuenta de la cuenta de compensacion (ver comentario
+    " de GV_HBKID/GV_HKTID) - en blanco si TFK012 no tenia fila para esta
+    " sociedad+cuenta (aviso ya dado en GET_CONSTANTS).
+    ls_dfkkrk-hbkid = gv_hbkid.
+    ls_dfkkrk-hktid = gv_hktid.
     ls_dfkkrk-blart = `DV`.
     ls_dfkkrk-keyr1 = generate_keyr1( ).
     " Concepto de busqueda (DFKKRK-KEYR2, CHAR40): nombre del fichero
