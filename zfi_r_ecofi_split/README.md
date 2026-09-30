@@ -160,9 +160,19 @@ docs/
 
 ## Pendiente / a definir con el cliente
 
-Ver la sección completa en `docs/DF_resumen.md`. Los dos puntos más
+Ver la sección completa en `docs/DF_resumen.md`. Los puntos más
 relevantes:
 
+- **Bug real encontrado en producción (30/09/2026) — pendiente de
+  confirmar con Eva antes de tocar código**: la regla de "24 dígitos"
+  del DF **no es equivalente** al indicador `ANUP`/`TRRD` del propio
+  fichero en un tercer fichero real (`YFRECAU_1239_260828.140157.txt`,
+  fuera de los 2 usados para validar la regla originalmente) — falsos
+  positivos y falsos negativos reales. Ver `docs/DF_resumen.md`,
+  "Bug real: la regla de 24 dígitos falla con datos de producción" para
+  el detalle completo y la propuesta de fix (usar el indicador
+  directamente). Eva ya lo ha preguntado — a la espera de su respuesta
+  antes de cambiar la lógica.
 - Formato exacto de la línea de extorno en `_DEV` (ancho fijo con relleno,
   como hace este programa, o formato más corto como el ejemplo del DF).
 - Diseño del modo de ejecución en producción (servidor/AL11, disparo

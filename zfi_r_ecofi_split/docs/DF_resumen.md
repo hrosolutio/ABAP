@@ -72,6 +72,67 @@ Analizados `YFRECAU_1239_260402.140017.txt` (378 líneas) y
   RU_01) — no forma parte de este programa, es una decisión operativa sobre
   el proceso existente.
 
+## Bug real: la regla de 24 dígitos falla con datos de producción (30/09/2026)
+
+Analizado un tercer fichero real, `YFRECAU_1239_260828.140157.txt` (282
+líneas de datos, fuera de los 2 usados para validar la regla
+originalmente) — **la regla de "24 dígitos" y el indicador `ANUP`/`TRRD`
+del propio fichero dejan de coincidir al 100%** (sí coincidían en los 2
+ficheros de la validación original, ver arriba). El indicador es un
+código de 4 caracteres en posición fija — offset 46 de la línea (antes
+de la parte variable de la línea, confirmado en este fichero) — con
+valores `ANUP` (extorno) o `TRRD` (transferencia).
+
+Resultado de comparar las 282 líneas del fichero: el indicador clasifica
+bien 280, la regla de 24 dígitos falla en las 2 restantes, en **los dos
+sentidos posibles**:
+
+- **Falso positivo (líneas 2 y 3)** — detectado por el usuario primero,
+  antes de este análisis completo: el concepto empieza por 24 dígitos
+  (`000000000000008159130921...`, una referencia/cuenta larga), así que
+  la regla actual las manda a `_DEV`. Pero el indicador de esas líneas
+  está **en blanco** (ni `ANUP` ni `TRRD`) — son transferencias
+  `CLIENTE STR` (aparenta ser un tipo de transferencia instantánea,
+  distinto de `TRRD`, pero transferencia al fin y al cabo, no extorno).
+  ```
+  ...4452EUR  0000000000000081591309215876 CLIENTE STR 20359 ING...
+  ...257138EUR  0000000000000081591309215443 CLIENTE STR 20359 ING...
+  ```
+- **Falso negativo (línea 110)** — encontrado ampliando el análisis a
+  todo el fichero: el indicador es `ANUP` (extorno real, confirmado por
+  el resto de la línea: "CONCELLO DE RAMIRAS... FACTURA..."), pero el
+  concepto es `000000000000ORIGEN 20805331...` — solo 12 dígitos
+  seguidos de texto, no 24 dígitos. Con la regla actual iría a `_TRF`
+  por error — un extorno real que se perdería, el caso más grave de los
+  dos (el desarrollo 2, `ZFI_R_DEVOLUCIONES_CREA`, nunca vería esa
+  posición).
+  ```
+  ...31874EUR  000000000000ORIGEN 20805331 CONCELLO DE RAMIRAS...
+  ```
+
+**Por qué pasó (no es un fallo de implementación, la lógica ABAP replica
+exactamente lo que dice el DF)**: el DF especifica literalmente la regla
+de los 24 dígitos, y el indicador se documentó solo como "doble
+verificación" porque coincidía al 100% en los 2 ficheros usados para
+validar — no se sabía, con esa muestra, que el indicador y la regla
+podían divergir. Este tercer fichero real demuestra que sí pueden.
+
+**Propuesta de fix (pendiente de decisión — no implementado, a la
+espera de que Eva confirme)**: usar directamente el indicador
+`ANUP`/`TRRD` (offset fijo, ver arriba) como criterio de extorno en vez
+de contar dígitos del concepto — es el dato que trae el propio banco
+para distinguir exactamente esto, y en este fichero acierta 280/282
+frente a los 280/282 (con las 2 excepciones opuestas) de la regla de
+dígitos. Cambiaría `get_doc_number`/`split_lines` en
+`ZFI_R_ECOFI_SPLIT_CLS.abap`: primero comprobar el indicador en su
+posición fija, y solo si es `ANUP` calcular el número de documento con
+la posición de dígitos ya conocida (siempre que el concepto los tenga —
+si un extorno real viniera sin los 24 dígitos, como la línea 110, habría
+que decidir aparte qué hacer con el número de documento a clarificar).
+Se deja sin tocar hasta confirmar con Eva, porque el DF especifica la
+regla de dígitos de forma explícita y cambiarla es una decisión de
+negocio, no solo técnica.
+
 ## Pendiente / a definir con el cliente
 
 - **Formato de la línea de extorno en `_DEV`**: este programa mantiene el
