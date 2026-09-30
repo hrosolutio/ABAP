@@ -87,6 +87,24 @@ fichero extraído de `P_PATH`. Sin ningún criterio especial de recorte si
 el nombre no cupiera en 40 caracteres (los nombres reales observados
 caben enteros).
 
+## ⚠️ Modo Upload no deja traza en `ZFI_T_FILE_LOG` (confusión real, 30/09/2026)
+
+Eva preguntó por qué un lote contabilizado ese día no aparecía en
+`ZFI_T_FILE_LOG` — parecía un bug (ni siquiera un registro `ERROR`).
+**No lo es**: la prueba se había lanzado en modo **Upload** (`P_PATH`,
+fichero elegido a mano por F4), y ese modo, por diseño, **nunca toca
+`ZFI_T_FILE_LOG`** (`execute_upload` no llama a `go_file_log->
+create_log` en ningún punto — ver el comentario del propio método:
+*"Pensado para probar rápido con un `_DEV` local sin pasar por AL11.
+Sin traza en `ZFI_T_FILE_LOG`."*). El lote sí se crea de verdad (no es
+una simulación), solo que sin dejar registro.
+
+Solo el modo **Server** (`P_SERVER`, sin indicar fichero — escanea la
+carpeta de entrada él solo) deja traza en `ZFI_T_FILE_LOG`, siempre
+(`process_dev_file` llama a `create_log` como primera línea, antes de
+cualquier otra cosa). Si una prueba real necesita quedar registrada,
+tiene que lanzarse en modo Server, no Upload.
+
 ## Modo Server: el fichero SIEMPRE se mueve, se procese bien o mal
 
 Pedido por Eva: para dejar la carpeta de entrada limpia de cara a la
