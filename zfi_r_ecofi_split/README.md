@@ -163,16 +163,21 @@ docs/
 Ver la sección completa en `docs/DF_resumen.md`. Los puntos más
 relevantes:
 
-- **Bug real encontrado en producción (30/09/2026) — pendiente de
-  confirmar con Eva antes de tocar código**: la regla de "24 dígitos"
-  del DF **no es equivalente** al indicador `ANUP`/`TRRD` del propio
-  fichero en un tercer fichero real (`YFRECAU_1239_260828.140157.txt`,
-  fuera de los 2 usados para validar la regla originalmente) — falsos
-  positivos y falsos negativos reales. Ver `docs/DF_resumen.md`,
-  "Bug real: la regla de 24 dígitos falla con datos de producción" para
-  el detalle completo y la propuesta de fix (usar el indicador
-  directamente). Eva ya lo ha preguntado — a la espera de su respuesta
-  antes de cambiar la lógica.
+- **Bug real corregido (30/09/2026)**: la regla de "24 dígitos" del DF
+  **no era equivalente** al indicador `ANUP`/`TRRD` del propio fichero en
+  un tercer fichero real (`YFRECAU_1239_260828.140157.txt`, fuera de los
+  2 usados para validar la regla originalmente) — daba un falso positivo
+  real (líneas de transferencia `CLIENTE STR` con concepto que también
+  empezaba por 24 dígitos, clasificadas como extorno por error).
+  **Corregido con una segunda validación, confirmada por Eva/Diego**: es
+  extorno solo si se cumplen **las dos condiciones** — 24 dígitos en el
+  concepto **y** el indicador `ANUP` (offset fijo 46, 4 caracteres) — si
+  no, va a `_TRF`. Se probó también aplicar el indicador solo, pero un
+  caso real con `ANUP` y concepto sin 24 dígitos resultó ser, comprobado
+  en producción, una transferencia de verdad (paga una factura, sin
+  ninguna referencia de extorno) — de ahí que haga falta la combinación
+  de las dos condiciones y no una sola. Ver `docs/DF_resumen.md`,
+  "Segunda validación: tag ANUP + 24 dígitos" para el detalle completo.
 - Formato exacto de la línea de extorno en `_DEV` (ancho fijo con relleno,
   como hace este programa, o formato más corto como el ejemplo del DF).
 - Diseño del modo de ejecución en producción (servidor/AL11, disparo

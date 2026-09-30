@@ -1,9 +1,11 @@
 *&---------------------------------------------------------------------*
 *& Include          ZFI_R_ECOFI_SPLIT_CLS
 *&---------------------------------------------------------------------*
-* Regla de deteccion de extorno (verificada contra 2 ficheros ECOFI
-* reales, YFRECAU_1239_260402.140017.txt y YFRECAU_1239_260415.140018.txt,
-* 100% de coincidencia con el tag ANUP/TRRD del propio fichero):
+* Regla de deteccion de extorno (verificada inicialmente contra 2
+* ficheros ECOFI reales, YFRECAU_1239_260402.140017.txt y
+* YFRECAU_1239_260415.140018.txt, 100% de coincidencia con el tag
+* ANUP/TRRD del propio fichero - ver "Segunda validacion" mas abajo para
+* el motivo real de por que ahora hacen falta las DOS condiciones):
 *
 *   - Cada linea de datos tiene 260 caracteres fijos. La primera linea
 *     del fichero (cabecera) tiene 20 caracteres y se escribe tal cual
@@ -11,9 +13,30 @@
 *   - "EUR" aparece siempre en la misma posicion (columna 102, offset
 *     101), seguido de 2 espacios y el concepto (154 caracteres, hasta
 *     el final de la linea).
-*   - Es extorno si el concepto empieza por 24 digitos. El numero de
-*     documento SAP a clarificar son los digitos 13-24 de ese bloque
-*     (los ultimos 12), igual que en el ejemplo del DF.
+*   - Candidato a extorno si el concepto empieza por 24 digitos. El
+*     numero de documento SAP a clarificar son los digitos 13-24 de ese
+*     bloque (los ultimos 12), igual que en el ejemplo del DF.
+*
+* Segunda validacion - tag ANUP/TRRD (30/09/2026, decision real de
+* Eva/Diego tras encontrar un fichero de produccion donde la regla de
+* 24 digitos sola fallaba): ES EXTORNO SOLO SI SE CUMPLEN LAS DOS
+* CONDICIONES - el concepto empieza por 24 digitos Y el indicador de 4
+* caracteres en offset fijo 46 de la linea vale "ANUP" (offset/valores
+* confirmados con YFRECAU_1239_260828.140157.txt, 282 lineas de datos).
+* Si solo se cumple una de las dos, es transferencia (_TRF):
+*   - Concepto con 24 digitos pero indicador SIN "ANUP" (visto real:
+*     lineas "CLIENTE STR ..." con indicador en blanco, no "ANUP" ni
+*     "TRRD") -> _TRF. Es el bug real que motivo esta segunda condicion:
+*     esas lineas se iban antes a _DEV por error.
+*   - Indicador "ANUP" pero concepto SIN 24 digitos seguidos (visto real:
+*     un caso con "ANUP" y concepto tipo "000000000000ORIGEN 20805331
+*     CONCELLO DE RAMIRAS...FACTURA...") -> _TRF, y es lo correcto:
+*     confirmado por Eva en produccion, es una transferencia que paga una
+*     factura (no lleva ninguna referencia de extorno en el concepto,
+*     pese al indicador "ANUP") - CONFIRMADO QUE NO ES UN BUG, no cambiar
+*     esta clasificacion aunque el indicador sea "ANUP".
+* Por eso NO basta con usar el indicador solo ni los 24 digitos solos -
+* hacen falta las dos condiciones a la vez.
 *
 * Pendiente de confirmar con EVA (ver README): si la linea de extorno
 * en el fichero _DEV debe mantener el ancho fijo de 260 caracteres
@@ -88,6 +111,13 @@ CLASS lcl_ecofi_split DEFINITION.
       co_suffix_dev     TYPE string    VALUE '_DEV',
       co_eur_tag        TYPE string    VALUE 'EUR',
 
+      " Segunda validacion de extorno (ver comentario al principio del
+      " include) - indicador de 4 caracteres en offset fijo de la linea,
+      " confirmado real: "ANUP" = extorno, "TRRD" = transferencia.
+      co_tag_offset     TYPE i         VALUE 46,
+      co_tag_len        TYPE i         VALUE 4,
+      co_tag_anup       TYPE string    VALUE 'ANUP',
+
       " Claves en ZFI_T_CONSTANTS de las rutas fisicas del modo Server -
       " leidas en GET_CONSTANTS, no hace falta para el modo Upload. Mismo
       " PROCESS_ID que ZFI_R_DEVOLUCIONES_CREA (ver comentario al
@@ -113,6 +143,9 @@ CLASS lcl_ecofi_split DEFINITION.
 
       get_doc_number IMPORTING iv_line          TYPE string
                       RETURNING VALUE(rv_docnum) TYPE string,
+
+      has_anup_tag IMPORTING iv_line          TYPE string
+                   RETURNING VALUE(rv_result) TYPE abap_bool,
 
       build_output_filename IMPORTING iv_filename      TYPE string
                                        iv_suffix        TYPE string
@@ -348,7 +381,10 @@ CLASS lcl_ecofi_split IMPLEMENTATION.
 
       DATA(lv_docnum) = get_doc_number( lv_line ).
 
-      IF lv_docnum IS NOT INITIAL.
+      " Es extorno solo si se cumplen las DOS condiciones - 24 digitos en
+      " el concepto Y el indicador "ANUP" en su offset fijo (ver
+      " comentario al principio del include, decision real de Eva/Diego).
+      IF lv_docnum IS NOT INITIAL AND has_anup_tag( lv_line ) = abap_true.
         " Extorno: se reemplaza el concepto por el numero de documento,
         " manteniendo el ancho fijo de linea y el sufijo final original
         FIND FIRST OCCURRENCE OF co_eur_tag IN lv_line MATCH OFFSET DATA(lv_eur_off).
@@ -385,6 +421,18 @@ CLASS lcl_ecofi_split IMPLEMENTATION.
     CHECK lv_prefix24 CO '0123456789'.
 
     rv_docnum = substring( val = lv_prefix24 off = 12 len = 12 ).
+
+  ENDMETHOD.
+
+  METHOD has_anup_tag.
+
+    " Offset fijo desde el principio de la linea (no relativo a "EUR",
+    " que es la parte variable) - ver comentario al principio del
+    " include para el hallazgo real y el motivo de esta segunda
+    " condicion.
+    CHECK strlen( iv_line ) >= co_tag_offset + co_tag_len.
+
+    rv_result = xsdbool( substring( val = iv_line off = co_tag_offset len = co_tag_len ) = co_tag_anup ).
 
   ENDMETHOD.
 

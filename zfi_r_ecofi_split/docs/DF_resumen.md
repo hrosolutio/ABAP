@@ -98,40 +98,56 @@ sentidos posibles**:
   ...4452EUR  0000000000000081591309215876 CLIENTE STR 20359 ING...
   ...257138EUR  0000000000000081591309215443 CLIENTE STR 20359 ING...
   ```
-- **Falso negativo (línea 110)** — encontrado ampliando el análisis a
-  todo el fichero: el indicador es `ANUP` (extorno real, confirmado por
-  el resto de la línea: "CONCELLO DE RAMIRAS... FACTURA..."), pero el
-  concepto es `000000000000ORIGEN 20805331...` — solo 12 dígitos
-  seguidos de texto, no 24 dígitos. Con la regla actual iría a `_TRF`
-  por error — un extorno real que se perdería, el caso más grave de los
-  dos (el desarrollo 2, `ZFI_R_DEVOLUCIONES_CREA`, nunca vería esa
-  posición).
+- **Caso "raro" con indicador `ANUP` pero sin 24 dígitos (línea 110)** —
+  encontrado ampliando el análisis a todo el fichero: el indicador es
+  `ANUP`, pero el concepto es `000000000000ORIGEN 20805331...` — solo 12
+  dígitos seguidos de texto, no 24 dígitos:
   ```
   ...31874EUR  000000000000ORIGEN 20805331 CONCELLO DE RAMIRAS...
   ```
+  En un primer análisis se interpretó como un **falso negativo** (un
+  extorno real que se perdería yendo a `_TRF`) — **descartado por Eva
+  tras comprobarlo en producción**: es una transferencia de verdad, que
+  paga una factura, sin ninguna referencia de extorno en ningún sitio
+  del concepto, pese a traer el indicador `ANUP`. **`_TRF` es la
+  clasificación correcta para este caso**, no un bug.
 
-**Por qué pasó (no es un fallo de implementación, la lógica ABAP replica
-exactamente lo que dice el DF)**: el DF especifica literalmente la regla
-de los 24 dígitos, y el indicador se documentó solo como "doble
-verificación" porque coincidía al 100% en los 2 ficheros usados para
-validar — no se sabía, con esa muestra, que el indicador y la regla
-podían divergir. Este tercer fichero real demuestra que sí pueden.
+**Por qué pasó el fallo real (líneas 2-3) — no es un fallo de
+implementación, la lógica ABAP replicaba exactamente lo que dice el
+DF**: el DF especifica literalmente la regla de los 24 dígitos, y el
+indicador se documentó solo como "doble verificación" porque coincidía
+al 100% en los 2 ficheros usados para validar — no se sabía, con esa
+muestra, que el indicador y la regla podían divergir. Este tercer
+fichero real demuestra que sí pueden, en los dos sentidos.
 
-**Propuesta de fix (pendiente de decisión — no implementado, a la
-espera de que Eva confirme)**: usar directamente el indicador
-`ANUP`/`TRRD` (offset fijo, ver arriba) como criterio de extorno en vez
-de contar dígitos del concepto — es el dato que trae el propio banco
-para distinguir exactamente esto, y en este fichero acierta 280/282
-frente a los 280/282 (con las 2 excepciones opuestas) de la regla de
-dígitos. Cambiaría `get_doc_number`/`split_lines` en
-`ZFI_R_ECOFI_SPLIT_CLS.abap`: primero comprobar el indicador en su
-posición fija, y solo si es `ANUP` calcular el número de documento con
-la posición de dígitos ya conocida (siempre que el concepto los tenga —
-si un extorno real viniera sin los 24 dígitos, como la línea 110, habría
-que decidir aparte qué hacer con el número de documento a clarificar).
-Se deja sin tocar hasta confirmar con Eva, porque el DF especifica la
-regla de dígitos de forma explícita y cambiarla es una decisión de
-negocio, no solo técnica.
+## Segunda validación: tag `ANUP` + 24 dígitos (decisión real de Eva/Diego, 30/09/2026)
+
+Trasladado el hallazgo a Eva, que lo consultó con Diego. Decisión final
+(conversación literal, resumida): **usar el indicador `ANUP` como
+SEGUNDA validación, no como sustituto de la regla de 24 dígitos** —
+primero se comprueba la lógica ya existente (24 dígitos), y además el
+indicador tiene que ser `ANUP`. Si no se cumplen **las dos condiciones a
+la vez**, es transferencia (`_TRF`):
+
+- El caso de las líneas 2-3 (24 dígitos, indicador en blanco) confirma
+  que hacía falta el indicador como condición adicional — sin él,
+  seguirían yendo a `_DEV` por error.
+- El caso "raro" de la línea 110 (indicador `ANUP`, sin 24 dígitos)
+  confirma que el indicador **no basta por sí solo** — usarlo como único
+  criterio habría "arreglado" un caso que en realidad ya estaba bien
+  (esa línea es correctamente `_TRF`, ver arriba) convirtiéndolo en un
+  extorno inventado. De ahí la frase de Eva: *"por lo que el ANUP que
+  vimos en el TRF es correcto"*.
+
+**Implementado** en `ZFI_R_ECOFI_SPLIT_CLS.abap`: nuevo método
+`has_anup_tag` (comprueba el indicador en su offset fijo, `CO_TAG_OFFSET
+= 46`, `CO_TAG_LEN = 4`, confirmado con `YFRECAU_1239_260828.140157.txt`)
+y `split_lines` ahora exige `get_doc_number( lv_line ) IS NOT INITIAL AND
+has_anup_tag( lv_line ) = abap_true` para clasificar como extorno — antes
+solo miraba `get_doc_number`. Verificado en local (`python3`, replicando
+la lógica) contra las 282 líneas de datos del fichero real: 107 extornos
+(coincide con las líneas que cumplen ambas condiciones), líneas 2-3 y 110
+correctamente en `_TRF` las tres.
 
 ## Pendiente / a definir con el cliente
 
