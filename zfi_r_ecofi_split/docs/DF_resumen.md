@@ -149,6 +149,34 @@ la lógica) contra las 282 líneas de datos del fichero real: 107 extornos
 (coincide con las líneas que cumplen ambas condiciones), líneas 2-3 y 110
 correctamente en `_TRF` las tres.
 
+## Tercera validación: texto `"Naturgy Clientes S.A.U."` (pedida por Eva, 01/10/2026)
+
+Pedido explícito de Eva: además de las dos condiciones anteriores
+(24 dígitos + tag `ANUP`), el concepto tiene que mencionar literalmente
+`"Naturgy Clientes S.A.U."` para considerarse extorno. Confirmado con
+Eva: **texto exacto** (sensible a mayúsculas/minúsculas), posición
+dentro de la línea **no especificada** — se busca en toda la línea, no
+solo en la parte del concepto que sigue a los 24 dígitos (en los
+ejemplos reales siempre aparece justo ahí, pero no se asume esa posición
+fija sin confirmación explícita).
+
+**Implementado**: nuevo método `has_naturgy_text` — `FIND
+co_naturgy_text IN iv_line` (no el operador de comparación `CS`, que es
+case-insensitive; `FIND` sin `IGNORING CASE` sí es sensible a mayúsculas/
+minúsculas, necesario para el "texto exacto" pedido). `split_lines`
+ahora exige las **tres** condiciones a la vez:
+`get_doc_number( lv_line ) IS NOT INITIAL AND has_anup_tag( lv_line ) =
+abap_true AND has_naturgy_text( lv_line ) = abap_true`.
+
+Verificado contra `YFRECAU_1239_260828.140157.txt`: de las 107 líneas
+que ya cumplían las dos condiciones anteriores, las 107 contienen
+literalmente `"Naturgy Clientes S.A.U."` — esta tercera condición no
+cambia el resultado en este fichero (107 extornos / 175 transferencias,
+igual que antes), pero queda como salvaguarda real para cuando aparezcan
+en producción extornos `ANUP`+24 dígitos de otras empresas que no deban
+tratarse como extorno de este proceso (alcance de CDI_11 limitado a
+Naturgy, según el pedido de Eva).
+
 ## Pendiente / a definir con el cliente
 
 - **Formato de la línea de extorno en `_DEV`**: este programa mantiene el

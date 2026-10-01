@@ -38,6 +38,20 @@
 * Por eso NO basta con usar el indicador solo ni los 24 digitos solos -
 * hacen falta las dos condiciones a la vez.
 *
+* Tercera validacion - texto "Naturgy Clientes S.A.U." (01/10/2026,
+* pedida por Eva): ademas de las dos condiciones anteriores, el concepto
+* tiene que mencionar literalmente esta empresa (texto exacto, sensible
+* a mayusculas/minusculas - ver HAS_NATURGY_TEXT) para considerarse
+* extorno. Posicion dentro de la linea no especificada por Eva - se
+* busca en toda la linea, no solo en el concepto (visto real: siempre
+* aparece justo despues del numero de documento, pero no se asume esa
+* posicion fija por si acaso). Verificado contra YFRECAU_1239_260828.
+* 140157.txt: las 107 lineas que ya cumplian las dos condiciones
+* anteriores contienen literalmente este texto - anadir esta tercera
+* condicion no cambia nada en ese fichero (sirve de salvaguarda para
+* futuros ficheros con ANUP+24 digitos de otras empresas que no deban
+* tratarse como extorno de este proceso).
+*
 * Pendiente de confirmar con EVA (ver README): si la linea de extorno
 * en el fichero _DEV debe mantener el ancho fijo de 260 caracteres
 * (como hace este programa, rellenando con espacios tras el numero de
@@ -118,6 +132,13 @@ CLASS lcl_ecofi_split DEFINITION.
       co_tag_len        TYPE i         VALUE 4,
       co_tag_anup       TYPE string    VALUE 'ANUP',
 
+      " Tercera validacion de extorno, pedida por Eva (01/10/2026): el
+      " concepto tiene que mencionar literalmente esta empresa - texto
+      " exacto (CASE sensitive, ver HAS_NATURGY_TEXT), posicion no
+      " especificada (se busca en toda la linea, no solo en el concepto -
+      " no hay riesgo real de que aparezca en la parte fija de la linea).
+      co_naturgy_text   TYPE string    VALUE 'Naturgy Clientes S.A.U.',
+
       " Claves en ZFI_T_CONSTANTS de las rutas fisicas del modo Server -
       " leidas en GET_CONSTANTS, no hace falta para el modo Upload. Mismo
       " PROCESS_ID que ZFI_R_DEVOLUCIONES_CREA (ver comentario al
@@ -146,6 +167,9 @@ CLASS lcl_ecofi_split DEFINITION.
 
       has_anup_tag IMPORTING iv_line          TYPE string
                    RETURNING VALUE(rv_result) TYPE abap_bool,
+
+      has_naturgy_text IMPORTING iv_line          TYPE string
+                        RETURNING VALUE(rv_result) TYPE abap_bool,
 
       build_output_filename IMPORTING iv_filename      TYPE string
                                        iv_suffix        TYPE string
@@ -381,10 +405,12 @@ CLASS lcl_ecofi_split IMPLEMENTATION.
 
       DATA(lv_docnum) = get_doc_number( lv_line ).
 
-      " Es extorno solo si se cumplen las DOS condiciones - 24 digitos en
-      " el concepto Y el indicador "ANUP" en su offset fijo (ver
-      " comentario al principio del include, decision real de Eva/Diego).
-      IF lv_docnum IS NOT INITIAL AND has_anup_tag( lv_line ) = abap_true.
+      " Es extorno solo si se cumplen las TRES condiciones - 24 digitos en
+      " el concepto, el indicador "ANUP" en su offset fijo, y el concepto
+      " menciona literalmente "Naturgy Clientes S.A.U." (ver comentario al
+      " principio del include, decisiones reales de Eva/Diego).
+      IF lv_docnum IS NOT INITIAL AND has_anup_tag( lv_line ) = abap_true
+                                   AND has_naturgy_text( lv_line ) = abap_true.
         " Extorno: se reemplaza el concepto por el numero de documento,
         " manteniendo el ancho fijo de linea y el sufijo final original
         FIND FIRST OCCURRENCE OF co_eur_tag IN lv_line MATCH OFFSET DATA(lv_eur_off).
@@ -433,6 +459,18 @@ CLASS lcl_ecofi_split IMPLEMENTATION.
     CHECK strlen( iv_line ) >= co_tag_offset + co_tag_len.
 
     rv_result = xsdbool( substring( val = iv_line off = co_tag_offset len = co_tag_len ) = co_tag_anup ).
+
+  ENDMETHOD.
+
+  METHOD has_naturgy_text.
+
+    " Texto exacto (sensible a mayusculas/minusculas) - FIND es case
+    " sensitive por defecto, a diferencia de CS (operador de comparacion,
+    " case-insensitive), por eso no se usa "iv_line CS co_naturgy_text".
+    " Pedido por Eva (01/10/2026), posicion no especificada - se busca en
+    " toda la linea, ver comentario al principio del include.
+    FIND co_naturgy_text IN iv_line.
+    rv_result = xsdbool( sy-subrc = 0 ).
 
   ENDMETHOD.
 

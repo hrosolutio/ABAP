@@ -178,6 +178,13 @@ relevantes:
   ninguna referencia de extorno) — de ahí que haga falta la combinación
   de las dos condiciones y no una sola. Ver `docs/DF_resumen.md`,
   "Segunda validación: tag ANUP + 24 dígitos" para el detalle completo.
+- **Tercera validación (01/10/2026, pedida por Eva)**: además de las dos
+  condiciones anteriores, el concepto tiene que mencionar literalmente
+  `"Naturgy Clientes S.A.U."` (texto exacto) para considerarse extorno —
+  salvaguarda para futuros ficheros con `ANUP`+24 dígitos de otras
+  empresas que no deban tratarse como extorno de este proceso. No cambia
+  nada en el fichero de prueba ya analizado (las 107 líneas que cumplían
+  las dos condiciones anteriores ya contenían este texto).
 - Formato exacto de la línea de extorno en `_DEV` (ancho fijo con relleno,
   como hace este programa, o formato más corto como el ejemplo del DF).
 - Diseño del modo de ejecución en producción (servidor/AL11, disparo
