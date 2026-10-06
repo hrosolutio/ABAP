@@ -25,11 +25,11 @@ flujo general y las validaciones de CUPS / contrato.
 | Validaciones de integridad 2.1-2.5 | **TODO**, falta el origen de cada dato |
 | Validaciones 2.6 y 2.7 (reposición, Tarifa Plana) | Hechas, falta el operando y el tipo de tarifa |
 | Búsqueda del cálculo original | Hecha, campos de ERCH por verificar |
-| Lectura de líneas del cálculo | Hecha, campos de DBERCHZ* por verificar |
+| Lectura de líneas del cálculo | Hecha: `DBERCHZ1..8` juntadas en `ERCHZ` |
 | Cálculo luz (energía, prorrateo, descuentos, IEE, potencia) | Hecho, con ABAP Unit |
 | Cálculo gas (TV, prorrateo, descuentos, hidrocarburos) | Hecho; conceptos 1923/1924 **TODO** |
 | Factura a 0 (descarte / titular) | Hecho hasta la creación del cálculo |
-| Creación del cálculo manual | Llamada a `ISU_S_MANUBILL_CREATE` montada; falta cabecera `REA16` y heredar las líneas originales |
+| Creación del cálculo manual | Hecha con `ISU_S_MANUBILL_CREATE`, heredando las líneas originales; falta probar en el sistema y las líneas sin original (EREPOS/GREPOS, PGINTR/PGIRAP, mínimo IEE nuevo) |
 | **Facturación del cálculo** (documento de impresión y oficial) | **TODO** |
 | Log y control de expediente duplicado | Hecho |
 | Mensaje en el formulario | Pendiente |
@@ -137,10 +137,14 @@ que saber interpretarlos.
 4. **Cálculo original**: `ERCH` del contrato que solapa con el periodo, sin
    anular ni simular. Si no hay ninguno, `0108`; si hay varios, `0109`
    (el DF no dice qué hacer).
-5. **Líneas del cálculo**: `DBERCHZ1` + `DBERCHZ2` (cantidad) + `DBERCHZ3`
-   (precio e importe). Solo se quedan las líneas cuyo concepto está en la
-   tabla `ZFA_FRAUD_CONC`, que dice qué es cada concepto. Así no hay códigos
-   de concepto inventados metidos en el código.
+5. **Líneas del cálculo**: cada línea `ERCHZ` está repartida en
+   `DBERCHZ1..8` con clave `BELNR` + `BELZEILE`. Se leen de forma dinámica
+   (la que no exista en el release se salta) y se juntan en una `ERCHZ` por
+   línea. Se guardan enteras para heredarlas en el cálculo manual. Para
+   calcular se usan `BELZART`, `AB`, `BIS`, `I_ABRMENGE` (cantidad),
+   `PREISBTR` (precio) y `NETTOBTR` (importe). Solo cuentan las líneas cuyo
+   concepto está en `ZFA_FRAUD_CONC`, que dice qué es cada concepto. Así no
+   hay códigos de concepto inventados metidos en el código.
 6. **Prorrateo** (luz y gas): el consumo se reparte entre las fracciones de
    precio del cálculo original según los días de cada fracción **que caen
    dentro del periodo del expediente**. El resto del redondeo va a la última
@@ -167,6 +171,18 @@ que saber interpretarlos.
    - Las líneas van en `X_AUTO-BILL_DOC-IERCHZ` (estructura `ERCHZ`). Cada
      una se combina con `X_AUTO-REA16` (`FILL_OBJ_REA16_DATA`) y se valida
      con `ISU_O_MANUBILL_INPUT`, como si se tecleara en EA20.
+   - `FILL_OBJ_REA16_DATA` monta `REA16` con `MOVE-CORRESPONDING` en este
+     orden: `X_AUTO-REA16`, después la línea `ERCHZ` y después
+     `BILL_DOC-ERCH`. Por eso **la cabecera va en `BILL_DOC-ERCH`**:
+     contrato, sociedad, división, cuenta contrato y periodo. Lo que se
+     ponga en `REA16` con nombre de campo de `ERCH` se pisa aunque `ERCH`
+     venga vacío. En `REA16` solo va lo propio de pantalla (`STICHTAG`).
+   - La cantidad va en **`ERCHZ-I_ABRMENGE`**: el FORM la pasa a
+     `MENGE`/`ABRMENGE` (con `ISU_METER_IDDATA_TRANSFORM`), fija
+     `ABRFAKT = 1` y toma la unidad de `MASSBILL`.
+   - Cada línea parte de la **línea original** (misma operación `TVORG`,
+     tarifa, unidad, IVA, moneda…) y solo se cambian `BELZEILE`, `BELZART`,
+     fechas, cantidad, precio e importe, como pide el DF.
    - Él mismo bloquea el contrato (`FOREIGN_LOCK` → `2005`). El bloqueo de
      facturación (`BILL_LOCK`) se trata como el descarte `0105`.
    - Marca `ERCH-MANBILLREL`, así que en principio queda liberado y no
@@ -241,23 +257,21 @@ activación real en el sistema es la que vale.
 ## Pendiente
 
 **A comprobar en el sistema (SE11 / SE37):**
-- [ ] Código de los FORMs `COPY_AUTO_DATA` y `FILL_OBJ_REA16_DATA` (grupo
-      `EA16`) y de `ISU_MANUBILL_FILL_AUTO_DATA`: qué campos de `REA16` y
-      `ERCHZ` hay que informar y cuáles recalcula.
-- [ ] Definición de `REA16`, `ERCHZ` e `ISU2A_BILL_DOC` (type pool `ISU2A`).
+- [ ] **Primera prueba en SE37** con un caso real: ver si
+      `ISU_O_MANUBILL_INPUT` respeta precio e importe o los recalcula, y si
+      `data_read` necesita más campos de cabecera en `BILL_DOC-ERCH`
+      (comparar con un cálculo manual hecho a mano en EA20).
+- [ ] Datos de las líneas sin original (EREPOS/GREPOS, PGINTR/PGIRAP,
+      mínimo comunitario nuevo): mirar una reposición real en las DBERCHZ.
 - [ ] Fecha clave (`X_STICHTAG`) correcta para el cálculo manual.
 - [ ] Cómo facturar el cálculo al momento (en vez de esperar al job sobre
       `EITR`) y de dónde sale el documento oficial.
 - [ ] Campos de `ERCH`: `BEGABRPE`, `ENDABRPE`, `STORNODAT`, `SIMULATION`.
       Ver también si hay que filtrar por `ABRVORG`.
-- [ ] De dónde salen cantidad, precio e importe de una línea de cálculo
-      (`DBERCHZ2-I_ABRMENGE`, `DBERCHZ3-PREISBTR`, `DBERCHZ3-NETTOBTR`),
-      contrastándolo con un cálculo real en EA22.
 - [ ] Si el precio de la línea de IEE viene en % (5,11…) o como factor.
 - [ ] Valores de `SPARTE` para luz y gas (asumidos `01` / `02`).
 - [ ] Dónde están las facturas ATR y sus conceptos 1923/1924 (¿existen
       `/IDXGC/PRST_INHD`…? Si no, buscar la tabla Z que usa `ZLE_DE_FACTUR`).
-- [ ] Bloqueo que pone EA20 (SM12), para replicarlo.
 - [ ] Rellenar `ZFA_FRAUD_CONC` con los conceptos reales.
 
 **A definir con Aleix:**

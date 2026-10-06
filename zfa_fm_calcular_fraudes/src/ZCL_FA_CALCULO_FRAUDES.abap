@@ -131,7 +131,11 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
           mv_anlage    TYPE anlage,
           mv_vkonto    TYPE vkont_kk,
           mv_sparte    TYPE sparte,
-          mt_conceptos TYPE ty_t_conceptos.
+          mv_bukrs     TYPE bukrs,
+          mt_conceptos TYPE ty_t_conceptos,
+          " Líneas del cálculo original tal cual (ERCHZ), para heredar
+          " operación, tarifa, unidad, etc. en el cálculo manual
+          mt_erchz_original TYPE STANDARD TABLE OF erchz WITH DEFAULT KEY.
 
     METHODS procesar
       RETURNING VALUE(rs_resultado) TYPE ty_resultado
@@ -212,8 +216,7 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
       RETURNING VALUE(rt_lineas) TYPE ty_t_linea.
 
     METHODS crear_calculo_manual
-      IMPORTING is_calculo         TYPE ty_calculo
-                it_lineas          TYPE ty_t_linea
+      IMPORTING it_lineas          TYPE ty_t_linea
       RETURNING VALUE(rt_facturas) TYPE zfa_t_fraudes_factura
       RAISING   zcx_fa_fraudes.
 
@@ -292,8 +295,7 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
                     texto  = |División { mv_sparte } no contemplada|.
     ENDCASE.
 
-    rs_resultado-facturas    = crear_calculo_manual( is_calculo = ls_calculo
-                                                     it_lineas  = lt_lineas ).
+    rs_resultado-facturas    = crear_calculo_manual( lt_lineas ).
     rs_resultado-codigo      = '0000'.
     rs_resultado-descripcion = 'Factura creada correctamente'.
     rs_resultado-modo        = gc_modo_normal.
@@ -343,7 +345,7 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     ENDIF.
 
     " 1.2 El contrato existe y su instalación es la del CUPS
-    SELECT SINGLE anlage, vkonto, sparte, einzdat, auszdat
+    SELECT SINGLE anlage, vkonto, sparte, bukrs, einzdat, auszdat
       FROM ever
       WHERE vertrag = @ms_entrada-contrato
       INTO @DATA(ls_ever).
@@ -378,6 +380,7 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     mv_anlage = ls_ever-anlage.
     mv_vkonto = ls_ever-vkonto.
     mv_sparte = ls_ever-sparte.
+    mv_bukrs  = ls_ever-bukrs.
 
     " 1.4 Factura ATR de tipo 06 u 11 y existente
     IF ms_entrada-tipo_factura_atr <> '06' AND ms_entrada-tipo_factura_atr <> '11'.
@@ -535,8 +538,7 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     ls_linea-cantidad = ms_entrada-consumo_total.
     APPEND ls_linea TO lt_linea.
 
-    rs_resultado-facturas = crear_calculo_manual( is_calculo = VALUE #( )
-                                                  it_lineas  = lt_linea ).
+    rs_resultado-facturas = crear_calculo_manual( lt_linea ).
 
     IF ms_entrada-descarte = abap_true.
       rs_resultado-codigo      = '0001'.
@@ -587,39 +589,62 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
 
   METHOD leer_lineas_calculo.
 
-    DATA ls_linea TYPE ty_linea.
+    DATA: lr_tabla TYPE REF TO data,
+          lv_tabla TYPE tabname,
+          ls_linea TYPE ty_linea.
 
-    " TODO verificar en SE11 y contra un cálculo real (EA22) de dónde sale
-    " cada dato: cantidad (DBERCHZ2-I_ABRMENGE), precio (DBERCHZ3-PREISBTR)
-    " e importe (DBERCHZ3-NETTOBTR). Si resulta más sencillo, leer las
-    " líneas del documento de impresión (DBERDL) en vez del cálculo.
-    SELECT z1~belzeile, z1~belzart, z1~ab, z1~bis,
-           z2~i_abrmenge, z3~preisbtr, z3~nettobtr
-      FROM dberchz1 AS z1
-        LEFT OUTER JOIN dberchz2 AS z2
-          ON  z2~belnr    = z1~belnr
-          AND z2~belzeile = z1~belzeile
-        LEFT OUTER JOIN dberchz3 AS z3
-          ON  z3~belnr    = z1~belnr
-          AND z3~belzeile = z1~belzeile
-      WHERE z1~belnr = @iv_belnr
-      INTO TABLE @DATA(lt_dberchz).
+    FIELD-SYMBOLS: <lt_tabla>    TYPE STANDARD TABLE,
+                   <ls_fila>     TYPE any,
+                   <lv_belzeile> TYPE any,
+                   <ls_erchz>    TYPE erchz.
+
+    " Las líneas de cálculo (ERCHZ) se guardan repartidas en DBERCHZ1..8,
+    " todas con clave BELNR + BELZEILE. Se juntan en una ERCHZ por línea.
+    " TODO si aparece el FM estándar que lee el documento entero en
+    " ISU2A_BILL_DOC, usarlo en lugar de esto.
+    CLEAR mt_erchz_original.
+
+    DO 8 TIMES.
+      lv_tabla = |DBERCHZ{ sy-index }|.
+      TRY.
+          CREATE DATA lr_tabla TYPE STANDARD TABLE OF (lv_tabla).
+        CATCH cx_sy_create_data_error.
+          " Esa DBERCHZn no existe en este release
+          CONTINUE.
+      ENDTRY.
+      ASSIGN lr_tabla->* TO <lt_tabla>.
+
+      SELECT *
+        FROM (lv_tabla)
+        WHERE belnr = @iv_belnr
+        INTO TABLE @<lt_tabla>.
+
+      LOOP AT <lt_tabla> ASSIGNING <ls_fila>.
+        ASSIGN COMPONENT 'BELZEILE' OF STRUCTURE <ls_fila> TO <lv_belzeile>.
+        READ TABLE mt_erchz_original ASSIGNING <ls_erchz>
+          WITH KEY belzeile = <lv_belzeile>.
+        IF sy-subrc <> 0.
+          APPEND INITIAL LINE TO mt_erchz_original ASSIGNING <ls_erchz>.
+        ENDIF.
+        MOVE-CORRESPONDING <ls_fila> TO <ls_erchz>.
+      ENDLOOP.
+    ENDDO.
 
     " Solo interesan las líneas cuyo concepto está en ZFA_FRAUD_CONC
-    LOOP AT lt_dberchz INTO DATA(ls_dberchz).
+    LOOP AT mt_erchz_original ASSIGNING <ls_erchz>.
       READ TABLE mt_conceptos INTO DATA(ls_concepto)
-        WITH KEY belzart = ls_dberchz-belzart.
+        WITH KEY belzart = <ls_erchz>-belzart.
       CHECK sy-subrc = 0.
 
-      ls_linea = VALUE #( belzeile = ls_dberchz-belzeile
-                          belzart  = ls_dberchz-belzart
+      ls_linea = VALUE #( belzeile = <ls_erchz>-belzeile
+                          belzart  = <ls_erchz>-belzart
                           tipo     = ls_concepto-tipo
                           periodo  = ls_concepto-periodo
-                          ab       = ls_dberchz-ab
-                          bis      = ls_dberchz-bis
-                          cantidad = ls_dberchz-i_abrmenge
-                          precio   = ls_dberchz-preisbtr
-                          importe  = ls_dberchz-nettobtr ).
+                          ab       = <ls_erchz>-ab
+                          bis      = <ls_erchz>-bis
+                          cantidad = <ls_erchz>-i_abrmenge
+                          precio   = <ls_erchz>-preisbtr
+                          importe  = <ls_erchz>-nettobtr ).
       APPEND ls_linea TO rt_lineas.
     ENDLOOP.
 
@@ -977,15 +1002,36 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     " tecleara en pantalla (ISU_O_MANUBILL_INPUT).
     ls_auto-bill_doc_use = abap_true.
 
-    " TODO cabecera REA16: rellenar según lo que lea FILL_OBJ_REA16_DATA
-    " (grupo EA16). Pendiente de ver ese FORM.
+    " Cabecera. FILL_OBJ_REA16_DATA monta REA16 por cada línea así:
+    " X_AUTO-REA16 -> línea ERCHZ -> BILL_DOC-ERCH, con MOVE-CORRESPONDING
+    " y en ese orden. Los campos de cabecera (los de ERCH) tienen que ir en
+    " BILL_DOC-ERCH: lo que se ponga en REA16 con nombre de ERCH se pisa,
+    " aunque ERCH venga vacío. En REA16 solo lo que es propio de pantalla.
+    " TODO comparar con un cálculo manual hecho a mano en EA20 (SE16 ERCH)
+    " por si hace falta algún campo más de cabecera
+    ls_auto-bill_doc-erch-vertrag  = ms_entrada-contrato.
+    ls_auto-bill_doc-erch-bukrs    = mv_bukrs.
+    ls_auto-bill_doc-erch-sparte   = mv_sparte.
+    ls_auto-bill_doc-erch-vkont    = mv_vkonto.
+    ls_auto-bill_doc-erch-begabrpe = ms_entrada-fecha_desde.
+    ls_auto-bill_doc-erch-endabrpe = ms_entrada-fecha_hasta.
+    ls_auto-rea16-stichtag         = ms_entrada-fecha_hasta.
 
     LOOP AT it_lineas INTO DATA(ls_linea).
-      " TODO partir de la línea ERCHZ original (is_calculo-belnr +
-      " ls_linea-belzeile) para heredar operación, tarifa, etc., como pide
-      " el DF, y sobrescribir solo cantidad, precio e importe. Pendiente de
-      " ver qué campos recalcula FILL_OBJ_REA16_DATA.
+      " Se parte de la línea original (misma operación, tarifa, unidad,
+      " impuesto...) y solo se cambian fechas, cantidad, precio e importe.
+      " La cantidad tiene que ir en I_ABRMENGE: FILL_OBJ_REA16_DATA la pasa
+      " a MENGE/ABRMENGE y toma la unidad de MASSBILL.
       CLEAR ls_erchz.
+      IF ls_linea-belzeile IS NOT INITIAL.
+        READ TABLE mt_erchz_original INTO ls_erchz
+          WITH KEY belzeile = ls_linea-belzeile.
+      ENDIF.
+      " TODO líneas sin original (EREPOS/GREPOS, PGINTR/PGIRAP, mínimo
+      " comunitario cuando el original llevaba IEE): copiar los datos de una
+      " reposición real o de la línea de IEE (operación TVORG, MASSBILL,
+      " MWSKZ, TWAERS...)
+      CLEAR: ls_erchz-belnr.
       lv_belzeile = lv_belzeile + 1.
       ls_erchz-belzeile   = lv_belzeile.
       ls_erchz-belzart    = ls_linea-belzart.
