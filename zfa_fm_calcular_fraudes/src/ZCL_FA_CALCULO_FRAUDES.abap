@@ -961,20 +961,94 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
 
 
   METHOD crear_calculo_manual.
-    " TODO núcleo pendiente: crear el cálculo manual (como EA20) con
-    " it_lineas, reutilizando operaciones y conceptos de las líneas
-    " originales (it_lineas-belzeile apunta a la línea de is_calculo-belnr
-    " de la que sale cada una), facturarlo y devolver documento de
-    " impresión y documento oficial en rt_facturas.
-    " - Antes de nada: buscar si existe un Z que ya cree cálculos manuales
-    "   (las reposiciones con EREPOS/GREPOS) y usarlo de plantilla.
-    " - Bloquear el contrato como lo hace EA20 (mirar SM12 con EA20
-    "   abierta) para evitar dos llamadas simultáneas.
-    " - Si el FM estándar hace COMMIT por su cuenta, revisar el log de
-    "   errores: ejecutar() hace ROLLBACK y graba el log después.
-    RAISE EXCEPTION TYPE zcx_fa_fraudes
-      EXPORTING codigo = '2003'
-                texto  = 'Creación de cálculo manual pendiente de implementar'.
+
+    DATA: ls_auto      TYPE isu20_manubill_auto,
+          ls_erchz     TYPE erchz,
+          ls_new_doc   TYPE isu2a_bill_doc,
+          lv_db_update TYPE regen-db_update,
+          lv_belzeile  TYPE erchz-belzeile,
+          lv_codigo    TYPE char4,
+          lv_mensaje   TYPE string,
+          ls_factura   TYPE zfa_s_fraudes_factura.
+
+    " Creación sin diálogo de ISU_S_MANUBILL_CREATE (grupo EA16): sin
+    " BILL_DOC_USE no hace nada. Las líneas van en BILL_DOC-IERCHZ y cada
+    " una se combina con la cabecera REA16 y se valida como si se
+    " tecleara en pantalla (ISU_O_MANUBILL_INPUT).
+    ls_auto-bill_doc_use = abap_true.
+
+    " TODO cabecera REA16: rellenar según lo que lea FILL_OBJ_REA16_DATA
+    " (grupo EA16). Pendiente de ver ese FORM.
+
+    LOOP AT it_lineas INTO DATA(ls_linea).
+      " TODO partir de la línea ERCHZ original (is_calculo-belnr +
+      " ls_linea-belzeile) para heredar operación, tarifa, etc., como pide
+      " el DF, y sobrescribir solo cantidad, precio e importe. Pendiente de
+      " ver qué campos recalcula FILL_OBJ_REA16_DATA.
+      CLEAR ls_erchz.
+      lv_belzeile = lv_belzeile + 1.
+      ls_erchz-belzeile   = lv_belzeile.
+      ls_erchz-belzart    = ls_linea-belzart.
+      ls_erchz-ab         = ls_linea-ab.
+      ls_erchz-bis        = ls_linea-bis.
+      ls_erchz-i_abrmenge = ls_linea-cantidad.
+      ls_erchz-preisbtr   = ls_linea-precio.
+      ls_erchz-nettobtr   = ls_linea-importe.
+      APPEND ls_erchz TO ls_auto-bill_doc-ierchz.
+    ENDLOOP.
+
+    " TODO confirmar la fecha clave (REA16-STICHTAG) que espera la
+    " transacción para un cálculo manual
+    CALL FUNCTION 'ISU_S_MANUBILL_CREATE'
+      EXPORTING
+        x_vertrag      = ms_entrada-contrato
+        x_stichtag     = ms_entrada-fecha_hasta
+        x_no_dialog    = abap_true
+        x_auto         = ls_auto
+      IMPORTING
+        y_db_update    = lv_db_update
+        y_new_bill_doc = ls_new_doc
+      EXCEPTIONS
+        foreign_lock   = 1
+        input_error    = 2
+        general_fault  = 3
+        bill_lock      = 4
+        error_message  = 5
+        OTHERS         = 6.
+
+    IF sy-subrc <> 0 OR ls_new_doc-erch-belnr IS INITIAL.
+      IF sy-msgid IS NOT INITIAL.
+        MESSAGE ID sy-msgid TYPE 'E' NUMBER sy-msgno
+          WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4 INTO lv_mensaje.
+      ENDIF.
+      CASE sy-subrc.
+        WHEN 1.
+          lv_codigo  = '2005'.
+          lv_mensaje = |Contrato bloqueado por otro proceso. { lv_mensaje }|.
+        WHEN 4.
+          " Bloqueo de facturación del contrato: es el descarte 2.5 del DF
+          lv_codigo  = '0105'.
+          lv_mensaje = |Descarte: contrato con bloqueo de facturación. { lv_mensaje }|.
+        WHEN OTHERS.
+          lv_codigo  = '2003'.
+          lv_mensaje = |Error creando el cálculo manual. { lv_mensaje }|.
+      ENDCASE.
+      RAISE EXCEPTION TYPE zcx_fa_fraudes
+        EXPORTING codigo = lv_codigo
+                  texto  = lv_mensaje.
+    ENDIF.
+
+    " El cálculo queda grabado (en update task: el COMMIT lo hace
+    " registrar_log) y apuntado en EITR para facturar.
+    " TODO facturar el cálculo al momento y devolver documento de
+    " impresión (FACTURA) y documento oficial (DOC_OFICIAL).
+    ls_factura-calculo     = ls_new_doc-erch-belnr.
+    ls_factura-consumo     = ms_entrada-consumo_total.
+    ls_factura-importe     = sumar_importes( it_lineas ).
+    ls_factura-fecha_desde = ms_entrada-fecha_desde.
+    ls_factura-fecha_hasta = ms_entrada-fecha_hasta.
+    APPEND ls_factura TO rt_facturas.
+
   ENDMETHOD.
 
 

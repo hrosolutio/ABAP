@@ -29,7 +29,8 @@ flujo general y las validaciones de CUPS / contrato.
 | Cálculo luz (energía, prorrateo, descuentos, IEE, potencia) | Hecho, con ABAP Unit |
 | Cálculo gas (TV, prorrateo, descuentos, hidrocarburos) | Hecho; conceptos 1923/1924 **TODO** |
 | Factura a 0 (descarte / titular) | Hecho hasta la creación del cálculo |
-| **Creación del cálculo manual + factura** | **TODO — núcleo del desarrollo** |
+| Creación del cálculo manual | Llamada a `ISU_S_MANUBILL_CREATE` montada; falta cabecera `REA16` y heredar las líneas originales |
+| **Facturación del cálculo** (documento de impresión y oficial) | **TODO** |
 | Log y control de expediente duplicado | Hecho |
 | Mensaje en el formulario | Pendiente |
 
@@ -110,6 +111,7 @@ docs/
 | `2001` | KO | El cálculo original no tiene conceptos configurados |
 | `2002` | KO | Falta un dato para calcular (precio, concepto, factor IEE…) |
 | `2003` | KO | Error creando el cálculo manual |
+| `2005` | KO | Contrato bloqueado por otro proceso (`FOREIGN_LOCK`) |
 
 Los códigos son una propuesta: **confirmarlos con Aleix**, que la IA tiene
 que saber interpretarlos.
@@ -157,7 +159,22 @@ que saber interpretarlos.
    - Hidrocarburos con el precio de la línea del original (es el vigente a
      su fecha de creación).
    - Conceptos 1923/1924 del ATR → `PGINTR`/`PGIRAP`.
-9. **Creación del cálculo manual**: TODO (devuelve `2003`).
+9. **Creación del cálculo manual**: `ISU_S_MANUBILL_CREATE` (grupo `EA16`)
+   en modo sin diálogo:
+   - `X_NO_DIALOG = 'X'` y `X_AUTO` (`ISU20_MANUBILL_AUTO`, type pool
+     `ISU20`) con `BILL_DOC_USE = 'X'`. **Sin ese flag el FM no hace nada y
+     no da error.**
+   - Las líneas van en `X_AUTO-BILL_DOC-IERCHZ` (estructura `ERCHZ`). Cada
+     una se combina con `X_AUTO-REA16` (`FILL_OBJ_REA16_DATA`) y se valida
+     con `ISU_O_MANUBILL_INPUT`, como si se tecleara en EA20.
+   - Él mismo bloquea el contrato (`FOREIGN_LOCK` → `2005`). El bloqueo de
+     facturación (`BILL_LOCK`) se trata como el descarte `0105`.
+   - Marca `ERCH-MANBILLREL`, así que en principio queda liberado y no
+     hace falta `ISU_S_MANUBILL_RELEASE` (confirmar en la prueba).
+   - Graba `EITR` (pendiente de facturar). El `COMMIT` lo hace nuestro
+     `registrar_log`. Solo hace `COMMIT` interno si `ERCH-NINVOICE` está
+     marcado, que no es nuestro caso.
+   - Devuelve el `BELNR` en `Y_NEW_BILL_DOC-ERCH-BELNR`.
 10. **Transacción**: si algo falla se hace `ROLLBACK`. Siempre se graba una
     línea en `ZFA_FRAUD_LOG` y se hace el `COMMIT` al final.
 
@@ -224,8 +241,13 @@ activación real en el sistema es la que vale.
 ## Pendiente
 
 **A comprobar en el sistema (SE11 / SE37):**
-- [ ] **Cómo crear el cálculo manual y facturarlo.** Buscar primero un Z que
-      ya lo haga (reposiciones con `EREPOS`/`GREPOS`). Es lo más crítico.
+- [ ] Código de los FORMs `COPY_AUTO_DATA` y `FILL_OBJ_REA16_DATA` (grupo
+      `EA16`) y de `ISU_MANUBILL_FILL_AUTO_DATA`: qué campos de `REA16` y
+      `ERCHZ` hay que informar y cuáles recalcula.
+- [ ] Definición de `REA16`, `ERCHZ` e `ISU2A_BILL_DOC` (type pool `ISU2A`).
+- [ ] Fecha clave (`X_STICHTAG`) correcta para el cálculo manual.
+- [ ] Cómo facturar el cálculo al momento (en vez de esperar al job sobre
+      `EITR`) y de dónde sale el documento oficial.
 - [ ] Campos de `ERCH`: `BEGABRPE`, `ENDABRPE`, `STORNODAT`, `SIMULATION`.
       Ver también si hay que filtrar por `ABRVORG`.
 - [ ] De dónde salen cantidad, precio e importe de una línea de cálculo
