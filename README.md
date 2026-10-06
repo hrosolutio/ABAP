@@ -10,3 +10,4 @@ con su propio código fuente, documentación y README de instalación.
 |---|---|
 | [`zfi_fm_paylot_reverse/`](zfi_fm_paylot_reverse/README.md) | RFC `ZFI_FM_PAYLOT_REVERSE`: anulación de transferencias contabilizadas en SAP (FI-CA), proceso `CDI_11_03` |
 | [`zfi_fm_payment_lot_clarify2/`](zfi_fm_payment_lot_clarify2/README.md) | RFC `ZFI_FM_PAYMENT_LOT_CLARIFY2`: clarificación de transferencias pendientes en SAP (FI-CA) — **prueba end-to-end real superada** |
+| [`zfa_fm_calcular_fraudes/`](zfa_fm_calcular_fraudes/README.md) | RFC `ZFA_FM_CALCULAR_FRAUDES`: facturación automática de averías y fraudes (IS-U) — **en desarrollo** |
