@@ -9,6 +9,7 @@ Sacada de los textos de `TE835T`. La carga la hace el report
 | `TV` | Término variable | — | `GTVARI` |
 | `PO` | Potencia (solo para la línea de potencia mayor a importe 0) | `EPOTP1`-`EPOTP6` | — |
 | `DE` | Descuento sobre energía / TV | `EDACTS`, `EDEMPC` | `GDTVAR`, `GDEMPV`, `GDEMPC` |
+| `BI` | Resto de la base del IEE (además de energía y potencia) | `EBONSO` | — |
 | `IE` | IEE (%), `BELZART_REL` = su mínimo | `EIEE`/`EIER`/`EIEX`/`EIED`/`EIEM` + región | — |
 | `IM` | Mínimo comunitario, `BELZART_REL` = su IEE | `EMIC`/`EMIR`/`EMIX`/`EMID`/`EMIM` + región | — |
 | `IH` | Impuesto de hidrocarburos | — | `GIEH`/`GIEX`/`GIED` + región |
@@ -34,3 +35,22 @@ Conceptos fijos del DF (en el código, no en la tabla): `EREPOS` / `GREPOS`
 - **2.7 Tarifa Plana**: si el cálculo original lleva conceptos de Tarifa
   Plana (`ETP*`, `GTP*`, `GTPLAN`), el cliente tenía Tarifa Plana en ese
   periodo.
+
+## Lo comprobado con cálculos reales (510100377871 luz, 510000003066 gas)
+
+- Cantidad en `DBERCHZ1` partida en `V_ABRMENGE` (enteros) + `N_ABRMENGE`
+  (decimales); precio unitario en `DBERCHZ3-PREISBTR` e importe en
+  `DBERCHZ3-NETTOBTR`. Ejemplo: `EACTPS` 288 kWh x 0,1149 = 33,09.
+- La línea de IEE (`EIEEGE`) **no trae precio ni cantidad**, solo el importe
+  (2,42). Cuadra con 5,11269632 % sobre energía + potencia + bono social
+  (33,09 + 10,60 + 3,48 + 0,19 = 47,36). El alquiler (`EALQCO`) no entra.
+- La línea `EMIC` (informativa, operación `PR02`) calcula el mínimo con
+  precio `E_MINCOM` = 0,001 EUR/kWh, que coincide con el DF (1 EUR/MWh).
+- Las líneas con operación `PR02` (`EIATR`, `EICAR`, `EIEE`, `EMIC`) son
+  informativas, no se facturan.
+- Gas: `GIEHGE` 312 kWh x 0,00234 = 0,73 (precio `G_IMPHIDC`); `GTVARI`
+  312 kWh x 0,087076 = 27,17.
+- Tarifa Plana: tipo de tarifa `E_PLANA` / `G_PLANA` (normal: `E_PRUSO` /
+  `G_PRUSO`).
+- Reposición real (`510000000408`): `GREPOS`, operación `2001`, unidad
+  `KWH`, tarifa `GV_REPOSIC`.

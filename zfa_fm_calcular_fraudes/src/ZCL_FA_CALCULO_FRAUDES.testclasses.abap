@@ -20,6 +20,7 @@ CLASS ltc_calculo DEFINITION FINAL
     METHODS prorrateo_sin_solape     FOR TESTING RAISING cx_static_check.
     METHODS iee_gana_porcentaje      FOR TESTING RAISING cx_static_check.
     METHODS iee_gana_minimo          FOR TESTING RAISING cx_static_check.
+    METHODS iee_factor_derivado      FOR TESTING RAISING cx_static_check.
     METHODS descuento_proporcional   FOR TESTING RAISING cx_static_check.
     METHODS potencia_mayor_por_kw    FOR TESTING RAISING cx_static_check.
 
@@ -121,8 +122,29 @@ CLASS ltc_calculo IMPLEMENTATION.
 
     cl_abap_unit_assert=>assert_equals( act = ls_iee-belzart  exp = 'IEEMIN01' ).
     cl_abap_unit_assert=>assert_equals( act = ls_iee-tipo     exp = 'IM' ).
-    cl_abap_unit_assert=>assert_equals( act = ls_iee-cantidad exp = '1.000' ).
+    cl_abap_unit_assert=>assert_equals( act = ls_iee-cantidad exp = '1000.000' ).
+    cl_abap_unit_assert=>assert_equals( act = ls_iee-precio   exp = '0.001' ).
     cl_abap_unit_assert=>assert_equals( act = ls_iee-importe  exp = '1.00' ).
+
+  ENDMETHOD.
+
+
+  METHOD iee_factor_derivado.
+
+    " Cálculo real 510100377871: la línea EIEEGE solo trae importe (2,42)
+    " sobre energía 33,09 + potencia 10,60 + 3,48 + bono social 0,19.
+    " Factor 2,42 / 47,36 = 5,1098 %; sobre 100 EUR de energía -> 5,11
+    DATA(ls_iee) = mo_cut->calcular_iee(
+      it_original = VALUE #( ( belzart = 'EACTPS' tipo = 'EN' importe = '33.09' )
+                             ( belzart = 'EPOTP1' tipo = 'PO' importe = '10.60' )
+                             ( belzart = 'EPOTP2' tipo = 'PO' importe = '3.48' )
+                             ( belzart = 'EBONSO' tipo = 'BI' importe = '0.19' )
+                             ( belzart = 'EIEEGE' tipo = 'IE' importe = '2.42' ) )
+      iv_base     = 100
+      iv_consumo  = 288 ).
+
+    cl_abap_unit_assert=>assert_equals( act = ls_iee-belzart exp = 'EIEEGE' ).
+    cl_abap_unit_assert=>assert_equals( act = ls_iee-importe exp = '5.11' ).
 
   ENDMETHOD.
 

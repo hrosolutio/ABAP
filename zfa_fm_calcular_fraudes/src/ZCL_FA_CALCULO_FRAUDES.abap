@@ -105,6 +105,9 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
       gc_tipo_descuento     TYPE char2 VALUE 'DE',
       gc_tipo_term_variable TYPE char2 VALUE 'TV',
       gc_tipo_hidrocarb     TYPE char2 VALUE 'IH',
+      " Conceptos que, además de energía y potencia, forman la base del IEE
+      " en el cálculo original (p. ej. EBONSO, financiación bono social)
+      gc_tipo_base_iee      TYPE char2 VALUE 'BI',
 
       " Conceptos fijos indicados en el DF
       gc_belzart_erepos     TYPE dberchz1-belzart VALUE 'EREPOS',
@@ -114,8 +117,9 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
       gc_concepto_atr_1923  TYPE char4 VALUE '1923',
       gc_concepto_atr_1924  TYPE char4 VALUE '1924',
 
-      " IEE mínimo según DF: consumo (kWh) / 1000 * 1 EUR
-      gc_iee_minimo_mwh     TYPE ty_precio VALUE '1',
+      " IEE mínimo según DF: consumo / 1000 * 1 EUR, es decir 0,001 EUR/kWh
+      " (mismo precio que la línea EMIC de los cálculos reales)
+      gc_iee_minimo_kwh     TYPE ty_precio VALUE '0.001',
 
       " TODO pedir a Aleix el operando de reposición. Mientras esté vacío
       " la validación no se hace.
@@ -594,10 +598,12 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
           lv_tabla TYPE tabname,
           ls_linea TYPE ty_linea.
 
-    FIELD-SYMBOLS: <lt_tabla>    TYPE STANDARD TABLE,
-                   <ls_fila>     TYPE any,
-                   <lv_belzeile> TYPE any,
-                   <ls_erchz>    TYPE erchz.
+    FIELD-SYMBOLS: <lt_tabla>     TYPE STANDARD TABLE,
+                   <ls_fila>      TYPE any,
+                   <lv_belzeile>  TYPE any,
+                   <lv_entero>    TYPE any,
+                   <lv_decimales> TYPE any,
+                   <ls_erchz>     TYPE erchz.
 
     " Las líneas de cálculo (ERCHZ) se guardan repartidas en DBERCHZ1..8,
     " todas con clave BELNR + BELZEILE. Se juntan en una ERCHZ por línea.
@@ -628,14 +634,28 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
           APPEND INITIAL LINE TO mt_erchz_original ASSIGNING <ls_erchz>.
         ENDIF.
         MOVE-CORRESPONDING <ls_fila> TO <ls_erchz>.
+
+        " En BD la cantidad va partida en enteros (V_ABRMENGE) y decimales
+        " (N_ABRMENGE); en ERCHZ va junta en I_ABRMENGE
+        ASSIGN COMPONENT 'V_ABRMENGE' OF STRUCTURE <ls_fila> TO <lv_entero>.
+        IF sy-subrc = 0.
+          ASSIGN COMPONENT 'N_ABRMENGE' OF STRUCTURE <ls_fila> TO <lv_decimales>.
+          <ls_erchz>-i_abrmenge = <lv_entero> + <lv_decimales>.
+        ENDIF.
       ENDLOOP.
     ENDDO.
 
-    " Solo interesan las líneas cuyo concepto está en ZFA_FRAUD_CONC
+    " Solo interesan las líneas cuyo concepto está en ZFA_FRAUD_CONC.
+    " Cantidad en I_ABRMENGE, precio unitario en PREISBTR e importe en
+    " NETTOBTR (DBERCHZ3), comprobado con cálculos reales.
     LOOP AT mt_erchz_original ASSIGNING <ls_erchz>.
       READ TABLE mt_conceptos INTO DATA(ls_concepto)
         WITH KEY belzart = <ls_erchz>-belzart.
       CHECK sy-subrc = 0.
+
+      " Las líneas de abono de una refacturación vienen con cantidad
+      " negativa (operación 21xx): no son el cálculo que vale
+      CHECK <ls_erchz>-i_abrmenge >= 0 OR ls_concepto-tipo = gc_tipo_descuento.
 
       ls_linea = VALUE #( belzeile = <ls_erchz>-belzeile
                           belzart  = <ls_erchz>-belzart
@@ -899,7 +919,9 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
 
   METHOD calcular_iee.
 
-    DATA: lv_importe_pct TYPE ty_importe,
+    DATA: lv_factor      TYPE ty_precio,
+          lv_base_orig   TYPE ty_importe,
+          lv_importe_pct TYPE ty_importe,
           lv_importe_min TYPE ty_importe.
 
     READ TABLE it_original INTO DATA(ls_iee) WITH KEY tipo = gc_tipo_iee.
@@ -921,18 +943,37 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
                   texto  = 'Factor IEE no disponible (original facturado con mínimo)'.
     ENDIF.
 
-    " TODO verificar que el precio de la línea de IEE viene en % (p. ej.
-    " 5,11269632) y no como factor (0,0511...)
-    lv_importe_pct = iv_base * ls_iee-precio / 100.
-    lv_importe_min = iv_consumo / 1000 * gc_iee_minimo_mwh.
+    " Factor del IEE en %. La línea de IEE de los cálculos reales no trae
+    " precio, solo importe: se saca del original como importe IEE / base,
+    " con base = energía + potencia + conceptos BI (bono social).
+    " TODO confirmar con Aleix de dónde sale el factor "a fecha de
+    " creación del cálculo" (operando o precio) y leerlo de ahí: derivado
+    " del importe redondeado puede variar en el último céntimo
+    IF ls_iee-precio <> 0.
+      lv_factor = ls_iee-precio.
+    ELSE.
+      lv_base_orig = sumar_importes( lineas_tipo( it_lineas = it_original iv_tipo = gc_tipo_energia ) )
+                   + sumar_importes( lineas_tipo( it_lineas = it_original iv_tipo = gc_tipo_potencia ) )
+                   + sumar_importes( lineas_tipo( it_lineas = it_original iv_tipo = gc_tipo_base_iee ) ).
+      IF lv_base_orig = 0.
+        RAISE EXCEPTION TYPE zcx_fa_fraudes
+          EXPORTING codigo = '2002'
+                    texto  = 'No se puede calcular el factor IEE: base del cálculo original a 0'.
+      ENDIF.
+      lv_factor = ls_iee-importe * 100 / lv_base_orig.
+    ENDIF.
+
+    lv_importe_pct = iv_base * lv_factor / 100.
+    lv_importe_min = iv_consumo * gc_iee_minimo_kwh.
 
     " Se factura el mayor, reutilizando el concepto del original (la región
-    " va en el concepto) o su equivalente de mínimo comunitario
+    " va en el concepto) o su equivalente de mínimo comunitario. Igual que
+    " en los cálculos reales: la línea de IEE solo lleva importe y la de
+    " mínimo lleva kWh x 0,001 EUR.
     IF lv_importe_pct >= lv_importe_min.
       rs_linea-belzeile = ls_iee-belzeile.
       rs_linea-belzart  = ls_iee-belzart.
       rs_linea-tipo     = gc_tipo_iee.
-      rs_linea-precio   = ls_iee-precio.
       rs_linea-importe  = lv_importe_pct.
     ELSE.
       IF lv_hay_min = abap_true.
@@ -942,8 +983,8 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
         rs_linea-belzart  = concepto_relacionado( ls_iee-belzart ).
       ENDIF.
       rs_linea-tipo     = gc_tipo_iee_min.
-      rs_linea-cantidad = iv_consumo / 1000.
-      rs_linea-precio   = gc_iee_minimo_mwh.
+      rs_linea-cantidad = iv_consumo.
+      rs_linea-precio   = gc_iee_minimo_kwh.
       rs_linea-importe  = lv_importe_min.
     ENDIF.
 
@@ -997,6 +1038,8 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
           lv_mensaje   TYPE string,
           ls_factura   TYPE zfa_s_fraudes_factura.
 
+    FIELD-SYMBOLS <lv_campo> TYPE any.
+
     " Creación sin diálogo de ISU_S_MANUBILL_CREATE (grupo EA16): sin
     " BILL_DOC_USE no hace nada. Las líneas van en BILL_DOC-IERCHZ y cada
     " una se combina con la cabecera REA16 y se valida como si se
@@ -1041,6 +1084,16 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
       ls_erchz-i_abrmenge = ls_linea-cantidad.
       ls_erchz-preisbtr   = ls_linea-precio.
       ls_erchz-nettobtr   = ls_linea-importe.
+      " Si la línea copiada trae también la cantidad partida (enteros y
+      " decimales, formato de BD), se deja coherente con la nueva
+      ASSIGN COMPONENT 'V_ABRMENGE' OF STRUCTURE ls_erchz TO <lv_campo>.
+      IF sy-subrc = 0.
+        <lv_campo> = trunc( ls_linea-cantidad ).
+      ENDIF.
+      ASSIGN COMPONENT 'N_ABRMENGE' OF STRUCTURE ls_erchz TO <lv_campo>.
+      IF sy-subrc = 0.
+        <lv_campo> = frac( ls_linea-cantidad ).
+      ENDIF.
       APPEND ls_erchz TO ls_auto-bill_doc-ierchz.
     ENDLOOP.
 

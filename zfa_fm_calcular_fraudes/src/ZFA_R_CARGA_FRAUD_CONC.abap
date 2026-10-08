@@ -49,6 +49,10 @@ START-OF-SELECTION.
                      ( belzart = 'EPOTP5' )
                      ( belzart = 'EPOTP6' ) ).
 
+  " Resto de la base del IEE (además de energía y potencia)
+  lt_conc = VALUE #( BASE lt_conc sparte = p_luz tipo = 'BI'
+                     ( belzart = 'EBONSO' ) ).
+
   " Descuentos sobre la energía activa
   lt_conc = VALUE #( BASE lt_conc sparte = p_luz tipo = 'DE'
                      ( belzart = 'EDACTS' )
