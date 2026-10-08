@@ -23,7 +23,8 @@ flujo general y las validaciones de CUPS / contrato.
 | Validación 1.4 (factura ATR) | Tipo 06/11 hecho; existencia **TODO** |
 | Validación 1.5 (consumo ATR) | **TODO**, pendiente de definir en el DF |
 | Validaciones de integridad 2.1-2.5 | **TODO**, falta el origen de cada dato |
-| Validaciones 2.6 y 2.7 (reposición, Tarifa Plana) | Hechas, falta el operando y el tipo de tarifa |
+| Validación 2.6 (reposición) | Hecha, falta el operando |
+| Validación 2.7 (Tarifa Plana) | Hecha: tipo de tarifa `E_PLANA` / `G_PLANA` en `EANLH` |
 | Búsqueda del cálculo original | Hecha, campos de ERCH por verificar |
 | Lectura de líneas del cálculo | Hecha: `DBERCHZ1..8` juntadas en `ERCHZ` |
 | Cálculo luz (energía, prorrateo, descuentos, IEE, potencia) | Hecho, con ABAP Unit |

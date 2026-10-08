@@ -117,11 +117,14 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
       " IEE mínimo según DF: consumo (kWh) / 1000 * 1 EUR
       gc_iee_minimo_mwh     TYPE ty_precio VALUE '1',
 
-      " TODO pedir a Aleix el operando de reposición y el/los tipos de
-      " tarifa de Tarifa Plana. Mientras estén vacíos la validación no
-      " se hace.
+      " TODO pedir a Aleix el operando de reposición. Mientras esté vacío
+      " la validación no se hace.
       gc_operando_reposicion TYPE ettifn-operand VALUE '',
-      gc_tariftyp_plana      TYPE eanlh-tariftyp VALUE '',
+
+      " Tipos de tarifa de Tarifa Plana (vistos en ERCHZ-TARIFTYP de
+      " cálculos reales). TODO confirmar con Aleix que no hay más
+      gc_tariftyp_plana_luz  TYPE eanlh-tariftyp VALUE 'E_PLANA',
+      gc_tariftyp_plana_gas  TYPE eanlh-tariftyp VALUE 'G_PLANA',
 
       gc_modo_normal        TYPE char30 VALUE 'NORMAL',
       gc_modo_cero_descarte TYPE char30 VALUE 'IMPORTE_CERO_DESCARTE',
@@ -494,22 +497,20 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
       ENDIF.
     ENDIF.
 
-    " 2.7 Tarifa Plana en el periodo
-    IF gc_tariftyp_plana IS NOT INITIAL.
-      SELECT anlage
-        FROM eanlh
-        WHERE anlage   = @mv_anlage
-          AND tariftyp = @gc_tariftyp_plana
-          AND ab      <= @ms_entrada-fecha_hasta
-          AND bis     >= @ms_entrada-fecha_desde
-        INTO @lv_anlage
-        UP TO 1 ROWS.
-      ENDSELECT.
-      IF sy-subrc = 0.
-        RAISE EXCEPTION TYPE zcx_fa_fraudes
-          EXPORTING codigo = '0107'
-                    texto  = 'Descarte: cliente con Tarifa Plana en el periodo'.
-      ENDIF.
+    " 2.7 Tarifa Plana en el periodo: tipo de tarifa de la instalación
+    SELECT anlage
+      FROM eanlh
+      WHERE anlage   = @mv_anlage
+        AND tariftyp IN ( @gc_tariftyp_plana_luz, @gc_tariftyp_plana_gas )
+        AND ab      <= @ms_entrada-fecha_hasta
+        AND bis     >= @ms_entrada-fecha_desde
+      INTO @lv_anlage
+      UP TO 1 ROWS.
+    ENDSELECT.
+    IF sy-subrc = 0.
+      RAISE EXCEPTION TYPE zcx_fa_fraudes
+        EXPORTING codigo = '0107'
+                  texto  = 'Descarte: cliente con Tarifa Plana en el periodo'.
     ENDIF.
 
   ENDMETHOD.
