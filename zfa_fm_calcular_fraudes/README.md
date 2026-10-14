@@ -1,4 +1,4 @@
-# ZFA_FM_CALCULAR_FRAUDES — Facturación automática de averías y fraudes
+# ZFA_FM_CALCULAR_FRAUDESV2 — Facturación automática de averías y fraudes
 
 Implementación del servicio RFC descrito en el Diseño Funcional
 *"Automatización de averías y fraude"* (v1.0, ver [`docs/DF_resumen.md`](docs/DF_resumen.md)).
@@ -9,6 +9,14 @@ cálculo manual con los precios del cálculo original del cliente. Lo llama
 desde fuera un proceso de IA.
 
 Plazo: **final de noviembre de 2026**.
+
+## Objetos en el sistema
+
+| Objeto | Qué es |
+|---|---|
+| `ZFA_FM_CALCULAR_FRAUDESV2` (grupo de funciones `ZFA_FG_FRAUDES`) | **RFC nueva**, la de este desarrollo. Es la que se llama desde fuera: avisar a Aleix del nombre |
+| `ZFA_FM_CALCULAR_FRAUDES` | Versión de partida de Aleix (generada con IA). Se deja como está, solo como referencia |
+| `ZFA_FG_FRAUD_CONC` | Grupo de funciones del generador de actualización (SM30) de `ZFA_FRAUD_CONC` |
 
 ## Estado
 
@@ -43,7 +51,7 @@ flujo general y las validaciones de CUPS / contrato.
 
 ```
 src/
-  ZFA_FM_CALCULAR_FRAUDES.abap               Módulo de función RFC (solo traslada parámetros)
+  ZFA_FM_CALCULAR_FRAUDESV2.abap             Módulo de función RFC (solo traslada parámetros)
   ZCL_FA_CALCULO_FRAUDES.abap                Clase con toda la lógica
   ZCL_FA_CALCULO_FRAUDES.testclasses.abap    ABAP Unit de la parte de cálculo
   ZCX_FA_FRAUDES.abap                        Excepción con código y descripción de resultado
@@ -247,9 +255,10 @@ concepto del cálculo.
    basado en fuente.
 3. SE24: crear `ZCL_FA_CALCULO_FRAUDES` y pegar el código; en *Clases de
    test locales*, pegar `ZCL_FA_CALCULO_FRAUDES.testclasses.abap`.
-4. SE37: en la `ZFA_FM_CALCULAR_FRAUDES` existente, ajustar la interfaz a la
-   tabla de arriba y sustituir el código fuente (los FORMs de la versión de
-   partida se borran).
+4. SE37: crear el grupo de funciones `ZFA_FG_FRAUDES` y en él la RFC
+   `ZFA_FM_CALCULAR_FRAUDESV2` (atributo *Módulo de función remoto*), con la
+   interfaz de la tabla de arriba y el código de
+   `src/ZFA_FM_CALCULAR_FRAUDESV2.abap`.
 5. Ejecutar el ABAP Unit de la clase (Ctrl+Shift+F10).
 
 Comprobado con abaplint (sintaxis 7.40 SP08) sin los objetos DDIC; la

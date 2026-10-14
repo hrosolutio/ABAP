@@ -1,4 +1,4 @@
-FUNCTION zfa_fm_calcular_fraudes.
+FUNCTION zfa_fm_calcular_fraudesv2.
 *"----------------------------------------------------------------------
 *"*"Interfase local
 *"  IMPORTING
