@@ -24,7 +24,7 @@ CLASS zcx_fa_fraudes DEFINITION
         codigo   TYPE char4 OPTIONAL
         texto    TYPE string OPTIONAL.
 
-    METHODS get_text REDEFINITION.
+    METHODS if_message~get_text REDEFINITION.
 
 ENDCLASS.
 
@@ -39,7 +39,7 @@ CLASS zcx_fa_fraudes IMPLEMENTATION.
   ENDMETHOD.
 
 
-  METHOD get_text.
+  METHOD if_message~get_text.
     result = texto.
   ENDMETHOD.
 
