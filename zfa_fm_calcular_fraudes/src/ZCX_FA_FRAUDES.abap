@@ -5,6 +5,10 @@
 * su descripción. Los códigos 0xxx son descartes (resultado OK), los
 * 1xxx errores de validación de entrada y los 2xxx errores técnicos o
 * de cálculo (resultado KO). Ver README.
+*
+* Creada en SE24 con el editor de formularios: los atributos CODIGO y
+* TEXTO (públicos, de instancia, sólo lectura) y SE24 genera el
+* constructor con ellos como parámetros opcionales.
 *----------------------------------------------------------------------*
 CLASS zcx_fa_fraudes DEFINITION
   PUBLIC
@@ -24,8 +28,6 @@ CLASS zcx_fa_fraudes DEFINITION
         codigo   TYPE char4 OPTIONAL
         texto    TYPE string OPTIONAL.
 
-    METHODS if_message~get_text REDEFINITION.
-
 ENDCLASS.
 
 
@@ -36,11 +38,6 @@ CLASS zcx_fa_fraudes IMPLEMENTATION.
     super->constructor( textid = textid previous = previous ).
     me->codigo = codigo.
     me->texto  = texto.
-  ENDMETHOD.
-
-
-  METHOD if_message~get_text.
-    result = texto.
   ENDMETHOD.
 
 ENDCLASS.

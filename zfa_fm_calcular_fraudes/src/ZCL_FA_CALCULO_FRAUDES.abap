@@ -255,7 +255,7 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
         ROLLBACK WORK.
         CLEAR rs_resultado.
         rs_resultado-codigo      = lx_fraudes->codigo.
-        rs_resultado-descripcion = lx_fraudes->get_text( ).
+        rs_resultado-descripcion = lx_fraudes->texto.
     ENDTRY.
 
     " 0xxx (factura creada o descarte) es OK; 1xxx y 2xxx son KO
