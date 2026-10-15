@@ -100,11 +100,11 @@ CLASS ltc_calculo IMPLEMENTATION.
 
     " 100 * 5,11269632 % = 5,11 > 1000 kWh / 1000 * 1 = 1,00
     DATA(ls_iee) = mo_cut->calcular_iee(
-      it_original = VALUE #( ( belzart = 'IEE01' tipo = 'IE' precio = '5.11269632' ) )
+      it_original = VALUE #( ( belzart = 'EIEEGE' tipo = 'IE' precio = '5.11269632' ) )
       iv_base     = 100
       iv_consumo  = 1000 ).
 
-    cl_abap_unit_assert=>assert_equals( act = ls_iee-belzart exp = 'IEE01' ).
+    cl_abap_unit_assert=>assert_equals( act = ls_iee-belzart exp = 'EIEEGE' ).
     cl_abap_unit_assert=>assert_equals( act = ls_iee-importe exp = '5.11' ).
 
   ENDMETHOD.
@@ -113,14 +113,14 @@ CLASS ltc_calculo IMPLEMENTATION.
   METHOD iee_gana_minimo.
 
     " 10 * 5,11269632 % = 0,51 < 1,00: va el mínimo con su concepto
-    mo_cut->mt_conceptos = VALUE #( ( belzart = 'IEE01' tipo = 'IE' belzart_rel = 'IEEMIN01' ) ).
+    mo_cut->mt_conceptos = VALUE #( ( belzart = 'EIEEGE' tipo = 'IE' belzart_rel = 'EMICGE' ) ).
 
     DATA(ls_iee) = mo_cut->calcular_iee(
-      it_original = VALUE #( ( belzart = 'IEE01' tipo = 'IE' precio = '5.11269632' ) )
+      it_original = VALUE #( ( belzart = 'EIEEGE' tipo = 'IE' precio = '5.11269632' ) )
       iv_base     = 10
       iv_consumo  = 1000 ).
 
-    cl_abap_unit_assert=>assert_equals( act = ls_iee-belzart  exp = 'IEEMIN01' ).
+    cl_abap_unit_assert=>assert_equals( act = ls_iee-belzart  exp = 'EMICGE' ).
     cl_abap_unit_assert=>assert_equals( act = ls_iee-tipo     exp = 'IM' ).
     cl_abap_unit_assert=>assert_equals( act = ls_iee-cantidad exp = '1000.000' ).
     cl_abap_unit_assert=>assert_equals( act = ls_iee-precio   exp = '0.001' ).
