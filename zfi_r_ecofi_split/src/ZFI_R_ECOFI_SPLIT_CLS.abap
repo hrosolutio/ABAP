@@ -125,6 +125,14 @@ CLASS lcl_ecofi_split DEFINITION.
       co_suffix_dev     TYPE string    VALUE '_DEV',
       co_eur_tag        TYPE string    VALUE 'EUR',
 
+      " Modo Server: solo se procesan ficheros de entrada cuyo nombre
+      " empiece por esto (real, 01/10/2026 - en productivo el programa
+      " estaba cogiendo CUALQUIER fichero de la carpeta de entrada, no
+      " solo los ECOFI; GET_SERVER_FILES ya descartaba los _TRF/_DEV
+      " propios, pero no filtraba por prefijo). Patron con CP (comodin
+      " '*'), no FIND, para permitir cualquier cosa despues del prefijo.
+      co_prefix_yfrecau TYPE string    VALUE 'YFRECAU*',
+
       " Segunda validacion de extorno (ver comentario al principio del
       " include) - indicador de 4 caracteres en offset fijo de la linea,
       " confirmado real: "ANUP" = extorno, "TRRD" = transferencia.
@@ -545,6 +553,10 @@ CLASS lcl_ecofi_split IMPLEMENTATION.
 
     LOOP AT lt_dir_list INTO DATA(ls_dir).
       CHECK ls_dir-name IS NOT INITIAL.
+      " Solo ficheros ECOFI reales - real, 01/10/2026: en productivo el
+      " modo Server estaba cogiendo cualquier fichero de la carpeta de
+      " entrada, no solo los YFRECAU*.
+      CHECK ls_dir-name CP co_prefix_yfrecau.
       " Los ficheros _TRF/_DEV son la SALIDA de este mismo programa (en
       " otra carpeta): si por error apareciesen aqui y se escanean como
       " si fuesen ECOFI de entrada, se reprocesarian sin fin.

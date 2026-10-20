@@ -30,15 +30,24 @@ Modo de ejecución: **local o servidor**, con radio buttons `p_server`/`p_upload
 en modo servidor):
 - **Upload** (local): pide un fichero (`P_PATH`, con F4), lo sube/descarga vía
   GUI. Para poder probarlo desde SE38 contra un fichero en tu PC.
-- **Server**: no pide ningún fichero — **procesa automáticamente todos los
-  ficheros** que haya en la carpeta de **entrada** (ruta física leída
-  directamente de `ZFI_T_CONSTANTS`, ver "Configuración" más abajo —
-  antes era la constante `co_logical_path` con `ZFICA_COBROS_ECOFI`
-  hardcodeado e inventado, sin existir en ningún sistema), escribe
-  `_DEV` y `_TRF` cada uno en su **propia carpeta de salida** (distintas
-  entre sí), y mueve cada original a una carpeta de **procesados** —
-  también distinta — tras dividirlo, para no reprocesarlo en la
-  siguiente ejecución. No usa `ZFI_T_FILE_LOG` ni el campo `S_FILEID`
+- **Server**: no pide ningún fichero — **procesa automáticamente los
+  ficheros `YFRECAU*`** que haya en la carpeta de **entrada** (ruta
+  física leída directamente de `ZFI_T_CONSTANTS`, ver "Configuración"
+  más abajo — antes era la constante `co_logical_path` con
+  `ZFICA_COBROS_ECOFI` hardcodeado e inventado, sin existir en ningún
+  sistema), escribe `_DEV` y `_TRF` cada uno en su **propia carpeta de
+  salida** (distintas entre sí), y mueve cada original a una carpeta de
+  **procesados** — también distinta — tras dividirlo, para no
+  reprocesarlo en la siguiente ejecución.
+
+  **Bug real corregido (01/10/2026)**: en productivo, `get_server_files`
+  cogía **cualquier** fichero de la carpeta de entrada (solo descartaba
+  los `_TRF`/`_DEV` propios) — si llegaba algo que no fuera un ECOFI
+  real, el programa igualmente intentaba dividirlo. Añadido un filtro
+  de prefijo (`CHECK ls_dir-name CP co_prefix_yfrecau`, patrón
+  `'YFRECAU*'`), antes de la exclusión de `_TRF`/`_DEV`.
+
+  No usa `ZFI_T_FILE_LOG` ni el campo `S_FILEID`
   que tiene `ZFI_R_DEVOLUCIONES`: a diferencia de las devoluciones, el
   fichero ECOFI es el primer eslabón de la cadena y no está registrado
   en ningún sitio todavía, así que este programa escanea la carpeta

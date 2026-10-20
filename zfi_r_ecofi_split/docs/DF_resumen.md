@@ -177,6 +177,21 @@ en producción extornos `ANUP`+24 dígitos de otras empresas que no deban
 tratarse como extorno de este proceso (alcance de CDI_11 limitado a
 Naturgy, según el pedido de Eva).
 
+## Bug real: el modo Server cogía cualquier fichero de la carpeta de entrada (01/10/2026)
+
+Encontrado en producción: el programa estaba haciendo `split` de
+**todos** los ficheros que hubiera en la carpeta de entrada, no solo los
+`YFRECAU*` reales. Causa: `get_server_files` solo descartaba los
+ficheros `_TRF`/`_DEV` (para no reprocesar su propia salida), pero no
+filtraba por ningún prefijo de nombre — cualquier otro fichero que
+llegara a esa carpeta se intentaba dividir igual.
+
+**Corregido**: nuevo `CHECK ls_dir-name CP co_prefix_yfrecau` (constante
+`co_prefix_yfrecau = 'YFRECAU*'`, patrón con comodín `CP`) justo antes
+de la exclusión de `_TRF`/`_DEV`, dentro del mismo `LOOP AT lt_dir_list`.
+Solo afecta al modo Server — el modo Upload no escanea ninguna carpeta,
+el fichero lo elige la persona a mano por `P_PATH`.
+
 ## Pendiente / a definir con el cliente
 
 - **Formato de la línea de extorno en `_DEV`**: este programa mantiene el
