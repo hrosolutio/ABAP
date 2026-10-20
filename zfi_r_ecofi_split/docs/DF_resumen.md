@@ -1,0 +1,258 @@
+# Resumen del Diseño Funcional
+
+**Documento origen:** CS_CDI_11_Procedimiento_Gestion_de_extornos (27/07/2026, con
+comentarios de EVA), requisito **RU_01**.
+
+Es el desarrollo 1 de 3 del proyecto CDI_11 (gestión de extornos):
+1. **División del fichero ECOFI** en transferencias/extornos → este programa.
+2. Creación del lote de devoluciones → [`zfi_r_devoluciones2/`](../zfi_r_devoluciones2/README.md) *(pendiente, aún no empezado como programa independiente)*.
+3. Cierre y contabilización del lote → [`zfi_r_devoluciones2/`](../zfi_r_devoluciones2/README.md).
+
+## Objeto
+
+Al llegar el fichero bancario de transferencias de ECOFI, generar dos ficheros a
+partir de este: uno con las transferencias y otro con los extornos, ambos
+manteniendo el formato del fichero original. El proceso debe garantizar que
+todas las líneas se escriben en uno u otro fichero.
+
+## Formato del fichero de entrada (verificado contra 2 ficheros reales)
+
+Analizados `YFRECAU_1239_260402.140017.txt` (378 líneas) y
+`YFRECAU_1239_260415.140018.txt` (148 líneas):
+
+- **Primera línea** (cabecera): 20 caracteres, formato numérico
+  (`01` + sociedad `1239` + fecha `ddmmaaaa` + `mmaaaa`), sin información de
+  ninguna transferencia. Va **igual en ambos ficheros de salida**.
+- **Resto de líneas**: 260 caracteres fijos cada una.
+  - La cadena `EUR` aparece siempre en la **misma posición** (columna 102,
+    offset 101 en las 260 líneas de datos de ambos ficheros — 100% constante).
+  - Tras `EUR` y 2 espacios empieza el **concepto** (154 caracteres, hasta el
+    final de la línea).
+- **Regla de extorno** (verificada, sin excepciones en ninguno de los dos
+  ficheros): el concepto **empieza por 24 dígitos** → es extorno. Coincide al
+  100% con el indicador de 4 letras que trae el propio fichero en la zona de
+  cabecera de línea (`ANUP` = extorno, `TRRD` = transferencia normal) — se usa
+  como doble verificación, no como regla, porque el DF especifica la regla de
+  los 24 dígitos.
+  - Fichero 260402: 72 extornos (`ANUP`) / 305 transferencias (`TRRD`) sobre 377
+    líneas de datos.
+  - Fichero 260415: 57 extornos (`ANUP`) / 90 transferencias (`TRRD`) sobre 147
+    líneas de datos.
+- **Número de documento SAP a clarificar**: dígitos 13-24 del bloque de 24
+  dígitos del concepto (los últimos 12), igual que en el ejemplo del DF
+  (`000000051378481000009815` → `481000009815`). El ejemplo del propio DF
+  coincide literalmente con la línea 73 de `YFRECAU_1239_260402.140017.txt`.
+
+## Lógica implementada (`lcl_ecofi_split=>split_lines`)
+
+- Línea 1 (cabecera) → se escribe en ambos ficheros de salida.
+- Resto de líneas: se busca `EUR` (dinámicamente, no por columna fija, por si
+  algún fichero futuro no respeta el offset 101) y se comprueban los 24
+  caracteres siguientes (tras 2 espacios) del concepto.
+  - Si son 24 dígitos → **extorno**: en el fichero `_DEV` se sustituye el
+    concepto completo por los dígitos 13-24 (número de documento), manteniendo
+    el ancho fijo de línea original (relleno de espacios) y el sufijo final de
+    4 caracteres (`0020` en ambos ficheros de prueba).
+  - Si no → **transferencia**: se escribe la línea completa, sin modificar, en
+    el fichero `_TRF`.
+- No se pierde ninguna línea: en las pruebas locales, `_TRF` + `_DEV` (sin
+  contar la cabecera duplicada) siempre suma el total de líneas de datos del
+  fichero original.
+- Nomenclatura de fichero de salida: se inserta `_TRF`/`_DEV` antes de la
+  **última** extensión del nombre original (ej.
+  `YFRECAU_1239_260402.140017_TRF.txt`), igual que el ejemplo del DF.
+
+## Fuera de alcance (de este programa)
+
+- **RU_02/RU_03**: la creación, cierre y contabilización del lote de
+  devoluciones son desarrollos aparte (`zfi_r_devoluciones2/`), este programa
+  solo genera el fichero `_DEV` que consumirán.
+- Integración con el proceso actual que crea el lote de transferencias
+  (filtrar por `_TRF` vs. mover ficheros a otras carpetas, comentario de EVA en
+  RU_01) — no forma parte de este programa, es una decisión operativa sobre
+  el proceso existente.
+
+## Bug real: la regla de 24 dígitos falla con datos de producción (30/09/2026)
+
+Analizado un tercer fichero real, `YFRECAU_1239_260828.140157.txt` (282
+líneas de datos, fuera de los 2 usados para validar la regla
+originalmente) — **la regla de "24 dígitos" y el indicador `ANUP`/`TRRD`
+del propio fichero dejan de coincidir al 100%** (sí coincidían en los 2
+ficheros de la validación original, ver arriba). El indicador es un
+código de 4 caracteres en posición fija — offset 46 de la línea (antes
+de la parte variable de la línea, confirmado en este fichero) — con
+valores `ANUP` (extorno) o `TRRD` (transferencia).
+
+Resultado de comparar las 282 líneas del fichero: el indicador clasifica
+bien 280, la regla de 24 dígitos falla en las 2 restantes, en **los dos
+sentidos posibles**:
+
+- **Falso positivo (líneas 2 y 3)** — detectado por el usuario primero,
+  antes de este análisis completo: el concepto empieza por 24 dígitos
+  (`000000000000008159130921...`, una referencia/cuenta larga), así que
+  la regla actual las manda a `_DEV`. Pero el indicador de esas líneas
+  está **en blanco** (ni `ANUP` ni `TRRD`) — son transferencias
+  `CLIENTE STR` (aparenta ser un tipo de transferencia instantánea,
+  distinto de `TRRD`, pero transferencia al fin y al cabo, no extorno).
+  ```
+  ...4452EUR  0000000000000081591309215876 CLIENTE STR 20359 ING...
+  ...257138EUR  0000000000000081591309215443 CLIENTE STR 20359 ING...
+  ```
+- **Caso "raro" con indicador `ANUP` pero sin 24 dígitos (línea 110)** —
+  encontrado ampliando el análisis a todo el fichero: el indicador es
+  `ANUP`, pero el concepto es `000000000000ORIGEN 20805331...` — solo 12
+  dígitos seguidos de texto, no 24 dígitos:
+  ```
+  ...31874EUR  000000000000ORIGEN 20805331 CONCELLO DE RAMIRAS...
+  ```
+  En un primer análisis se interpretó como un **falso negativo** (un
+  extorno real que se perdería yendo a `_TRF`) — **descartado por Eva
+  tras comprobarlo en producción**: es una transferencia de verdad, que
+  paga una factura, sin ninguna referencia de extorno en ningún sitio
+  del concepto, pese a traer el indicador `ANUP`. **`_TRF` es la
+  clasificación correcta para este caso**, no un bug.
+
+**Por qué pasó el fallo real (líneas 2-3) — no es un fallo de
+implementación, la lógica ABAP replicaba exactamente lo que dice el
+DF**: el DF especifica literalmente la regla de los 24 dígitos, y el
+indicador se documentó solo como "doble verificación" porque coincidía
+al 100% en los 2 ficheros usados para validar — no se sabía, con esa
+muestra, que el indicador y la regla podían divergir. Este tercer
+fichero real demuestra que sí pueden, en los dos sentidos.
+
+## Segunda validación: tag `ANUP` + 24 dígitos (decisión real de Eva/Diego, 30/09/2026)
+
+Trasladado el hallazgo a Eva, que lo consultó con Diego. Decisión final
+(conversación literal, resumida): **usar el indicador `ANUP` como
+SEGUNDA validación, no como sustituto de la regla de 24 dígitos** —
+primero se comprueba la lógica ya existente (24 dígitos), y además el
+indicador tiene que ser `ANUP`. Si no se cumplen **las dos condiciones a
+la vez**, es transferencia (`_TRF`):
+
+- El caso de las líneas 2-3 (24 dígitos, indicador en blanco) confirma
+  que hacía falta el indicador como condición adicional — sin él,
+  seguirían yendo a `_DEV` por error.
+- El caso "raro" de la línea 110 (indicador `ANUP`, sin 24 dígitos)
+  confirma que el indicador **no basta por sí solo** — usarlo como único
+  criterio habría "arreglado" un caso que en realidad ya estaba bien
+  (esa línea es correctamente `_TRF`, ver arriba) convirtiéndolo en un
+  extorno inventado. De ahí la frase de Eva: *"por lo que el ANUP que
+  vimos en el TRF es correcto"*.
+
+**Implementado** en `ZFI_R_ECOFI_SPLIT_CLS.abap`: nuevo método
+`has_anup_tag` (comprueba el indicador en su offset fijo, `CO_TAG_OFFSET
+= 46`, `CO_TAG_LEN = 4`, confirmado con `YFRECAU_1239_260828.140157.txt`)
+y `split_lines` ahora exige `get_doc_number( lv_line ) IS NOT INITIAL AND
+has_anup_tag( lv_line ) = abap_true` para clasificar como extorno — antes
+solo miraba `get_doc_number`. Verificado en local (`python3`, replicando
+la lógica) contra las 282 líneas de datos del fichero real: 107 extornos
+(coincide con las líneas que cumplen ambas condiciones), líneas 2-3 y 110
+correctamente en `_TRF` las tres.
+
+## Tercera validación: texto `"Naturgy Clientes S.A.U."` (pedida por Eva, 01/10/2026)
+
+Pedido explícito de Eva: además de las dos condiciones anteriores
+(24 dígitos + tag `ANUP`), el concepto tiene que mencionar literalmente
+`"Naturgy Clientes S.A.U."` para considerarse extorno. Confirmado con
+Eva: **texto exacto** (sensible a mayúsculas/minúsculas), posición
+dentro de la línea **no especificada** — se busca en toda la línea, no
+solo en la parte del concepto que sigue a los 24 dígitos (en los
+ejemplos reales siempre aparece justo ahí, pero no se asume esa posición
+fija sin confirmación explícita).
+
+**Implementado**: nuevo método `has_naturgy_text` — `FIND
+co_naturgy_text IN iv_line` (no el operador de comparación `CS`, que es
+case-insensitive; `FIND` sin `IGNORING CASE` sí es sensible a mayúsculas/
+minúsculas, necesario para el "texto exacto" pedido). `split_lines`
+ahora exige las **tres** condiciones a la vez:
+`get_doc_number( lv_line ) IS NOT INITIAL AND has_anup_tag( lv_line ) =
+abap_true AND has_naturgy_text( lv_line ) = abap_true`.
+
+Verificado contra `YFRECAU_1239_260828.140157.txt`: de las 107 líneas
+que ya cumplían las dos condiciones anteriores, las 107 contienen
+literalmente `"Naturgy Clientes S.A.U."` — esta tercera condición no
+cambia el resultado en este fichero (107 extornos / 175 transferencias,
+igual que antes), pero queda como salvaguarda real para cuando aparezcan
+en producción extornos `ANUP`+24 dígitos de otras empresas que no deban
+tratarse como extorno de este proceso (alcance de CDI_11 limitado a
+Naturgy, según el pedido de Eva).
+
+## Bug real: el modo Server cogía cualquier fichero de la carpeta de entrada (01/10/2026)
+
+Encontrado en producción: el programa estaba haciendo `split` de
+**todos** los ficheros que hubiera en la carpeta de entrada, no solo los
+`YFRECAU*` reales. Causa: `get_server_files` solo descartaba los
+ficheros `_TRF`/`_DEV` (para no reprocesar su propia salida), pero no
+filtraba por ningún prefijo de nombre — cualquier otro fichero que
+llegara a esa carpeta se intentaba dividir igual.
+
+**Corregido**: nuevo `CHECK ls_dir-name CP co_prefix_yfrecau` (constante
+`co_prefix_yfrecau = 'YFRECAU*'`, patrón con comodín `CP`) justo antes
+de la exclusión de `_TRF`/`_DEV`, dentro del mismo `LOOP AT lt_dir_list`.
+Solo afecta al modo Server — el modo Upload no escanea ninguna carpeta,
+el fichero lo elige la persona a mano por `P_PATH`.
+
+## Pendiente / a definir con el cliente
+
+- **Formato de la línea de extorno en `_DEV`**: este programa mantiene el
+  ancho fijo de 260 caracteres (concepto sustituido por el nº de documento +
+  relleno de espacios + sufijo `0020` original). El ejemplo del DF muestra una
+  línea más corta (sin relleno) — confirmar si el ancho fijo importa para el
+  desarrollo 2 (creación del lote) o si es indiferente.
+- **Modo de ejecución en producción**: el programa ya tiene modo servidor —
+  radio button `p_server`, sin pedir ruta (a diferencia del upload): escanea
+  automáticamente **todos** los ficheros de la carpeta de **entrada**
+  (`EPS2_GET_DIRECTORY_LISTING` + `OPEN DATASET`), deja `_DEV` y `_TRF`
+  cada uno en su **propia carpeta de salida** (distintas entre sí — antes
+  iban a la misma carpeta, se separaron a petición explícita), y mueve
+  cada original a una carpeta de **procesados** — también distinta —
+  tras dividirlo (`ZXX_CL_FILE_UTILS=> MOVE_SERVER_FILE`, la misma
+  utilidad que ya usa `ZFI_R_DEVOLUCIONES`), para no reprocesarlo. Las 4
+  rutas se leen de `ZFI_T_CONSTANTS` como **ruta física directa** (todo
+  variable — ya no hay ninguna ruta hardcodeada en el código: la
+  constante `co_logical_path` con `ZFICA_COBROS_ECOFI` inventada sin
+  existir en ningún sistema, primer intento de este punto, fue
+  corregida). Decisión adicional: en vez de dar de alta rutas lógicas
+  en transacción `FILE` y resolverlas con
+  `ZXX_CL_FILE_UTILS=>GET_DIRECTORY` (como hacía la primera versión, igual
+  que `ZFI_R_DEVOLUCIONES`), `CONSTANT_VALUE` contiene ya la ruta física
+  del servidor tal cual (p.ej. `/interfaces/cobros/transf_N43/in/`) — el
+  sistema de ficheros ya existe antes que el programa, así que se adapta
+  el programa en vez de forzar de alta rutas lógicas nuevas solo para una
+  indirección que `ZFI_T_CONSTANTS` ya da (el valor cambia por sistema
+  igualmente, fila a fila, sin tocar código). Además, las 4 filas viven
+  bajo el **mismo `PROCESS_ID='DEVOL_CREA'`** que ya usa
+  `ZFI_R_DEVOLUCIONES_CREA` — deliberadamente no se da de alta un
+  `PROCESS_ID` propio (`ECOFI_SPLIT`) en `ZFI_T_PROCESS`, tratando los dos
+  programas como el mismo eslabón lógico del proceso. Se distinguen solo
+  por `CONSTANT_ID`: entrada (`CONSTANT_ID='RUTA_LOG_ECOFI'`), salida
+  `_TRF` (`CONSTANT_ID='RUTA_LOG_TRF'`) y procesados
+  (`CONSTANT_ID='RUTA_LOG_PROC'`) tienen fila nueva; la de salida `_DEV`
+  **no tiene fila propia**, se lee directamente de la fila que ya usa
+  `ZFI_R_DEVOLUCIONES_CREA` (`CONSTANT_ID='RUTA_LOG_DEV'` — renombrada
+  desde `RUTA_LOGICA` por consistencia con las otras 3 claves, ver aviso
+  de migración más abajo —, mismo `PROCESS_ID='DEVOL_CREA'`), que es
+  quien escanea esa misma carpeta buscando los `_DEV` — una única fuente
+  de verdad para la carpeta compartida, ver `README.md`. La carpeta de
+  `_TRF` no la consume ningún desarrollo de este repositorio — es para
+  el proceso ya existente que crea el lote de transferencias, mencionado
+  en "Fuera de
+  alcance" más arriba. **Sin probar aún dentro de SAP** y sin disparo
+  automático: hoy hay que ejecutarlo a mano en SE38. Falta:
+  - Dar de alta en `ZFI_T_CONSTANTS` las filas de entrada, salida `_TRF`
+    y procesados con la ruta física real como `CONSTANT_VALUE` (la de
+    entrada, ¿la misma AL11 `/interfaces/cobros/transf_N43/in/` que
+    menciona el comentario de EVA, o una carpeta de staging distinta?;
+    las de `_TRF` y procesados, cualquier otra carpeta física existente
+    — ya no tienen que ser subcarpetas de la de entrada, ni coincidir
+    entre sí, ni pasar por transacción `FILE`).
+  - **Renombrar la fila ya existente** de `ZFI_R_DEVOLUCIONES_CREA`
+    (`CONSTANT_ID='RUTA_LOGICA'` → `'RUTA_LOG_DEV'`) en cada sistema
+    donde ya esté creada (DES, Integración...) — sin este paso, tanto
+    este programa como `ZFI_R_DEVOLUCIONES_CREA` dejan de encontrarla
+    (fallo silencioso en runtime, no un error de activación).
+  - Decidir cómo se dispara en producción: job propio programado, o
+    integrado en el job que hoy crea el lote de transferencias.
+- Si la moneda puede ser distinta de `EUR` en algún caso (el programa localiza
+  el concepto buscando la primera ocurrencia de `EUR` en la línea).
+- Alta del objeto en el sistema de transporte correspondiente al proyecto.

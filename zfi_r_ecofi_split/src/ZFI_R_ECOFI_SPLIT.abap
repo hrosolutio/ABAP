@@ -1,0 +1,45 @@
+*************************************************************************
+* PROGRAM: ZFI_R_ECOFI_SPLIT                                            *
+* DESCRIPTION: Division del fichero bancario ECOFI en transferencias    *
+*              (_TRF) y extornos (_DEV) - CDI_11, RU_01                 *
+* AUTHOR:                                                                *
+* DATE: 11.08.2026                                                      *
+* DEV ID (RICEFW/ENH/INC): CDI_11                                       *
+*=======================================================================*
+* MODIFICATION LOG                                                      *
+*-----------------------------------------------------------------------*
+* NO.MOD  | DATE       | NAME             | FUNC NAME           |DEV ID *
+*-----------------------------------------------------------------------*
+* 001     | 11.08.2026 |                  | Version inicial,      |CDI_11 *
+*         |            |                  | modo local (upload/   |       *
+*         |            |                  | download) para prueba |       *
+*         |            |                  | con ficheros reales    |       *
+*         |            |                  | (ver README)           |       *
+* 002     | 11.08.2026 |                  | Anade modo servidor   |CDI_11 *
+*         |            |                  | (OPEN DATASET), igual  |       *
+*         |            |                  | que ZFI_R_DEVOLUCIONES |       *
+* 003     | 11.08.2026 |                  | Modo servidor pasa a  |CDI_11 *
+*         |            |                  | escanear TODA la carpeta|      *
+*         |            |                  | de la ruta logica (no  |       *
+*         |            |                  | pide fichero), igual   |       *
+*         |            |                  | comportamiento de      |       *
+*         |            |                  | pantalla que            |       *
+*         |            |                  | ZFI_R_DEVOLUCIONES     |       *
+*                                                                       *
+*************************************************************************
+REPORT zfi_r_ecofi_split LINE-SIZE 255.
+
+INCLUDE zfi_r_ecofi_split_top.
+INCLUDE zfi_r_ecofi_split_eve.
+INCLUDE zfi_r_ecofi_split_cls.
+
+START-OF-SELECTION.
+
+*En modo Upload se debe indicar el fichero local
+  IF p_upload EQ 'X' AND p_path IS INITIAL.
+    MESSAGE 'Para carga local se debe indicar el fichero.' TYPE 'E'.
+  ENDIF.
+
+  DATA(go_split) = NEW lcl_ecofi_split( iv_path   = p_path
+                                         iv_upload = p_upload ).
+  go_split->execute( ).

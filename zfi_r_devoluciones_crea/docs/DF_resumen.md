@@ -1,0 +1,906 @@
+# Resumen del Diseño Funcional — RU_02 (creación del lote de devoluciones)
+
+**Documento origen:** CS_CDI_11_Procedimiento_Gestion_de_extornos (27/07/2026, con
+comentarios de EVA). Ver también `../zfi_r_devoluciones2/docs/DF_resumen.md` para
+el contexto completo de los 3 desarrollos.
+
+## Requisito del DF
+
+**RU_02 — Creación del lote de devoluciones** en SAP, transacción **`FP09`**, a
+partir del fichero `_DEV`, con nomenclatura `AAMMDDCDI11x`, sociedad `1239`,
+clase `DV`, motivo `Z01`, cta. compensación `4305500150`, una posición por línea
+del fichero.
+
+## Enfoque actual: pendiente de depurar `FP09`
+
+El primer borrador de este programa (ver "Enfoque descartado" más abajo) se
+construyó sobre `RFKKKA00`/`FPB17` por una lectura incorrecta del DF (se
+escribió "FP09/RFKKKA00" como si fueran equivalentes, sin comprobarlo). El DF
+pide **`FP09`**, que es la transacción de **alta manual de lote de pago**
+(cabecera + posiciones una a una), no el motor de carga masiva de extractos
+bancarios multicash que usa `ZFI_R_DEVOLUCIONES`.
+
+Si `FP09` es una transacción de diálogo (pantalla interactiva, `CALL SCREEN`),
+hace falta el mismo enfoque que ya funcionó para `ZFI_FM_PAYLOT_REVERSE`
+(`FP08`) y `ZFI_FM_PAYMENT_LOT_CLARIFY2` (`FPCPL`): **depurarla para encontrar
+la cadena real de módulos de función** que crea la cabecera del lote
+(`DFKKZK`: sociedad `1239`, motivo `Z01`, cta. compensación `4305500150`) y
+sus posiciones (`DFKKZP`: una por línea del `_DEV`, con el importe y el nº de
+documento SAP que ya extrae `ZFI_R_ECOFI_SPLIT`).
+
+**Pendiente, requiere depurar en SAP (no se puede hacer sin acceso al
+sistema):**
+- Localizar el `FORM`/cadena de FMs real detrás de `FP09`, siguiendo el mismo
+  método documentado en `../zfi_fm_paylot_reverse/README.md` (depurar hasta
+  encontrar dónde se contabiliza/crea de verdad, no solo dónde se calcula la
+  propuesta).
+- Confirmar la estructura exacta de `DFKKZK`/`DFKKZP` a rellenar y qué campos
+  son obligatorios.
+
+**Ventaja de este enfoque frente al de `RFKKKA00`**: si funciona, no hace falta
+ningún dato que no tengamos — no requiere `AUSZUG`/`UMSATZ`, ni banco/IBAN/BIC
+del deudor, ni número de secuencia de extracto. Solo los datos fijos del DF
+(sociedad, motivo, cta. compensación) y, por posición, el importe y el nº de
+documento del `_DEV`.
+
+## Progreso de la depuración de `FP09` (en curso)
+
+Confirmado en pantalla real (`FP09` → Crear → "Devoluciones: Datos prefijados
+y status tratar"):
+
+- **Nomenclatura del lote**: `260819CDI110` (12 caracteres) fue en
+  realidad **tecleado a mano** en la pantalla de `FP09` (un valor
+  propuesto de 13 caracteres, `260819CDI1101`, que el campo cortó a 12) —
+  corrección de una nota anterior de este documento que decía lo
+  contrario sin base real. Probado después con el programa (`_R_
+  DEVOLUCIONES_CREA` en DES): sin exit de cliente, `FKK_RLS_HDR_PREPARE`
+  cae al formato estándar de SAP `RL`+fecha+secuencial (`RL2026082103`).
+  El límite de **12 caracteres** de `KEYR1` sí es real y confirmado (el DF
+  pide `AAMMDDCDI11xx`, 13 caracteres, que no caben).
+
+### Nomenclatura real del lote: se calcula en la propia clase, sin exit
+
+`FKK_RLS_HDR_PREPARE` (código fuente, ver más abajo) solo genera un
+`KEYR1` cuando el campo llega vacío — si ya viene relleno, se limita a
+comprobar que no exista:
+
+```abap
+IF C_DFKKRK-KEYR1 IS INITIAL.
+  PERFORM ('GENERATE_RLS_KEY') IN PROGRAM (PROG_NAME) IF FOUND
+                               CHANGING C_DFKKRK-KEYR1.
+  IF C_DFKKRK-KEYR1 IS INITIAL.
+    PERFORM SAMPLE_SP_GENERATE_RLS_KEY CHANGING C_DFKKRK-KEYR1.  " RL+fecha+secuencial
+  ENDIF.
+ELSE.
+  SELECT SINGLE KEYR1 FROM DFKKRK ... WHERE KEYR1 = C_DFKKRK-KEYR1.
+  IF SY-SUBRC = 0. MESSAGE E403 RAISING LOT_EXISTS. ENDIF.
+  " ... y comprobación en DFKKRK_ARCKEY (archivados)
+ENDIF.
+```
+
+`PROG_NAME` está hardcodeado en el propio código estándar de SAP como
+`'ZFKR2_POOL'` (confirmado buscando la variable en todos los includes de
+`SAPLFKR2` con `Ctrl+F` → "en todos los includes") — se valoró crear ese
+programa de "soft-exit" para que generase `AAMMDDCDI11x` automáticamente,
+pero se descartó: `PROG_NAME` es **global para todo el grupo de función
+`FKR2`**, así que ese exit se dispararía para cualquier lote creado en el
+sistema (`FP09` a mano por otro motivo, otro desarrollo Z), no solo desde
+`CDI_11` — y aunque se puede acotar con una marca en memoria ABAP, es más
+riesgo e indirección de la que hace falta para algo que solo necesita nuestro
+programa.
+
+En su lugar, `create_lot` calcula el `KEYR1` **él mismo** (método
+`generate_keyr1`, `ZFI_R_DEVOLUCIONES_CREA_CLS`) y se lo pasa ya relleno a
+`FKK_RLS_HDR_PREPARE`, tomando el camino del `ELSE` de arriba — el mismo
+que se sigue cuando se teclea a mano en `FP09`. Construye
+`AAMMDDCDI11x` (secuencial de 1 dígito por el límite de 12 caracteres de
+`KEYR1` — ver arriba) con un único `SELECT MAX( KEYR1 )` contra `DFKKRK`
+filtrando por el prefijo del día (`LIKE`, sin `@`, ver `CLAUDE.md`) en vez
+de comprobar candidato a candidato; si se agotan los 10 posibles (0-9),
+devuelve vacío y deja que `FKK_RLS_HDR_PREPARE` caiga al generador
+estándar de SAP en vez de fallar. Queda todo contenido en la clase, sin
+tocar nada compartido con el resto del sistema.
+
+**Pendiente confirmar con el funcional**: el secuencial de 1 dígito (no 2
+como pide el DF literalmente) es un límite técnico del campo, no una
+decisión de diseño — hay que validar que sea aceptable (máx. 10
+lotes/día).
+
+**Probado con éxito** (DES, modo Upload, mismo `_DEV` de 72 líneas):
+`generate_keyr1` propuso `260824CDI110` (primer lote del día con esta
+nomenclatura), `FKK_RLS_HDR_PREPARE` lo aceptó tal cual (no generó nada,
+solo comprobó que no existiera) y el lote se creó con las 72 posiciones
+correctas.
+
+- **Clase de documento**: ya viene `DV` por defecto — coincide con el DF.
+- **Clave de reconciliación**: se autorrellena igual que el nº de lote.
+- Campos de cabecera vistos: Sociedad, División, Clase de documento, Clave
+  de reconciliación, Moneda, Motivo de devolución, Fecha de documento/
+  contabilización/valor, Clase de contab. (dropdown, p.ej. "Anular pago"),
+  Gestión devoluciones ampliada, indicadores de impuestos. La cta. de
+  compensación está en una pestaña aparte ("Cta.compensación y gestión").
+- Las posiciones se añaden con el botón **"Posiciones nuevas"**.
+- **`Banco propio`/`ID de cuenta` se derivan automáticamente de
+  `Cta.compensación devoluciones`** (customizing, no son datos
+  independientes a rellenar a mano). **`4305500150` (la cuenta que pide el
+  DF) no está configurada en DES** — al ponerla, esos dos campos quedan en
+  blanco. Con `4305500250` sí deriva (`Banco propio = CXB01`, `ID de cuenta
+  = CXB01`). **Pendiente real de configuración** (Basis/funcional): dar de
+  alta `4305500150` en DES, o confirmar si ese sigue siendo el valor
+  correcto. Para la depuración se sigue con `4305500250`, que sí funciona
+  — la corrección del dato final es un asunto aparte que no bloquea
+  encontrar la cadena de FMs.
+
+Pendiente: rellenar con los datos de prueba (sociedad `1239`, moneda `EUR`,
+motivo `Z01` si existe como valor válido, cta. `4305500150`), añadir 2-3
+posiciones de prueba (ver tabla de nº documento/importe más abajo) y
+depurar el botón final de grabar.
+
+### Datos de prueba para depurar (reales, del `_DEV` de `zfi_r_ecofi_split`)
+
+| Nº documento | Importe |
+|---|---|
+| `491000011392` | 60,49 € |
+| `491000011455` | 30,34 € |
+| `491000011482` | 14,59 € |
+
+**Importante**: en una posición de devolución el importe hay que meterlo en
+**negativo** (`-60,49`, no `60,49`) — probado en Integración con el primer
+documento: en positivo SAP da el error `>4703` ("Existe una devolución para
+un abono... verifique el signo"), porque en positivo lo interpreta como un
+abono en la cuenta bancaria, no como una devolución.
+
+**Nº de documento de prueba**: los nº de documento reales del `_DEV`
+(sociedad `1239` de Integración) no existen en DES — para depurar en DES hay
+que buscar uno real en la sociedad `1239` que sí exista (tabla `DFKKZP`,
+campo `OPBEL` no vacío — esa tabla son posiciones de lote de pago, así que
+cualquier `OPBEL` de ahí es, por definición, un documento de pago válido).
+En DES había muy pocos registros (7) — la depuración final se hizo en
+Integración en su lugar (mismo código, no afecta a la cadena de FMs).
+
+### Cadena real encontrada (clase `LCL_RLOT`, pool de funciones `FKR2DLG`)
+
+Depurando el botón "Grabar" de `FP09`: el objeto que gestiona el lote en
+pantalla es `o_rlot`, una instancia de **`LCL_RLOT`**, clase **local** del
+pool de funciones **`FKR2DLG`** (grupo de función `FKR2`) — **no se puede
+instanciar/llamar desde fuera** (no está en `SE24`, es privada de ese
+programa).
+
+`o_rlot->save( )` hace, en este orden:
+
+1. `COMPLETE_CHECK` (método interno, valida antes de grabar).
+2. Si es lote nuevo: **`CALL FUNCTION 'FKK_RLS_HDR_SAVE'`** — `CHANGING
+   C_DFKKRK = HEADER` (estructura `DFKKRK`, es la cabecera del lote). **Este
+   FM sí es público** — se puede llamar directamente desde nuestro código
+   para grabar la cabecera.
+3. `SAVE_POSITIONS` (método interno) — **aquí NO hay ningún FM**: hace
+   `INSERT DFKKRP FROM TABLE IT_DFKKRP.` e `INSERT DFKKRP3 FROM TABLE
+   IT_DFKKRP3.` directos a tabla, seguido de `COMMIT WORK.`. `IT_DFKKRP` se
+   monta con `MOVE-CORRESPONDING` desde una tabla interna `T_LINES`
+   (estructura `TY_RLSLINE`) que ya viene con todos los campos calculados
+   de antes (incluido `KEYR1`/`POSRA`/`LFDNR`) — esa parte del cálculo
+   ocurre en otro punto de la clase que aún no se ha depurado (donde se
+   procesa la rejilla "Posiciones nuevas" al teclear).
+4. `UPDATE_STATS` (interno) + `FKK_RLS_PROPERTY_SET` (marca `DIALOG=X`,
+   probablemente no aplica a un uso por programa).
+5. Si no es lote nuevo: `FKK_RLS_HDR_EDIT` (edición) y, si cambió algo,
+   otra vez `FKK_RLS_HDR_SAVE`.
+
+**Corrección**: aunque `SAVE_POSITIONS` (el método interno de `LCL_RLOT`)
+hace `INSERT` directo, **sí existe una API pública completa** para todo
+esto en el grupo de función `FKR2` (dominio "Rückläuferstapel" = lote de
+devoluciones/extornos — es literalmente nuestro caso). Se obtuvo el listado
+completo de FMs del grupo por `SE80`; los relevantes:
+
+**Para crear el lote (este programa, RU_02):**
+- `FKK_RLS_HDR_PREPARE` — Vorbereiten des Headers für einen RLS (prepara la cabecera)
+- `FKK_RLS_HDR_SAVE` — Sichern eines Rückläuferstapel-Headers (graba la cabecera; ya confirmado que es el que usa `FP09`)
+- `FKK_RLS_ITEM_PREPARE` — Bereitet eine neue Position für Eingabe vor (prepara una posición nueva — candidato a calcular `KEYR1`/`POSRA`/`LFDNR`)
+- `FKK_RLS_ITEM_VALIDATE` — Überprüft, ob eine Rückläuferzeile vernünftige Daten enthält (valida una posición)
+- `FKK_RLS_ITEM_SAVE` — Speichern einer Rückläuferzeile (graba una posición)
+- `FKK_RLS_ITEM_SAVE_MASS` — Massenspeicherung von Rückläufer-Zeilen (graba varias posiciones de golpe — probablemente el más adecuado para procesar todas las líneas del `_DEV` de una vez)
+
+**Para cerrar/contabilizar (relevante para el programa 3, `ZFI_R_DEVOLUCIONES2`, no este):**
+- `FKK_RLS_CLOSE` — Schließt einen Rückläuferstapel
+- `FKK_RLS_POST_LOT` / `FKK_RLS_POST_ITEM` — Buchen eines Rückläuferstapels / einer einzelnen Position
+
+**Otros del grupo que pueden hacer falta**: `FKK_RLS_EXISTS` (comprobar si
+el lote ya existe), `FKK_RLS_LOCK`/`FKK_RLS_UNLOCK` (bloqueo del lote),
+`FKK_RLS_ITEMS_READ` (releer posiciones), `FKK_RLS_ITEM_DELETE`.
+
+### Interfaces confirmadas (`SE37`)
+
+```
+FKK_RLS_HDR_PREPARE
+  CHANGING  C_DFKKRK  LIKE DFKKRK
+  EXCEPTIONS NO_AUTHORIZATION, LOT_EXISTS, LOCKED, FAILURE
+
+FKK_RLS_ITEM_PREPARE
+  IMPORTING I_KEYR1       LIKE DFKKRK-KEYR1
+            I_DFKKRK      LIKE DFKKRK
+            I_LINE_COUNT  TYPE I DEFAULT 1
+  EXPORTING E_DFKKRP      LIKE DFKKRP
+  TABLES    T_DFKKRP      LIKE DFKKRP
+  EXCEPTIONS FAILURE
+
+FKK_RLS_ITEM_VALIDATE
+  IMPORTING I_DFKKRK   LIKE DFKKRK
+  CHANGING  C_DFKKRP   LIKE DFKKRP
+  TABLES    T_DFKKRP3  LIKE DFKKRP3
+
+FKK_RLS_ITEM_SAVE
+  IMPORTING I_DFKKRP    LIKE DFKKRP
+            I_DONTCHECK TYPE CHAR1 DEFAULT SPACE
+  CHANGING  C_DFKKRK    LIKE DFKKRK
+  TABLES    T_DFKKRP3   LIKE DFKKRP3
+  EXCEPTIONS HEADER_UPDATE_FAILED, HEADER_NOT_FOUND, LOCK_FAILED, RP3CHECK_FAILED
+
+FKK_RLS_ITEM_SAVE_MASS
+  IMPORTING I_DONTCHECK   TYPE CHAR1 DEFAULT SPACE
+  CHANGING  C_DFKKRK      LIKE DFKKRK
+  TABLES    T_DFKKRP      LIKE DFKKRP
+            T_DFKKRP_DEL  LIKE DFKKRP
+            T_DFKKRP3     LIKE DFKKRP3
+  EXCEPTIONS NO_ENTRIES, HEADER_UPDATE_FAILED, UPDATE_FAILED, DELETE_FAILED, INSERT_FAILED
+```
+
+**Flujo propuesto** para este programa (RU_02):
+
+1. Montar `ls_dfkkrk` con lo que ya sabemos (sociedad `1239`, motivo `Z01`,
+   cta. compensación, moneda `EUR`...).
+2. `CALL FUNCTION 'FKK_RLS_HDR_PREPARE' CHANGING c_dfkkrk = ls_dfkkrk.`
+   (deriva `KEYR1` y defaults, incluido banco propio/ID cuenta si es igual
+   que en pantalla).
+3. `CALL FUNCTION 'FKK_RLS_HDR_SAVE' CHANGING c_dfkkrk = ls_dfkkrk.`
+4. `CALL FUNCTION 'FKK_RLS_ITEM_PREPARE'` con `i_line_count` = nº de líneas
+   del `_DEV`, para obtener `lt_dfkkrp` con las plantillas ya numeradas.
+5. Recorrer `lt_dfkkrp` y rellenar cada línea con el importe (**en
+   negativo**, confirmado con el error `>4703`) y la referencia del
+   documento del `_DEV`.
+6. (Opcional) `FKK_RLS_ITEM_VALIDATE` línea a línea.
+7. `CALL FUNCTION 'FKK_RLS_ITEM_SAVE_MASS'` con `t_dfkkrp` = todas las
+   líneas, `t_dfkkrp_del`/`t_dfkkrp3` vacías.
+8. `COMMIT WORK` (los FMs no parecen comitear ellos solos, a juzgar por
+   cómo lo hace `LCL_RLOT->save()` a mano tras el `INSERT`).
+
+### Campos confirmados (`SE11`)
+
+**`DFKKRK`** (cabecera): `BUKRS`=sociedad (`1239`), `RLGRD`=motivo de
+devolución (`Z01`), `RLSKO`=cta. bancaria de compensación para devolución
+(`4305500150`/`4305500250` en DES), `WAERS`=moneda, `BLART`=clase doc.
+(`DV`), `HBKID`/`HKTID`=banco propio/clave cuenta (se derivan solos de
+`RLSKO`, confirmado en pantalla), `KEYR1`=lote (lo calcula
+`FKK_RLS_HDR_PREPARE`, no se rellena a mano).
+
+**`DFKKRP`** (posición): `BETRR`=importe de devolución (**en negativo**,
+confirmado con el error `>4703`). Para el documento original hay dos
+campos relacionados, sin confirmar aún cuál usar directamente en las
+llamadas a los FM (en pantalla se usa el primero):
+- `SELT1`/`SELW1` = tipo de selección / valor a buscar — es lo que ya
+  probamos en pantalla (`T.`=`B`, `Val.selección`=nº documento), un
+  mecanismo de búsqueda.
+- `OPBEL` = "Doc.pago p.devoluciones" — pinta a ser el campo final donde
+  queda el documento de pago que se devuelve, probablemente relleno tras
+  resolver la búsqueda anterior.
+
+También en `DFKKRP`: `BANKL`/`BANKK`/`BANKN`/`IBAN` (banco/IBAN del
+deudor) — **si se derivan solos al indicar el documento de pago original**
+(vía `SELT1`/`SELW1` u `OPBEL`), esto resolvería completamente el hueco que
+teníamos con el enfoque `RFKKKA00` (el `_DEV` no lleva esos datos). Falta
+confirmar completando el flujo en pantalla hasta Grabar de verdad.
+
+`RLBEL`/`URBEL` en `DFKKRP` parecen campos de salida (nº del documento de
+devolución/abono generado tras contabilizar), no de entrada.
+
+**Confirmado con prueba real en Integración** (lote `260819CDI110`, 3
+posiciones, grabado con éxito — "Se han grabado los datos. Se puede
+proseguir el tratamiento"). Consultado `DFKKRP` por `SE16N`:
+
+| KEYR1 | POSRA | BANKL/BANKK/BANKN/IBAN | OPBEL | HBKID/HKTID | SELT1 | RLGRD | BETRR | SELW1 |
+|---|---|---|---|---|---|---|---|---|
+| 260819CDI110 | 000001 | (vacíos) | (vacío) | CXB01/CXB01 | B | Z01 | 60,49- | 491000011392 |
+| 260819CDI110 | 000002 | (vacíos) | (vacío) | CXB01/CXB01 | B | Z01 | 30,34- | 491000011455 |
+| 260819CDI110 | 000003 | (vacíos) | (vacío) | CXB01/CXB01 | B | Z01 | 14,59- | 491000011482 |
+
+**Conclusión**: `BANKL`/`BANKK`/`BANKN`/`IBAN`/`OPBEL` se quedan vacíos y
+el lote se graba igualmente sin error — **no hacen falta para crear el
+lote** (RU_02). Probablemente se resuelven en el cierre/contabilización
+(RU_03, `ZFI_R_DEVOLUCIONES2`), no en la creación. Esto cierra el hueco de
+datos que arrastrábamos desde el enfoque `RFKKKA00` (banco/IBAN del deudor
+no disponibles en el `_DEV`) — **con el enfoque `FP09`/`FKK_RLS_*` no
+hacen falta en absoluto**.
+
+**Campos mínimos confirmados para crear el lote:**
+- Cabecera (`DFKKRK`): `BUKRS`, `RLGRD`, `RLSKO`, `WAERS` (`BLART` ya viene
+  `DV` por defecto).
+- Posición (`DFKKRP`), por cada línea del `_DEV`: `BETRR` (importe, **en
+  negativo**), `SELT1` = `B`, `SELW1` = nº de documento SAP.
+
+Con esto ya se puede escribir el código ABAP real (ver
+`../src/ZFI_R_DEVOLUCIONES_CREA_CLS.abap`).
+
+### Primera prueba real del programa (DES): `FKK_RLS_ITEM_PREPARE` capa a `MAX_LINES`
+
+Primera ejecución completa de `ZFI_R_DEVOLUCIONES_CREA` (modo Upload, DES,
+tras dar de alta `ZFI_T_CONSTANTS`/`ZFI_T_PROCESS`) con un `_DEV` de 72
+líneas: `FKK_RLS_ITEM_PREPARE` devolvió solo 50 posiciones de las 72
+pedidas. Visto el código fuente del FM (`SE37`):
+
+```abap
+IF I_LINE_COUNT < 0. I_LINE_COUNT = 1. ENDIF.
+IF I_LINE_COUNT > MAX_LINES. I_LINE_COUNT = MAX_LINES. ENDIF.
+...
+I = I_DFKKRK-ANZPO + 1.
+DO I_LINE_COUNT TIMES.
+  ...
+  P_DFKKRP-POSRA = I.
+  I = I + 1.
+  ...
+ENDDO.
+```
+
+`MAX_LINES` es una variable/constante global del grupo de función `FKR2`
+que capa `I_LINE_COUNT` — con el `_DEV` de prueba, 50. La numeración de
+`POSRA` (nº de posición) arranca en `I_DFKKRK-ANZPO + 1`, es decir,
+depende del nº de posiciones que le digamos que ya tiene el lote
+(`ANZPO`), no de ningún buffer interno oculto — por tanto es seguro llamar
+al FM varias veces seguidas para completar el pedido: en cada vuelta se
+actualiza `ls_dfkkrk-anzpo` con las posiciones ya conseguidas y se pide
+solo lo que falta, hasta llegar al total de líneas del `_DEV`. Implementado
+como bucle `DO` en `create_lot` (`ZFI_R_DEVOLUCIONES_CREA_CLS`).
+
+### Depurando RU_03: el lote se crea pero no se puede cerrar (falta `OPBEL`)
+
+Al empezar a depurar el cierre/contabilización del lote (RU_03,
+`ZFI_R_DEVOLUCIONES2`) con un lote ya creado por este programa
+(`260824CDI110`, 72 posiciones), `FP09` → "Cerrar" dio error:
+
+```
+No existen entradas para la remesa 260824CDI110
+Nº mensaje: >2549
+Diagnóstico: El cierre de una remesa de devoluciones sólo tiene sentido
+si esta remesa también contiene entradas. Éste no es el caso.
+```
+
+`SELT1`='B'/`SELW1`=nº documento (lo único que rellena `create_lot`) es
+solo un **criterio de búsqueda**, no el documento resuelto — `OPBEL`
+("Doc.pago p.devoluciones") se queda vacío. Comprobado con `SE16N`: las
+72 posiciones tienen `OPBEL` vacío; eso es lo que hace que ninguna cuente
+como "entrada" para poder cerrar.
+
+Depurando en `FP09` (`Tratar` → `Posiciones nuevas`, con una posición
+nueva añadida a mano) con un **breakpoint de módulo de función** en
+`FKK_RLS_ITEM_VALIDATE` (`SE37` → módulo de función → Set breakpoint, más
+fiable que adivinar el momento exacto con `/h`): la llamada se dispara al
+teclear la posición nueva (antes de Grabar), y confirma:
+
+- `C_DFKKRP` **antes**: `OPBEL` vacío, `SELT1`='B', `SELW1`=nº documento
+  tecleado.
+- `C_DFKKRP` **después**: `OPBEL` = el mismo nº de documento (resuelto).
+  `BANKL`/`BANKK`/`BANKN`/`IBAN` siguen vacíos (no hacen falta, ya lo
+  sabíamos).
+- `T_DFKKRP3` entra y sale **vacía** — no es lo que hace falta rellenar
+  (no escribe nada en BD tampoco, seguro llamarla antes de persistir
+  nada).
+- Excepción `NOT_VALID` si el documento no existe/no es válido (probado
+  con un nº de documento inventado).
+
+**Fix aplicado a `create_lot`**: se añade un bucle llamando a
+`FKK_RLS_ITEM_VALIDATE` para cada posición (`i_dfkkrk` = cabecera,
+`c_dfkkrp` = la posición, `t_dfkkrp3` sin usar) **antes** de
+`FKK_RLS_HDR_SAVE`/`FKK_RLS_ITEM_SAVE_MASS` — como ningún FM hasta ese
+punto escribe en BD, si una posición da `NOT_VALID` se aborta todo el
+lote sin haber tocado la base de datos, sin dejar nada a medias. Mismo
+criterio de todo-o-nada que ya usan `ZFI_R_DEVOLUCIONES_CREA`/
+`ZFI_R_DEVOLUCIONES` a nivel de fichero completo (ninguno de los 3
+desarrollos tiene granularidad de error por línea).
+
+### Segundo intento fallido: `ITEM_VALIDATE` necesita la cabecera ya en BD
+
+Primera implementación del fix: `FKK_RLS_ITEM_VALIDATE` para todas las
+posiciones **antes** de `FKK_RLS_HDR_SAVE` (para poder abortar sin haber
+escrito nada en BD si un documento no era válido). Probado en DES: lote
+`260824CDI111` creado sin error, pero `OPBEL` seguía **vacío** — puesto
+un breakpoint justo después de la llamada dentro de nuestro propio
+`create_lot` (en vez de en `FP09`), se confirma que `C_DFKKRP-OPBEL` no
+se rellena ahí, sin ningún error (`sy-subrc` = 0 igualmente).
+
+Diferencia con la prueba manual que sí funcionó: en `FP09` siempre se
+probó sobre un lote **ya existente** (entrando en "Tratar" de un lote
+creado en una transacción anterior, ya comiteado). Conclusión:
+`FKK_RLS_ITEM_VALIDATE` necesita que la cabecera ya esté **persistida en
+BD** (no solo preparada en memoria) para poder resolver el documento —
+probablemente hace una lectura a BD por `KEYR1`/`FIKEY` en vez de usar
+solo lo que se le pasa en `I_DFKKRK`.
+
+**Fix corregido**: `FKK_RLS_HDR_SAVE` + `COMMIT WORK` se llaman ya justo
+después de `FKK_RLS_HDR_PREPARE` (el `COMMIT WORK` es necesario porque
+`HDR_SAVE` por sí sola solo deja el `INSERT` en tarea de actualización,
+no persistido hasta el siguiente commit) — **antes** de `ITEM_PREPARE`/
+`ITEM_VALIDATE`, no después. Coste: si una posición falla `NOT_VALID`, la
+cabecera ya queda creada en BD sin posiciones (recuperable borrando el
+lote vacío desde `FP09`, tal como indica el propio mensaje `>2549` de
+SAP) — ya no es un abort 100% limpio como se pretendía, pero es el único
+orden con el que `ITEM_VALIDATE` resuelve `OPBEL` de verdad.
+
+### Tercer intento: `OPBEL` era una pista falsa, el problema real es `ANZPO`
+
+Con el fix anterior (`HDR_SAVE`+`COMMIT` antes de `ITEM_VALIDATE`) se creó
+el lote `260824CDI113` en DES: `sy-subrc = 0` tras `ITEM_VALIDATE`, pero
+depurando con breakpoint justo después de la llamada dentro de nuestro
+propio `create_lot`, `<fs_dfkkrp_val>-opbel` seguía **vacío** — la
+persistencia de la cabecera tampoco era la explicación completa.
+
+Pedimos ver la pila de llamadas de la prueba manual en `FP09` (breakpoint
+de función en `FKK_RLS_ITEM_VALIDATE`): la llamada real viene de
+`LCL_RLOT->COMPLETE_CHECK` (el mismo método que ya sabíamos que es el
+primer paso de `SAVE`, ver más arriba). Su código fuente aclara todo:
+
+```abap
+LOOP AT IT_DFKKRP INTO WA_DFKKRP WHERE RLBEL = SPACE AND ( XVOID = SPACE OR XVOID IS INITIAL ).
+  ...
+* Validate: Wenn die manuellen Angaben einen Fehler melden, sollte an
+* dieser Stelle nichts passieren außer vielleicht einem Hinweis; der
+* Fehler darf erst bei CLOSE hochkommen
+  CALL FUNCTION 'FKK_RLS_ITEM_VALIDATE'
+       EXPORTING I_DFKKRK  = HEADER
+       TABLES    T_DFKKRP3 = IT_DFKKRP3
+       CHANGING  C_DFKKRP  = WA_DFKKRP
+       EXCEPTIONS NOT_VALID = 1 OTHERS = 2.
+  IF SY-SUBRC <> 0.
+    CALL METHOD CATCH_ERROR EXPORTING I_POSRA = WA_DFKKRP-POSRA.
+  ENDIF.
+  PERFORM ('CHECK_RETURNS_POS') IN PROGRAM (PROG_NAME) IF FOUND USING WA_DFKKRP.
+ENDLOOP.
+```
+
+`WA_DFKKRP` es una copia local (`LOOP...INTO`) y **nunca se hace `MODIFY`
+de vuelta** a `IT_DFKKRP`/`T_LINES` después de la llamada — el propio SAP
+**tira el `OPBEL` resuelto**, solo usa la llamada para comprobar si sería
+válido (el comentario original lo confirma: el error solo debe saltar en
+`CLOSE`, no aquí). Conclusión: **`OPBEL` nunca hace falta resolverlo ni
+grabarlo** para nada — ni para grabar el lote ni para cerrarlo. La
+hipótesis de los dos intentos anteriores era incorrecta.
+
+Con eso descartado, se revisó qué otro dato de la cabecera podría estar
+mal: **`DFKKRK-ANZPO`** (nº de posiciones), comprobado por `SE16N` en el
+lote real `260824CDI113` → **`000000`**, pese a que `DFKKRP` sí tiene sus
+72 posiciones. Causa: dentro del bucle `DO` que llama a
+`FKK_RLS_ITEM_PREPARE` por tandas, `ls_dfkkrk-anzpo` se actualiza para
+numerar `POSRA` correctamente en cada tanda, pero nunca se deja al total
+final antes de llamar a `FKK_RLS_ITEM_SAVE_MASS` — se queda con el valor
+de la penúltima tanda (o `0` si solo hizo falta una).
+
+**Primer intento del fix**: `ls_dfkkrk-anzpo = lines( lt_dfkkrp ).` justo
+antes de `FKK_RLS_ITEM_SAVE_MASS`, pasándolo en `C_DFKKRK` (`CHANGING`).
+Probado en DES: confirmado con un breakpoint justo antes de la llamada
+que `ls_dfkkrk-anzpo` = `72` en ese momento — pero tras grabar, `SE16N`
+sigue mostrando `DFKKRK-ANZPO` = `0`. **`FKK_RLS_ITEM_SAVE_MASS` no
+persiste `ANZPO`** aunque se lo pasemos relleno.
+
+**Fix definitivo**: en vez de un `UPDATE` directo a la tabla (descartado,
+demasiado chapucero/arriesgado en una tabla estándar), `create_lot`
+vuelve a llamar a `FKK_RLS_HDR_SAVE` — una **segunda vez**, con la
+cabecera ya existente en BD y `ANZPO` puesto al total real de
+posiciones — justo después de `FKK_RLS_ITEM_SAVE_MASS`, antes del
+`COMMIT WORK` final. Usa la propia API pública de SAP en vez de tocar la
+tabla a mano.
+
+**Confirmado con prueba real**: lote `260825CDI110` (DES, modo Upload,
+`_DEV` de 72 líneas) creado con `ANZPO` correcto, y **cerrado con éxito**
+en `FP09` (`Status`: "Ya no se pueden modificar devoluciones") — sin el
+error `>2549`. RU_02 (`ZFI_R_DEVOLUCIONES_CREA`) queda validado
+end-to-end incluyendo el cierre.
+
+**Pendiente**: probar "Contabilizar" sobre un lote ya cerrado, y seguir
+depurando qué FMs reales usa "Cerrar"/"Contabilizar" para RU_03
+(`ZFI_R_DEVOLUCIONES2`) — muy probablemente `FKK_RLS_CLOSE`/
+`FKK_RLS_POST_LOT` del mismo grupo de función, no `RFKKKA00` (ver
+`../zfi_r_devoluciones2/docs/DF_resumen.md`).
+
+### Configuración vía `ZFI_T_CONSTANTS` (sin hardcode)
+
+`BUKRS`/`RLGRD`/`RLSKO` (sociedad, motivo, cta. compensación) no van como
+`CONSTANTS` en la clase — se leen de la tabla genérica `ZFI_T_CONSTANTS`
+(reutilizada, ya existe en el sistema) con un único método `get_constants`
+llamado al principio de `execute( )`, con un solo `SELECT * ... INTO
+TABLE` (no `SELECT SINGLE` por constante) filtrando por las claves propias
+de la tabla:
+
+```
+APPLICATION_ID = 'FICA'
+PROCESS_ID     = 'DEVOL_CREA'
+SUB_PROCESS_ID = <blanco>
+ACTIVE         = 'X'
+```
+
+(`APPLICATION_ID` no es texto libre: `zfi_de_application_id` tiene una
+tabla de verificación/valores fijos detrás. `'CDI_11'` — el nombre del
+proyecto — no está dado de alta ahí; se usa `'FICA'`, que sí es un valor
+válido.)
+
+y un `LOOP` + `CASE` sobre `CONSTANT_ID` (`SOCIEDAD`, `MOTIVO`,
+`CTA_COMPENSACION`) para rellenar `gv_sociedad`/`gv_motivo`/`gv_cta_comp`.
+Si falta alguna, el programa aborta con mensaje antes de tocar `FKK_RLS_*`.
+
+Motivo del cambio: los valores hardcodeados anteriores (`co_sociedad`,
+`co_motivo`, `co_cta_comp`) obligaban a editar y reactivar la clase para
+cambiar un dato de configuración entre sistemas (p.ej. la cta.
+`4305500150` del DF frente a `4305500250`, la única que deriva banco/
+cuenta en DES — ver más arriba). Con `ZFI_T_CONSTANTS` es una fila de
+customizing por sistema, sin tocar código.
+
+**Filas a dar de alta** (una vez por sistema, con el `CONSTANT_VALUE`
+correcto en cada uno; en DES ya están dadas de alta y probadas con éxito —
+ver más abajo):
+
+| `CONSTANT_ID` | DES | Integración |
+|---|---|---|
+| `SOCIEDAD` | `1239` | `1239` |
+| `MOTIVO` | `Z01` (confirmado válido, prueba real end-to-end en DES) | `Z01` |
+| `CTA_COMPENSACION` | `4305500250` (la que deriva banco/cuenta en DES; `4305500150` del DF no está configurada) | `4305500150` (probado con éxito, ver tabla de test más abajo) |
+| `RUTA_LOG_DEV` | Ruta **física** real (no lógica de `FILE`, ver más abajo; antes se llamaba `RUTA_LOGICA`) — la definitiva de producción aún no está decidida/creada; para probar, cualquier carpeta física ya existente en DES | igual |
+| `RUTA_PROC_DEV` | Ruta **física** real, carpeta donde se mueve el `_DEV` ya usado para crear el lote (antes era la subcarpeta `procesados/` de `RUTA_LOG_DEV`, ver más abajo) — cualquier carpeta física ya existente | igual |
+| `MONEDA` | `EUR` | `EUR` |
+
+Además, `APPLICATION_ID`/`PROCESS_ID` no son texto libre: `PROCESS_ID`
+también valida contra una tabla de verificación propia (`ZFI_T_PROCESS`,
+por `APPLICATION_ID`) — `DEVOL_CREA` tampoco estaba ahí, se dio de alta
+como fila nueva (`APPLICATION_ID='FICA'`, `PROCESS_ID='DEVOL_CREA'`,
+`ACTIVE='X'`), igual que ya hay `CONTRATAS`, `MIGRACION`, `VULNERABLE`,
+etc. — es una tabla de mantenimiento del equipo, no un dominio fijo de SAP.
+
+`RUTA_LOG_DEV`, `RUTA_PROC_DEV` y `MONEDA` se añadieron por el mismo
+motivo que las tres anteriores: eran `CONSTANTS` hardcodeadas en la clase
+(`co_logical_path`/`co_processed_dir`/`co_eur_tag`) y, a diferencia de
+`co_error_dir` (que sigue siendo solo un nombre de subcarpeta interno, no
+un dato de configuración), sí son valores que conviene poder cambiar sin
+tocar código — en concreto para poder probar el modo Server apuntando a
+cualquier carpeta física que ya exista (mientras las definitivas de
+producción no estén decididas/creadas), o repetir la prueba con un
+fichero en otra moneda sin reactivar la clase. `MONEDA` se usa tanto para
+`DFKKRK-WAERS` (moneda del lote) como para localizar el importe dentro de
+la línea del `_DEV` (`parse_dev_lines` busca ese mismo tag en el texto).
+
+**`RUTA_LOG_DEV` es una ruta física directa, no una ruta lógica de
+transacción `FILE`**: `CONSTANT_VALUE` contiene la ruta del servidor tal
+cual, p.ej. `/interfaces/cobros/transf_N43/in/`, y `get_directories` la
+usa directamente (solo normaliza la barra final) en vez de resolverla
+con `ZXX_CL_FILE_UTILS=>GET_DIRECTORY`. Decisión: el sistema de ficheros
+(las carpetas físicas) ya existe antes que el programa — si algo hay
+que adaptar para que encajen es el programa, no forzar de alta rutas
+lógicas nuevas en `FILE` solo para una indirección que `ZFI_T_CONSTANTS`
+ya da (el valor cambia por sistema igualmente, fila a fila, sin tocar
+código). Esta misma fila la lee también `ZFI_R_ECOFI_SPLIT` para saber
+dónde dejar `_DEV` (`_TRF` va a su propia carpeta, `RUTA_LOG_TRF`) — ver
+`../zfi_r_ecofi_split/README.md`.
+
+**⚠️ Renombrada desde `RUTA_LOGICA`**: la clave se llamaba originalmente
+`RUTA_LOGICA` (nombre histórico de un primer diseño con ruta lógica de
+`FILE`) y no se había renombrado para no romper filas ya dadas de alta.
+Al añadir `RUTA_LOG_TRF` en `ZFI_R_ECOFI_SPLIT` se decidió renombrar
+también esta, por consistencia con `RUTA_LOG_ECOFI`/`RUTA_LOG_TRF`/
+`RUTA_LOG_PROC`. **La fila ya existente en `ZFI_T_CONSTANTS` (creada y
+probada con éxito en DES) hay que actualizarla** — cambiar su
+`CONSTANT_ID` de `RUTA_LOGICA` a `RUTA_LOG_DEV` (el `CONSTANT_VALUE` no
+cambia) — en cada sistema donde ya exista, o tanto este programa como
+`ZFI_R_ECOFI_SPLIT` dejan de encontrarla (fallan en tiempo de ejecución
+con "Faltan constantes...", no al activar).
+
+**`RUTA_PROC_DEV` sustituye a la subcarpeta `procesados/` de
+`RUTA_LOG_DEV`**: hasta ahora, tras crear el lote con éxito,
+`transport_files` movía el `_DEV` a `<RUTA_LOG_DEV>procesados/`
+(`co_processed_dir`, concatenado). **Fallo real reportado por Eva
+probando en Integración**: el lote se creó correctamente (60 posiciones,
+`260915CDI110`) pero el movimiento del fichero falló con "No fue posible
+transportar el fichero ... en el servidor" (mensaje `ZFI_MC_001`/`014`,
+excepción `ZFI_CL_CX_FILE` de `ZXX_CL_FILE_UTILS=>MOVE_SERVER_FILE`) —
+la subcarpeta `procesados/` no existe en la carpeta física de
+Integración (la de `error/` sí existe, esa no ha cambiado). En vez de
+asumir que esa subcarpeta existe en todos los sistemas, se pasa a una
+ruta física independiente y configurable (`RUTA_PROC_DEV`), mismo patrón
+que las demás rutas de este proyecto. Distinta de `RUTA_LOG_PROC` de
+`ZFI_R_ECOFI_SPLIT` (esa es para el ECOFI de entrada ya dividido, esta es
+para el `_DEV` ya consumido por este programa).
+
+## Concepto de búsqueda del lote (`DFKKRK-KEYR2`)
+
+Pedido por Eva (no viene del DF): para identificar fácilmente de qué
+fichero `_DEV` viene cada lote al mirarlo en `FP09`/`FQC0`, `create_lot`
+rellena `DFKKRK-KEYR2` ("Concepto de búsqueda", `CHAR40`, confirmado en
+pantalla) con el nombre del fichero `_DEV` origen. Se pasa como nuevo
+parámetro `IV_FILENAME` a `create_lot`: en modo Server es el nombre real
+del fichero listado por `EPS2_GET_DIRECTORY_LISTING`; en modo Upload se
+extrae de `P_PATH` con un `get_filename_from_path` (mismo patrón ya usado
+en `ZFI_R_ECOFI_SPLIT`). Sin recorte especial más allá del truncamiento
+natural de un `CHAR40` — los nombres reales observados (`YFRECAU_1239_
+260827.140156_DEV.txt`, 34 caracteres) caben enteros.
+
+## Banco propio/ID cuenta (`DFKKRK-HBKID`/`HKTID`) vía `TFK012` (30/09/2026)
+
+Eva encontró (probando `FP09` a mano) que, al indicar la cuenta de
+compensación (`RLSKO`) en la pantalla "Devoluciones: Datos prefijados y
+status tratar", se rellenan solos dos campos más en el bloque "Cta.
+compensación": **"Banco propio"** y **"ID cuenta"**. Comprobado que los
+lotes creados por `ZFI_R_DEVOLUCIONES_CREA` se quedaban con esos dos
+campos vacíos en `DFKKRK` — el relleno automático es lógica de la propia
+pantalla de `FP09`, `FKK_RLS_HDR_PREPARE` no lo deriva.
+
+**Campos técnicos reales** (confirmados por Eva, doble clic sobre cada
+campo en la pantalla de `FP09` → información técnica): `DFKKRK-HBKID`
+(banco propio) y `DFKKRK-HKTID` (ID cuenta).
+
+**Tabla origen real** (confirmada por Eva vía `SE16` — la misma tabla que
+consulta `FP09` para ese relleno automático): **`TFK012`**, clave
+`MANDT`+`BUKRS`+`BVRKO` (cuenta de compensación — mismo valor que
+`DFKKRK-RLSKO`), con columnas `HBKID`/`HKTID`/`GPARK` y varios flags
+(`XBVRZS`/`XBVRRL`/`XBVRSS`/`XBVRCR`/`XBVRZAU`/`XBVROL`/`XBVRVT`/
+`XBVRPDC`/`XBVRPBL`) y `DECRE`, no usados aquí. Ejemplo real visto en
+`SE16` (sociedad `1239`): fila `BVRKO = 4305500150` → `HBKID = CXB01`,
+`HKTID = CXB01`.
+
+**Decisión explícita de Eva: no meterlos como constantes nuevas en
+`ZFI_T_CONSTANTS`** (a diferencia de `SOCIEDAD`/`MOTIVO`/
+`CTA_COMPENSACION`/`MONEDA`) — ya viven en una tabla de customizing real
+de FI-CA, duplicarlos como constante propia sería una fuente de verdad
+adicional a mantener sincronizada sin necesidad.
+
+**Implementación**: `get_constants` (tras resolver `GV_CTA_COMP` desde
+`ZFI_T_CONSTANTS`) hace
+
+```abap
+SELECT SINGLE hbkid hktid FROM tfk012 INTO (gv_hbkid, gv_hktid)
+  WHERE bukrs = gv_sociedad AND bvrko = gv_cta_comp.
+```
+
+(sintaxis clásica sin `@`, ver `CLAUDE.md`) y `create_lot` los asigna a
+`ls_dfkkrk-hbkid`/`ls_dfkkrk-hktid` junto al resto de campos de cabecera,
+antes de `FKK_RLS_HDR_PREPARE`. Si `TFK012` no tiene fila para esa
+sociedad+cuenta, no es un error fatal — se deja un `WRITE` de aviso y el
+lote se sigue creando igual que antes de este fix (los dos campos quedan
+vacíos, igual que ya pasaba).
+
+## Validación de duplicados (`ZFI_T_R3SEG_DEV`)
+
+Pedido por Eva (no viene del DF): "básicamente es replicar la validación
+que tenemos en el programa de crear lote de pagos para evitar duplicados
+(usando esta tabla `ZFI_T_R3SEG`). Por si esa posición viene repetida en
+el mismo fichero, o si ya nos ha llegado en otro fichero previo".
+
+### El programa de referencia (`LCL_GESTION_COBROS_TRANSF`)
+
+Analizando el `CLS` completo que pasó el usuario, la validación real
+(dentro de `METHOD execute`) es:
+
+1. Por cada línea del fichero de cobros (formato N43, 260 caracteres),
+   parsea la línea entera de forma **posicional** a una work area:
+   ```abap
+   DATA: BEGIN OF ls_body,
+           tipo(2), bukrs(4), rkont(10), tkont(10), bkont(20),
+           zuonr(16), belnr(12), gjahr(4), bldat(8), bschl(2),
+           dmbtr(13), waers(5), sgtxt(150), apunt(3), status_i(1),
+         END OF ls_body.
+   ls_body = <fs_data>.
+   ```
+   (`ls_body = <fs_data>.` es un `MOVE` posicional byte a byte según el
+   orden de los campos — no hay ningún parseo por substring/offset
+   explícito, es la propia declaración de la estructura la que define
+   los offsets).
+2. Arma la clave de negocio: `APUNT`+`ZUONR`+`BUKRS`+`BELNR`+`GJAHR`.
+3. Descarta la línea si esa clave **ya existe en la tabla en memoria de
+   este mismo fichero** (`line_exists( <fs_file>-lt_r3seg[ ... ] )`,
+   mensaje `141`) o **ya existe en `ZFI_T_R3SEG`** de un fichero anterior
+   (`SELECT SINGLE COUNT( * ) FROM zfi_t_r3seg WHERE ...`, mensaje `142`).
+4. Si no es duplicado, completa campos de auditoría (`ERSDA`/`ERZET`/
+   `ERNAM`/`STATUS`/`FILE_NAME`) y la acumula en memoria (`lt_r3seg`),
+   sin grabar todavía.
+5. **Solo si el `SUBMIT` de contabilización (`RFKKZE00`) termina bien**
+   (`sy-subrc = 0 AND lv_error_buchen IS INITIAL`), hace
+   `MODIFY zfi_t_r3seg FROM TABLE is_files-lt_r3seg.` — si falla, no se
+   graba nada, para no marcar como "ya procesadas" posiciones de un
+   fichero que al final no se contabilizó.
+
+### Decisión: tabla propia `ZFI_T_R3SEG_DEV`, no compartir `ZFI_T_R3SEG`
+
+Se planteó reutilizar literalmente `ZFI_T_R3SEG` (compartida entre los
+dos procesos) — Eva confirmó que no hay riesgo real de colisión de
+claves entre cobros y devoluciones, pero decidió igualmente usar una
+**tabla nueva, copia exacta de `ZFI_T_R3SEG`**, para no mezclar datos de
+dos procesos de negocio distintos en la misma tabla física. Nombre
+elegido (pedido explícito: "más intuitivo" que un sufijo de versión tipo
+`V2`): **`ZFI_T_R3SEG_DEV`**.
+
+### Mapeo de campos para una posición de devolución
+
+La estructura `ZFI_T_R3SEG`/`ZFI_T_R3SEG_DEV` (confirmada en `SE11`,
+tabla transparente "Movimientos de Cuenta Bancaria en SAP R3") tiene
+como clave `MANDT`+`APUNT`(`NUMC3`)+`ZUONR`(`CHAR16`)+`BUKRS`(`CHAR4`)+
+`BELNR`(`CHAR12`)+`GJAHR`(`NUMC4`).
+
+La duda inicial era si estos campos había que rellenarlos con valores
+inventados/fijos (no vienen "explícitos" como conceptos de negocio de
+devoluciones) o si, igual que en el programa de pagos, vienen ya en la
+propia línea del fichero. **Confirmado por depuración real** (`ls_body`
+contra una línea real del `_DEV`, ver captura): la línea de 260
+caracteres del `_DEV` (heredada tal cual del fichero bancario original —
+`ZFI_R_ECOFI_SPLIT` solo reescribe el concepto para las líneas de
+extorno) es el **mismo formato posicional** que `LCL_GESTION_COBROS_
+TRANSF`, offset por offset:
+
+```
+ls_body-tipo     = '02'
+ls_body-bukrs    = '1239'                  <- coincide con SOCIEDAD
+ls_body-rkont    = '4305500150'            <- coincide con CTA_COMPENSACION (!)
+ls_body-tkont    = '57288X910...'
+ls_body-bkont    = '21002931930200826108'
+ls_body-zuonr    = 'ANUP'                  <- el indicador de extorno de ZFI_R_ECOFI_SPLIT
+ls_body-belnr    = '1826033854'            <- NO es el nº de documento SAP (ver más abajo)
+ls_body-gjahr    = '2026'
+ls_body-bldat    = '20260401'
+ls_body-bschl    = '50'
+ls_body-dmbtr    = '6049'
+ls_body-waers    = 'EUR'
+ls_body-sgtxt    = '491000011392'          <- el nº de documento SAP (docnum ya extraído por PARSE_DEV_LINES)
+ls_body-apunt    = '002'
+ls_body-status_i = '0'
+```
+
+Dos hallazgos importantes de esta prueba:
+
+1. **`RKONT` coincide con `CTA_COMPENSACION`** (`4305500150`) — confirma
+   que el formato de línea es realmente compartido entre el fichero de
+   cobros/transferencias y el ECOFI, no una casualidad de longitud.
+2. **El `BELNR` nativo del offset 62 NO es el número de documento SAP**
+   que se está devolviendo — es otra referencia del banco (probablemente
+   su propio nº de movimiento). El número de documento real (el que ya
+   extrae `PARSE_DEV_LINES` desde dentro del bloque de 24 dígitos que
+   reescribe `ZFI_R_ECOFI_SPLIT`) aparece en el campo `SGTXT` (el
+   "concepto"), no en `BELNR`.
+
+**Mapeo final** (implementado en `PARSE_DEV_LINES`/`FILTER_DUPLICATES`):
+
+| Campo de la clave | Origen |
+|---|---|
+| `BUKRS` | Real, `ls_body-bukrs` (offset 2) |
+| `GJAHR` | Real, `ls_body-gjahr` (offset 74) |
+| `APUNT` | Real, `ls_body-apunt` (offset 256) — sale constante en las pruebas vistas, pero se lee del fichero igualmente, no se fija a mano |
+| `ZUONR` | Real, `ls_body-zuonr` (offset 46) — será siempre `ANUP` porque el `_DEV` solo contiene extornos, pero se lee del fichero, no se hardcodea |
+| `BELNR` | **No** el nativo del offset 62 — es `docnum`, el nº de documento SAP de 12 dígitos que ya extraía `PARSE_DEV_LINES` desde `SGTXT` |
+
+### Implementación
+
+- `PARSE_DEV_LINES` parsea también `ls_body` (misma estructura que el
+  programa de pagos) y añade `bukrs`/`gjahr`/`apunt`/`zuonr` a cada
+  `ty_s_item`, junto a `docnum`/`importe_cent` que ya calculaba.
+- Nuevo método privado `FILTER_DUPLICATES` (llamado en `PROCESS_DEV_FILE`
+  y en `EXECUTE_UPLOAD`, justo después de `PARSE_DEV_LINES`): mismo
+  mecanismo de dos pasos que `LCL_GESTION_COBROS_TRANSF` (duplicado en el
+  propio fichero vía `line_exists`, duplicado ya persistido vía otro
+  `line_exists`), mensajes nuevos de `ZFI_MC_001` (hay que darlos de
+  alta en `SE91`, `&1` = documento, `&2` = fichero):
+  - `184` (I): `Posición &1 duplicada en el propio fichero &2, se descarta`
+  - `185` (I): `Posición &1 ya registrada de un fichero anterior, se descarta`
+- **Rendimiento**: a diferencia de `LCL_GESTION_COBROS_TRANSF` (que hace
+  un `SELECT SINGLE COUNT( * )` **por línea**, dentro del bucle),
+  `FILTER_DUPLICATES` trae **una sola vez, antes del bucle**, solo los 5
+  campos de la clave (no `SELECT *`, que traería también `SGTXT` de 150
+  caracteres, fechas, importe...) de los registros de `ZFI_T_R3SEG_DEV`
+  cuyo `BELNR` coincida con algún documento del fichero — y comprueba la
+  clave completa en memoria con `line_exists`. Evita un acceso a BD por
+  cada posición (ficheros de 72 posiciones ya vistos en pruebas
+  anteriores).
+  - **`WHERE belnr IN lt_r_belnr` (rango), no `FOR ALL ENTRIES`**: mismo
+    resultado sin sus dos inconvenientes — un rango vacío no trae nada
+    (`FOR ALL ENTRIES` con la tabla conductora vacía trae **toda** la
+    tabla si no se guarda aparte con un `IF`), y no depende de cómo arme
+    el motor la condición interna a partir de una tabla de filas
+    completas.
+  - **El `LOOP` para deduplicar antes de construir el rango sí hace
+    falta** — no vale construirlo directamente a partir de `it_items`:
+    tanto un rango como `FOR ALL ENTRIES` deduplican por el campo usado
+    en el `WHERE` (`docnum`), que es justo lo que interesa; si se
+    dedujera por fila completa de `it_items` (que además trae importe y
+    el resto de la clave), dos posiciones con el mismo `docnum` pero
+    distinto importe (un extorno partido en dos líneas contra el mismo
+    documento) no se tratarían como equivalentes a este efecto.
+- **Bug real corregido** (probado con la tabla `ZFI_T_R3SEG_DEV` vacía y
+  aun así todas las posiciones salían como duplicadas): la consulta de
+  duplicado contra BD, copiada tal cual del programa de pagos
+  (`SELECT SINGLE COUNT( * ) FROM zfi_t_r3seg_dev WHERE ...` sin
+  `INTO`), no tiene dónde dejar el resultado del conteo — comprobar
+  después `sy-dbcnt <> 0` es una apuesta: venía con un `1` residual de
+  la operación de BD anterior en el mismo método
+  (`go_file_log->create_log`), no con el conteo real (`0`, tabla
+  vacía). Fix: `INTO lv_count` explícito + `IF lv_count <> 0` (ver
+  `CLAUDE.md`).
+- **Segundo bug real corregido** (el mensaje "todas las posiciones ya
+  estaban registradas" seguía saliendo incluso después del fix
+  anterior): `PROCESS_DEV_FILE`/`EXECUTE_UPLOAD` llaman a
+  `FILTER_DUPLICATES` reutilizando la misma variable `lt_items` como
+  `it_items` (entrada) y `et_items` (salida) — patrón habitual para
+  "filtrar en sitio". Como los parámetros de un método son por
+  referencia por defecto (sin `VALUE()`), las dos quedaban apuntando al
+  mismo bloque de memoria, y el `CLEAR: et_items, et_r3seg_dev.` al
+  principio del método **borraba también `it_items` antes de que el
+  `LOOP AT it_items` leyera nada** — el bucle se ejecutaba 0 veces, sin
+  ningún duplicado real de por medio. Fix: `EXPORTING VALUE(et_items)
+  VALUE(et_r3seg_dev)` en la firma del método (paso por valor, copia
+  propia — ver `CLAUDE.md`).
+- El `MODIFY zfi_t_r3seg_dev FROM TABLE lt_r3seg_dev` solo se ejecuta si
+  `create_lot` termina con `ev_ok = abap_true` — mismo criterio que el
+  programa de pagos, para no marcar como "ya procesadas" posiciones de
+  un fichero que al final no generó ningún lote.
+- Si tras filtrar duplicados no queda ninguna posición (todas eran
+  repetidas), se considera `PROCESADO` (no `ERROR`) y se mueve a la
+  carpeta de procesados — igual que hace `LCL_GESTION_COBROS_TRANSF`
+  cuando todos los pagos de un fichero ya existían en el sistema.
+
+**Pendiente**: crear `ZFI_T_R3SEG_DEV` en `SE11` (copia de
+`ZFI_T_R3SEG`), dar de alta los mensajes `184`/`185` en `SE91`, y probar
+contra un `_DEV` real con posiciones repetidas (dentro del mismo fichero
+y contra un fichero ya procesado antes).
+
+## El fichero SIEMPRE se mueve, se procese bien o mal
+
+Pedido por Eva (no viene del DF): a veces el fichero de entrada no se
+movía de la carpeta de entrada, dejándolo abandonado ahí y provocando
+que se reintentara (y volviera a fallar) en cada ejecución siguiente del
+modo Server. Revisando `PROCESS_DEV_FILE` y `EXECUTE_SERVER` se
+encontraron dos huecos reales donde el código escribía un mensaje y
+pasaba al siguiente fichero **sin llamar a `transport_files`**:
+
+1. `read_server_file` devuelve vacío (fichero no legible, o vacío de
+   verdad) — en `EXECUTE_SERVER`, antes de aislar `PROCESS_DEV_FILE`.
+2. `go_file_log->create_log` lanza `ZFI_CL_CX` (fallo registrando en
+   `ZFI_T_FILE_LOG`) — en `PROCESS_DEV_FILE`, el primer paso de todos.
+
+En el caso 2 en concreto, `transport_files` no podía llamarse aunque se
+quisiera: su parámetro era `IS_FILE_LOG TYPE ZFI_T_FILE_LOG` (usaba solo
+el campo `FILE_NAME`), y ese registro es precisamente el que había
+fallado, así que no había ninguna fila que pasarle. Se cambia el
+parámetro a `IV_FILENAME TYPE STRING` (el nombre de fichero solo, que sí
+está disponible siempre) para desacoplar "mover el fichero" de "haberlo
+podido registrar en `ZFI_T_FILE_LOG`", y se añaden las dos llamadas que
+faltaban (a `ERROR_PATH` en ambos casos). Ahora los 4 desenlaces posibles
+de un fichero de entrada (no legible, sin líneas de extorno, lote creado
+con éxito, lote fallido) mueven el fichero — a `RUTA_PROC_DEV` el único
+caso de éxito, a `error/` los otros tres.
+
+Efecto colateral del cambio de tipo del parámetro: el mensaje `014`
+partía `IS_FILE_LOG-FILE_NAME` (campo de longitud fija) en dos trozos de
+50 caracteres con acceso posicional directo (`FILE_NAME(50)`/
+`FILE_NAME+50(50)`), seguro porque un campo de longitud fija siempre
+tiene esa longitud (relleno de espacios si hace falta). Con
+`IV_FILENAME TYPE STRING` ese mismo acceso posicional revienta en
+tiempo de ejecución si la cadena es más corta que el offset pedido — se
+protege con un `IF STRLEN( IV_FILENAME ) > 50` antes de partirla.
+
+## Enfoque descartado: `RFKKKA00`/multicash (no usar, referencia solamente)
+
+Se dejó el trabajo hecho documentado por si resulta útil más adelante (p.ej.
+si `FP09` resultara no ser viable), pero **no es el camino a seguir** salvo
+que se decida lo contrario explícitamente.
+
+Generaba a mano los ficheros multicash `AUSZUG`/`UMSATZ` que espera `RFKKKA00`
+(el original `ZFI_R_DEVOLUCIONES` los genera con `RFKKSEPA_DD_RJCT` a partir
+de un XML SEPA real, que aquí no aplica porque el `_DEV` no es XML). El
+formato se dedujo de 6 ejemplos reales (`ZFI_T_FILE_LOG`, 4 bancos distintos)
+sacados de Integración — ver el detalle campo a campo en el historial de git
+de este fichero si hiciera falta recuperarlo. Quedaban varios campos sin
+resolver (cuenta bancaria de cobro, BIC/IBAN/motivo del deudor, número de
+secuencia del extracto, encaje de la nomenclatura `AAMMDDCDI11x` con el
+límite de 6 caracteres de `RUNIDBS_KK`) — nunca se llegó a confirmar contra
+una ejecución real de `RFKKKA00`.
+
+## Premisas / Dependencias
+
+- Depende de que exista el fichero `_DEV` (RU_01, `zfi_r_ecofi_split`), con el
+  formato de línea ya validado contra 2 ficheros ECOFI reales (ver su propio
+  `docs/DF_resumen.md`). El parseo de cada línea (nº de documento SAP +
+  importe) ya está hecho y sirve igual con el enfoque `FP09` — es
+  independiente de cómo se cree el lote después.
+- `ZFI_T_FILE_LOG`, `zfi_cl_update_file_log`, `zxx_cl_msg_logs`,
+  `zxx_cl_generic_on_memory`, `zxx_cl_file_utils` se reutilizan tal cual del
+  programa original `ZFI_R_DEVOLUCIONES` (mismas clases ya existentes en el
+  sistema) — siguen aplicando para la traza en `ZFI_T_FILE_LOG` y el
+  escaneo de ficheros, independientemente del motor de creación del lote.

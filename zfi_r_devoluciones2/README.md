@@ -1,0 +1,178 @@
+# ZFI_R_DEVOLUCIONES2 — Cierre y contabilización del lote de devolución de extornos (CDI_11)
+
+**Estado: reescrito sobre `FKK_RLS_CLOSE`/`FKK_RLS_LOCK`/`FKK_RLS_HDR_STARS_SET`/`FKK_RLS_POST_LOT`, circuito probado en DES de principio a fin — incluido el detalle de error tipo FP09, confirmado en real.**
+Ya no es la copia de `ZFI_R_DEVOLUCIONES` — igual que pasó con el desarrollo 2
+(`zfi_r_devoluciones_crea/`), la sugerencia original de EVA de reutilizar el
+motor `RFKKKA00` resultó ser una lectura incorrecta del DF. Depurando `FP09`
+sobre lotes reales creados por `ZFI_R_DEVOLUCIONES_CREA`, se confirmó que
+"Cerrar"/"Contabilizar" llaman directamente a `FKK_RLS_CLOSE`/
+`FKK_RLS_POST_LOT` (grupo de función `FKR2`, el mismo que usa el desarrollo
+2) — ver `docs/DF_resumen.md` para las firmas exactas y las pruebas reales.
+
+Es uno de los 3 desarrollos del proyecto CDI_11:
+1. **División del fichero ECOFI** en transferencias/extornos → [`zfi_r_ecofi_split/`](../zfi_r_ecofi_split/README.md)
+2. **Creación del lote de devoluciones** → [`zfi_r_devoluciones_crea/`](../zfi_r_devoluciones_crea/README.md), ya reescrito y probado con éxito.
+3. **Cierre y contabilización del lote** → este programa (`ZFI_R_DEVOLUCIONES2`).
+
+**Además**, este mismo RU_03 está expuesto también como servicio RFC →
+[`zfi_fm_devoluciones2/`](../zfi_fm_devoluciones2/README.md) (ejecuta
+este report con `SUBMIT`, sin duplicar su lógica — ver ese README para
+el porqué de mantener las dos formas).
+
+## Cómo funciona
+
+El DF no define ningún mecanismo automático para que este programa se
+entere de qué lotes hay pendientes de cerrar/contabilizar — el lote (o
+lotes) a tratar se indica **a mano** en la pantalla de selección
+(`S_KEYR1`, obligatorio), igual que se haría entrando a `FP09` con el nº
+de lote. Este programa no lee ningún fichero ni consulta
+`ZFI_T_FILE_LOG` (una versión anterior lo hacía — descubrimiento
+automático vía esa tabla — pero era una invención sin base en el DF,
+descartada).
+
+Por cada `KEYR1` indicado que exista realmente en `DFKKRK`:
+
+1. Lee `DFKKRK-STARS` del lote (estado real en FI-CA).
+2. Si ya está contabilizado del todo (`STARS = 5`) → no se toca.
+3. Si está abierto (`STARS` en blanco) → `FKK_RLS_CLOSE`.
+4. Cualquier otro caso (recién cerrado en el paso anterior, ya estaba
+   cerrado sin contabilizar, o cualquier estado intermedio/con
+   incidencias) → `FKK_RLS_LOCK`/`FKK_RLS_UNLOCK`, `FKK_RLS_HDR_STARS_SET`
+   si `STARS < '2'` (imprescindible, ver más abajo) y luego
+   `FKK_RLS_POST_LOT` — **no se filtra por `STARS` antes de intentar
+   contabilizar**, se deja que el propio FM decida si el lote es válido
+   y devuelva su error estándar si no lo es (así ese error llega también
+   al detalle capturado tipo FP09, ver más abajo) — **sin reintento ni
+   corrección automática** en ningún caso.
+
+**Error falso "ya ha sido contabilizada" — causa real encontrada y
+corregida, confirmado con prueba real de punta a punta (28/09/2026)**:
+un lote que `FP09N` contabilizaba bien podía dar en
+nuestro programa el error falso *"La devolución ya ha sido
+contabilizada"* — reproducible con nuestro propio programa (dos
+ejecuciones seguidas, mismo error las dos veces), pero desaparecía si
+antes se había intentado una vez por `FP09N`. Se probaron `FKK_RLS_LOCK`
+solo y `FKK_RLS_LOCK`+`FKK_RLS_UNLOCK` (replicando el orden de `FP09N`)
+— **ninguno de los dos bastaba**, confirmado por prueba real.
+
+La causa real se encontró depurando **dentro** de `FKK_RLS_POST_LOT` →
+`FKK_RLS_USABLE` (código estándar real, no de memoria): esta última FM
+solo considera un lote utilizable para contabilizar si
+`DFKKRK-STARS` está en `'2'`/`'3'`/`'4'` (`IF I_DFKKRK-STARS CA '234'`).
+Con `STARS = '1'` (recién cerrado, sin contabilizar todavía) devuelve la
+excepción `CLOSED` ("Stapel ist zwar geschlossen, aber nicht geplant" =
+cerrado pero no planificado) — y el texto *"ya ha sido contabilizada"*
+que se ve en pantalla resultó ser un **residuo de `SY-MSGNO`** de una
+comprobación anterior sin relación con la causa real (confirmado
+depurando paso a paso, ver `docs/DF_resumen.md`), no un reflejo fiel del
+motivo del fallo.
+
+El propio comentario del código estándar de `FKK_RLS_USABLE` da la
+solución: *"if you want to do online posting set stars to the
+corresponding value via `FKK_RLS_HDR_STARS_SET`"* — exactamente lo que
+hace `FP09N` (`IF stars < 2. FKK_RLS_HDR_STARS_SET. ENDIF.`) y nosotros
+no hacíamos. Añadido: si `STARS < '2'`, se llama a
+`FKK_RLS_HDR_STARS_SET` con `I_XPLANNED = 'X'` (interfaz real confirmada
+por `SE37`: pone `STARS = '2'`, "planificado para contabilizar") justo
+antes de `FKK_RLS_POST_LOT`. Se mantienen también `FKK_RLS_LOCK`/
+`FKK_RLS_UNLOCK` (replican la estructura real de `FP09N`, aunque por sí
+solos no arreglaban nada). **Confirmado con un lote nuevo, de principio
+a fin: contabiliza correctamente, sin el error falso.**
+
+Parámetros de selección: **`S_KEYR1`** (obligatorio — nº de lote(s) a
+tratar) y **`P_SIMU`** (checkbox — si se marca, el programa solo escribe
+el `STARS` actual de cada lote indicado, sin cerrar ni contabilizar nada
+de verdad). Además, **`P_RFC`** (`NO-DISPLAY`, no aparece en pantalla) —
+solo lo rellena `ZFI_FM_DEVOLUCIONES2` al llamar por `SUBMIT`, ver
+"Detalle de error tipo FP09" más abajo.
+
+## Detalle de error tipo FP09 (para `ZFI_FM_DEVOLUCIONES2`)
+
+Cuando `FKK_RLS_POST_LOT` falla, este programa captura el **mismo
+detalle de mensajes por documento que muestra la FP09** (el popup que
+sale al pulsar "Contabilizar" cuando hay errores, ej. *"El documento
+484000019565 no existe. Corrija la entrada"*) — sin tocar ni una línea
+de código estándar ni reconstruir la validación por nuestra cuenta.
+
+Técnica (confirmada por depuración real, ver `docs/DF_resumen.md`):
+`FKK_RLS_POST_LOT` llama internamente al FM público `FKK_TRACE_INIT`,
+que crea un objeto `LCL_MESSENGER` (clase local del programa estándar
+`SAPLFKKTRACE`) donde se van acumulando todos los mensajes de
+validación de cada documento. Ese objeto (`GDBG`) es invisible desde
+fuera de `SAPLFKKTRACE`, pero ese mismo programa tiene un FORM público,
+`RETRIEVE_DATA`, que sí podemos invocar desde fuera
+(`PERFORM retrieve_data IN PROGRAM saplfkktrace USING ...`, dentro de la
+misma sesión interna, justo después de `FKK_RLS_POST_LOT`) y que vuelca
+el filtro de mensajes que le pidamos (aquí, solo errores) a la tabla
+global `T_MESSENGERDATA` — de ahí se lee con `ASSIGN` dinámico
+(`'(SAPLFKKTRACE)T_MESSENGERDATA[]'`, el `[]` porque es una tabla con
+línea de cabecera) y, línea a línea, se reconstruye el texto final con
+`MESSAGE ID ... TYPE ... NUMBER ... WITH ... INTO`, usando el
+`ID`/`TY`/`NR`/`V1-V4` de cada línea (`TYPE dfkktracep`, estructura DDIC
+real, no un tipo local invisible).
+
+El resultado (`KEYR1` + texto) se muestra también **en pantalla, solo en
+ejecución manual** (`show_log_msg`, con `WRITE` directo — son mensajes
+dinámicos de FI-CA reconstruidos en tiempo real, no un número de mensaje
+fijo de `ZFI_MC_001`, así que no se puede montar con `append_messages`) y,
+**solo si la llamada viene de `ZFI_FM_DEVOLUCIONES2`**, se deja además
+en memoria ABAP (`MEMORY ID 'ZFI_DEVOL2_ERRORS'`) al terminar `EXECUTE`
+para que esa RFC lo importe después de su `SUBMIT ... AND RETURN` (ver
+ese README) y lo añada a `ES_ERROR`.
+
+Esa condición se resuelve con un parámetro de pantalla **`P_RFC`**
+(`NO-DISPLAY`, no sale en la pantalla de selección): la RFC rellena esa
+fila a `'X'` en su tabla de selección del `SUBMIT`; en una ejecución
+manual (SE38) queda en blanco y no se exporta nada. (Se probó primero
+con `SY-CALLD`, pensado para lo mismo, pero se descartó: el propio
+"Ejecutar" de SE38 también deja `SY-CALLD = 'X'`, así que no distinguía
+lo que necesitábamos.)
+
+**Los `WRITE` de `show_log_msg` se saltan cuando `P_RFC = 'X'`**: cuando
+llama la RFC nadie va a leer nunca esa lista (llamada remota, sin
+pantalla) — no hace daño generarla (`SUBMIT ... AND RETURN` nunca la
+muestra al que llama), pero es trabajo de más sin ningún consumidor, así
+que se reutiliza el mismo flag para no generarla.
+
+## Mensajes (`ZFI_MC_001`)
+
+Igual que `ZFI_R_DEVOLUCIONES`/`ZFI_R_DEVOLUCIONES_CREA`, los mensajes van
+por `zxx_cl_msg_logs` con la clase `ZFI_MC_001` (dados de alta en `SE91`),
+no `WRITE` con texto suelto:
+
+| Nº | Tipo | Texto |
+|---|---|---|
+| `178` | E | Ningún lote indicado existe en DFKKRK |
+| `179` | I | Lote &1: STARS=&2 (simulación, no se toca nada) |
+| `180` | E | Lote &1: error en &2 (&3) |
+| `181` | S | Lote &1: cerrado y contabilizado |
+| `182` | S | Lote &1: ya estaba contabilizado, nada que hacer |
+
+## Contenido del repositorio
+
+```
+src/
+  ZFI_R_DEVOLUCIONES2.abap        Programa principal (REPORT)
+  ZFI_R_DEVOLUCIONES2_TOP.abap    Include TOP (TABLES dfkkrk, para S_KEYR1)
+  ZFI_R_DEVOLUCIONES2_EVE.abap    Include EVE (S_KEYR1 + P_SIMU)
+  ZFI_R_DEVOLUCIONES2_CLS.abap    Include CLS (clase lcl_devoluciones2) — sobre FKK_RLS_CLOSE/FKK_RLS_LOCK/FKK_RLS_POST_LOT
+docs/
+  DF_resumen.md                   Resumen del Diseño Funcional + cadena real de FMs confirmada por depuración
+```
+
+## Pendiente
+
+- **Detalle de error tipo FP09 confirmado en real** (21/09/2026, lote
+  `260921CDI110`): la RFC devolvió el desglose real de FI-CA
+  (`ES_ERROR-DESCRIPTION`) igual que lo haría `FP09N` a mano — la técnica
+  (`PERFORM retrieve_data` + `ASSIGN` dinámico + `MESSAGE...INTO`) queda
+  validada de punta a punta, no solo en debug aislado.
+- **Error falso "ya ha sido contabilizada" — resuelto y confirmado en
+  real (28/09/2026)**: `FKK_RLS_HDR_STARS_SET` (`I_XPLANNED = 'X'`)
+  añadido antes de `FKK_RLS_POST_LOT` cuando `STARS < '2'` — causa real
+  confirmada depurando dentro de `FKK_RLS_POST_LOT` → `FKK_RLS_USABLE`
+  (ver "Detalle de error tipo FP09" más arriba y `docs/DF_resumen.md`
+  para la investigación completa, incluida la pista falsa de
+  `FKK_RLS_LOCK`/`FKK_RLS_UNLOCK`, que por sí solos no bastaban).
+  **Probado con un lote nuevo de principio a fin: contabiliza bien.**
+- Alta del objeto en el sistema de transporte correspondiente al proyecto.
