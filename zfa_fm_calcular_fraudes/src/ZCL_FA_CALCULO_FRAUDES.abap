@@ -108,6 +108,10 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
       " Conceptos que, además de energía y potencia, forman la base del IEE
       " en el cálculo original (p. ej. EBONSO, financiación bono social)
       gc_tipo_base_iee      TYPE char2 VALUE 'BI',
+      " Líneas informativas que se copian tal cual del cálculo original
+      " (p. ej. EPROD/GPROD: la derivación CO-PA de ZFI_FM_ISU_SAMPLE_TE760
+      " saca de ahí el producto y sin ella no se puede grabar)
+      gc_tipo_informativa   TYPE char2 VALUE 'IN',
 
       " Conceptos fijos indicados en el DF
       gc_belzart_erepos     TYPE dberchz1-belzart VALUE 'EREPOS',
@@ -544,8 +548,10 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
 
   METHOD facturar_importe_cero.
 
-    DATA: ls_linea TYPE ty_linea,
-          lt_linea TYPE ty_t_linea.
+    DATA: ls_linea    TYPE ty_linea,
+          lt_linea    TYPE ty_t_linea,
+          lt_original TYPE ty_t_linea,
+          lv_belnr    TYPE erch-belnr.
 
     " Mismo tratamiento que las reposiciones: se contabiliza el consumo
     " con EREPOS/GREPOS e importe 0
@@ -564,6 +570,23 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     ls_linea-bis      = ms_entrada-fecha_hasta.
     ls_linea-cantidad = ms_entrada-consumo_total.
     APPEND ls_linea TO lt_linea.
+
+    " Las líneas informativas (producto, etc.) se toman del último cálculo
+    " del contrato
+    SELECT belnr
+      FROM erch
+      WHERE vertrag    = @ms_entrada-contrato
+        AND stornodat  = '00000000'
+        AND simulation = @space
+      ORDER BY endabrpe DESCENDING
+      INTO @lv_belnr
+      UP TO 1 ROWS.
+    ENDSELECT.
+    IF lv_belnr IS NOT INITIAL.
+      lt_original = leer_lineas_calculo( lv_belnr ).
+      lt_original = lineas_tipo( it_lineas = lt_original iv_tipo = gc_tipo_informativa ).
+      APPEND LINES OF lt_original TO lt_linea.
+    ENDIF.
 
     rs_resultado-facturas = crear_calculo_manual( lt_linea ).
 
@@ -775,6 +798,10 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
                             iv_consumo  = lv_consumo ).
     APPEND ls_iee TO rt_lineas.
 
+    " Líneas informativas del original (producto, etc.)
+    lt_aux = lineas_tipo( it_lineas = it_original iv_tipo = gc_tipo_informativa ).
+    APPEND LINES OF lt_aux TO rt_lineas.
+
     " Potencia mayor a importe 0, solo para que pinte bien la factura
     lt_aux = potencia_mayor( it_original ).
     APPEND LINES OF lt_aux TO rt_lineas.
@@ -828,6 +855,10 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     ls_linea-precio   = ls_hidrocarb-precio.
     ls_linea-importe  = lv_consumo * ls_hidrocarb-precio.
     APPEND ls_linea TO rt_lineas.
+
+    " Líneas informativas del original (producto, etc.)
+    lt_aux = lineas_tipo( it_lineas = it_original iv_tipo = gc_tipo_informativa ).
+    APPEND LINES OF lt_aux TO rt_lineas.
 
     " Conceptos 1923 / 1924 de la factura ATR -> PGINTR / PGIRAP
     lt_atr = leer_conceptos_atr( ).

@@ -49,6 +49,11 @@ START-OF-SELECTION.
                      ( belzart = 'EPOTP5' )
                      ( belzart = 'EPOTP6' ) ).
 
+  " Líneas informativas que se copian tal cual (producto comercial: lo
+  " necesita la derivación CO-PA al grabar)
+  APPEND VALUE #( sparte = p_luz belzart = 'EPROD' tipo = 'IN' ) TO lt_conc.
+  APPEND VALUE #( sparte = p_gas belzart = 'GPROD' tipo = 'IN' ) TO lt_conc.
+
   " Resto de la base del IEE (además de energía y potencia)
   lt_conc = VALUE #( BASE lt_conc sparte = p_luz tipo = 'BI'
                      ( belzart = 'EBONSO' ) ).

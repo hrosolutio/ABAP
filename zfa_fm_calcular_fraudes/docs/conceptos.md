@@ -9,6 +9,7 @@ Sacada de los textos de `TE835T`. La carga la hace el report
 | `TV` | Término variable | — | `GTVARI` |
 | `PO` | Potencia (solo para la línea de potencia mayor a importe 0) | `EPOTP1`-`EPOTP6` | — |
 | `DE` | Descuento sobre energía / TV | `EDACTS`, `EDEMPC` | `GDTVAR`, `GDEMPV`, `GDEMPC` |
+| `IN` | Informativa: se copia tal cual del original. Necesaria para la derivación CO-PA al grabar (`ZFI_FM_ISU_SAMPLE_TE760` lee el producto de `ERCHZ-ZTEXT`) | `EPROD` | `GPROD` |
 | `BI` | Resto de la base del IEE (además de energía y potencia) | `EBONSO` | — |
 | `IE` | IEE (%), `BELZART_REL` = su mínimo | `EIEE`/`EIER`/`EIEX`/`EIED`/`EIEM` + región | — |
 | `IM` | Mínimo comunitario, `BELZART_REL` = su IEE | `EMIC`/`EMIR`/`EMIX`/`EMID`/`EMIM` + región | — |
