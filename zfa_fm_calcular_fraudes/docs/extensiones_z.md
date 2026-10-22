@@ -10,6 +10,32 @@ primero.
 | `ZFA_FM_ISU_SAMPLE_R400` | Al **facturar** (evento R400, EA19 o masiva) | Saca la clase de documento de `t_bill_doc-erch-zserie_nod(1)`: `F` → `FE` (facturación normal), `R` → `RE`, `A` → `AE`, `S` → `SE`. Exporta la clase a memoria (`ZFA_BLART`, `ZFA_BLART1`) para el evento 1190 | `ERCH-ZSERIE_NOD` relleno en la cabecera del cálculo (hoy `FE`, a confirmar con Aleix) | "ERROR R400 - Campo ZSERIE_NOD Inválido en la cabecera …" (`ZFA_MC_001/002`) |
 | Evento 1190 (FI-CA) | Al contabilizar la factura | Lee `ZFA_BLART`/`ZFA_BLART1` de memoria (los deja el R400) | Nada directo: depende de que el R400 haya ido bien | — |
 
+## La serie: ZXBI1U01 (`EXIT_SAPLEA01_001`, ampliación `EBIA0001`)
+
+Exit al final del cálculo, también del manual. Es la que manda en los
+campos Z de `ERCH`:
+
+1. **Funcionalidad 1:** copia siempre `X_OBJ-CUST` a los campos Z de
+   `ERCH`. En un cálculo manual `CUST` va vacío, así que **pisa lo que le
+   pasemos** en `BILL_DOC-ERCH`. Por eso los 550000002613/2614 salieron
+   sin serie.
+2. **Funcionalidad 2:** solo con `sy-tcode` = `EA16`/`EA17`. Un popup pide
+   `ORIGDOC` (31-43) y la factura origen, y calcula:
+   - serie: `40` fraude, `41` avería, `42` permuta → `F*`; 31 → `S*`;
+     32 → `A*`; 33 → `R*`; 34 → `F*`
+   - segunda letra según el `KOFIZ`: DP → E, DC → C, DE → I, DM → M
+   - valida `KOFIZ` frente a la región de la dirección de suministro
+     (`ZXX_FM_DIRECCION_SUMINISTRO`)
+   - segundo popup con la fecha de operación (por defecto, hoy)
+3. **Funcionalidad 3:** tabla passthrough `ZFA_T_PASSTHROGH`. No nos afecta.
+
+**Solución:** la RFC calcula `ORIGDOC`, `ZSERIE_NOD` y `ZFECHA_OPER_CALC`
+con la misma lógica y los deja en memoria (`ZFA_FRAUDES_ERCH`) alrededor de
+`ISU_S_MANUBILL_CREATE`. Un bloque nuevo en la exit (funcionalidad 1B,
+`src/ZXBI1U01_bloque_fraudes.abap`) los recoge después de la
+funcionalidad 1. Sin nada en memoria no hace nada, así que el resto de
+procesos no cambia.
+
 ## Customizing estándar que también hay que tener en cuenta
 
 | Qué | Clave | Qué nos exige | Error si falta |
@@ -21,11 +47,12 @@ primero.
 
 | Campo | Valores vistos | Uso hoy |
 |---|---|---|
-| `ZSERIE_NOD` | `SE`, `AE`, `FE`, `RE` | Lo rellenamos con `FE` (`gc_serie_nod`) |
-| `ZRECT_FORZADO` | — | No se rellena; preguntar a Aleix |
-| `ZORIG_FACTURA` | — | No se rellena; preguntar a Aleix |
-| `ZFECHA_OPER_CALC` | — | No se rellena; preguntar a Aleix |
-| `ZORIG_FECHA_OPER` | — | No se rellena; preguntar a Aleix |
+| `ZSERIE_NOD` | `SE`, `AE`, `FE`, `RE` | `F` + letra del KOFIZ, vía memoria y exit |
+| `ZRECT_FORZADO` | — | Vacío: no es rectificativa |
+| `ZORIG_FACTURA` | — | Vacío |
+| `ZFECHA_OPER_CALC` | — | Hoy, como propone el popup de la EA16 |
+| `ZORIG_FECHA_OPER` | — | Vacío |
+| `ORIGDOC` (estándar) | 31-34, 40-42 | `40` fraude, `41` avería (tipo ATR 11) |
 
 ## Truco para ver el error real
 

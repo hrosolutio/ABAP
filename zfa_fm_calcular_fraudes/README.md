@@ -55,6 +55,7 @@ src/
   ZCL_FA_CALCULO_FRAUDES.abap                Clase con toda la lógica
   ZCL_FA_CALCULO_FRAUDES.testclasses.abap    ABAP Unit de la parte de cálculo
   ZCX_FA_FRAUDES.abap                        Excepción con código y descripción de resultado
+  ZXBI1U01_bloque_fraudes.abap               Bloque a añadir en la exit ZXBI1U01 (campos Z de cabecera)
 docs/
   DF_resumen.md                              Resumen del Diseño Funcional
   conceptos.md                               Clasificación de conceptos (ZFA_FRAUD_CONC)
@@ -123,6 +124,7 @@ docs/
 | `2002` | KO | Falta un dato para calcular (precio, concepto, factor IEE…) |
 | `2003` | KO | Error creando el cálculo manual |
 | `2005` | KO | Contrato bloqueado por otro proceso (`FOREIGN_LOCK`) |
+| `2006` | KO | `KOFIZ` del contrato no válido para la serie del documento oficial |
 
 Los códigos son una propuesta: **confirmarlos con Aleix**, que la IA tiene
 que saber interpretarlos.
@@ -202,15 +204,18 @@ que saber interpretarlos.
      `registrar_log`. Solo hace `COMMIT` interno si `ERCH-NINVOICE` está
      marcado, que no es nuestro caso.
    - Devuelve el `BELNR` en `Y_NEW_BILL_DOC-ERCH-BELNR`.
-   - Cabecera de cálculo manual como los de EA20: `ABRVORG 06`,
-     `HVORG 0300`, `BELEGART MN`, `BERGRUND 01`, `KOFIZ` del contrato,
-     porción y unidad de lectura del último cálculo y **`ZSERIE_NOD = FE`**.
-     Sin serie no factura: el evento R400 (`ZFA_FM_ISU_SAMPLE_R400`) saca
-     la clase de documento de su primera letra (F → FE normal, R → RE,
-     A → AE, S → SE) y si no casa da "ERROR R400 - Campo ZSERIE_NOD
-     Inválido".
+   - Cabecera de cálculo manual como los de la EA16: `ABRVORG 06`,
+     `HVORG 0300`, `BELEGART MN`, `BERGRUND 01`, `KOFIZ` del contrato y
+     porción y unidad de lectura del último cálculo.
+   - Campos Z: **`ORIGDOC` 40/41 y `ZSERIE_NOD` = F + letra del KOFIZ**
+     (FE en península). Sin serie no factura: el evento R400
+     (`ZFA_FM_ISU_SAMPLE_R400`) saca la clase de documento de su primera
+     letra y si no casa da "ERROR R400 - Campo ZSERIE_NOD Inválido".
+   - La exit `ZXBI1U01` pisa esos campos, así que van por memoria
+     (`ZFA_FRAUDES_ERCH`) y un bloque nuevo en la exit los recoge. Ver
+     [`docs/extensiones_z.md`](docs/extensiones_z.md).
    - Las líneas informativas (`EPROD`/`GPROD`) van las primeras, como en
-     EA20. La derivación CO-PA Z (`ZFI_FM_ISU_SAMPLE_TE760`) necesita el
+     los cálculos manuales hechos a mano. La derivación CO-PA Z (`ZFI_FM_ISU_SAMPLE_TE760`) necesita el
      producto o no deja grabar.
 10. **Transacción**: si algo falla se hace `ROLLBACK`. Siempre se graba una
     línea en `ZFA_FRAUD_LOG` y se hace el `COMMIT` al final.
@@ -310,8 +315,10 @@ activación real en el sistema es la que vale.
 - [ ] Si un cálculo manual de fraude ya hecho (ABRVORG 06) en el mismo
       periodo tiene que bloquear un segundo expediente (hoy da 0109 por
       varios cálculos) o hay que excluirlo de la búsqueda del original.
-- [ ] Serie `ZSERIE_NOD` de las facturas de fraude/avería en luz y gas
-      (hoy `FE`) y si hay que rellenar `ZRECT_FORZADO`, `ZORIG_FACTURA`…
+- [ ] `ORIGDOC`: ¿tipo ATR 06 = fraude (40) y 11 = avería (41)? ¿Cuándo
+      es permuta (42)?
+- [ ] OK a tocar la exit `ZXBI1U01` (bloque 1B, ver
+      `docs/extensiones_z.md`).
 - [ ] Códigos de resultado y valores de `EV_MODO_FACTURACION`.
 - [ ] Mínimo del IEE: el DF dice 1 €/MWh; hay casos de 0,5 €/MWh.
 - [ ] Factor IEE cuando el cálculo original se facturó con el mínimo.

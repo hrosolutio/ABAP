@@ -142,11 +142,16 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
       gc_hvorg_manual       TYPE erch-hvorg    VALUE '0300',
       gc_belegart_manual    TYPE erch-belegart VALUE 'MN',
       gc_bergrund_manual    TYPE erch-bergrund VALUE '01',
-      " Serie del documento oficial. El evento R400 (ZFA_FM_ISU_SAMPLE_R400)
-      " saca la clase de documento de la primera letra: F -> FE (facturación
-      " normal), R -> RE, A -> AE, S -> SE; con otra cosa no factura
-      " TODO confirmar con Aleix la serie de fraudes/averías en luz y gas
-      gc_serie_nod          TYPE erch-zserie_nod VALUE 'FE',
+      " Campos Z de la cabecera. La exit ZXBI1U01 (EXIT_SAPLEA01_001) los
+      " pisa siempre con X_OBJ-CUST, que en un cálculo manual va vacío, y
+      " solo los rellena con el popup de EA16/EA17. Sin diálogo se los
+      " pasamos por memoria (gc_memoria_erch) y la exit los recoge.
+      " ORIGDOC 40 fraude / 41 avería -> serie F + letra del KOFIZ
+      " TODO confirmar con Aleix: tipo ATR 06 = fraude y 11 = avería
+      gc_memoria_erch       TYPE char30 VALUE 'ZFA_FRAUDES_ERCH',
+      gc_origdoc_fraude     TYPE erch-origdoc VALUE '40',
+      gc_origdoc_averia     TYPE erch-origdoc VALUE '41',
+      gc_tipo_atr_averia    TYPE char2 VALUE '11',
 
       gc_modo_normal        TYPE char30 VALUE 'NORMAL',
       gc_modo_cero_descarte TYPE char30 VALUE 'IMPORTE_CERO_DESCARTE',
@@ -1095,7 +1100,11 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
           lv_codigo    TYPE char4,
           lv_mensaje   TYPE string,
           ls_factura   TYPE zfa_s_fraudes_factura,
-          lt_lineas    TYPE ty_t_linea.
+          lt_lineas    TYPE ty_t_linea,
+          lv_origdoc    TYPE erch-origdoc,
+          lv_serie_nod  TYPE erch-zserie_nod,
+          lv_fecha_oper TYPE erch-zfecha_oper_calc,
+          lv_subrc      TYPE sy-subrc.
 
     FIELD-SYMBOLS <lv_campo> TYPE any.
 
@@ -1135,7 +1144,26 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     ls_auto-bill_doc-erch-hvorg    = gc_hvorg_manual.
     ls_auto-bill_doc-erch-belegart = gc_belegart_manual.
     ls_auto-bill_doc-erch-bergrund = gc_bergrund_manual.
-    ls_auto-bill_doc-erch-zserie_nod = gc_serie_nod.
+    " Campos Z (ver gc_memoria_erch): misma lógica que el popup de la
+    " exit para un ORIGDOC 40-43: serie F + letra del KOFIZ, sin forzar
+    " y fecha de operación la de hoy
+    lv_origdoc = COND #( WHEN ms_entrada-tipo_factura_atr = gc_tipo_atr_averia
+                         THEN gc_origdoc_averia
+                         ELSE gc_origdoc_fraude ).
+    lv_serie_nod = SWITCH #( mv_kofiz
+                             WHEN 'DP' THEN 'FE'     " Península
+                             WHEN 'DC' THEN 'FC'     " Canarias
+                             WHEN 'DE' THEN 'FI'     " Ceuta
+                             WHEN 'DM' THEN 'FM' ).  " Melilla
+    IF lv_serie_nod IS INITIAL.
+      RAISE EXCEPTION TYPE zcx_fa_fraudes
+        EXPORTING codigo = '2006'
+                  texto  = |KOFIZ { mv_kofiz } del contrato no válido para la serie del documento oficial|.
+    ENDIF.
+    lv_fecha_oper = sy-datum.
+    ls_auto-bill_doc-erch-origdoc          = lv_origdoc.
+    ls_auto-bill_doc-erch-zserie_nod       = lv_serie_nod.
+    ls_auto-bill_doc-erch-zfecha_oper_calc = lv_fecha_oper.
     ls_auto-bill_doc-erch-abrdats  = sy-datum.
     ls_auto-bill_doc-erch-belegdat = sy-datum.
     ls_auto-bill_doc-erch-begabrpe = ms_entrada-fecha_desde.
@@ -1189,6 +1217,11 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
 
     " TODO confirmar la fecha clave (REA16-STICHTAG) que espera la
     " transacción para un cálculo manual
+    EXPORT origdoc          = lv_origdoc
+           zserie_nod       = lv_serie_nod
+           zfecha_oper_calc = lv_fecha_oper
+      TO MEMORY ID gc_memoria_erch.
+
     CALL FUNCTION 'ISU_S_MANUBILL_CREATE'
       EXPORTING
         x_vertrag      = ms_entrada-contrato
@@ -1205,13 +1238,15 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
         bill_lock      = 4
         error_message  = 5
         OTHERS         = 6.
+    lv_subrc = sy-subrc.
+    FREE MEMORY ID gc_memoria_erch.
 
-    IF sy-subrc <> 0 OR ls_new_doc-erch-belnr IS INITIAL.
+    IF lv_subrc <> 0 OR ls_new_doc-erch-belnr IS INITIAL.
       IF sy-msgid IS NOT INITIAL.
         MESSAGE ID sy-msgid TYPE 'E' NUMBER sy-msgno
           WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4 INTO lv_mensaje.
       ENDIF.
-      CASE sy-subrc.
+      CASE lv_subrc.
         WHEN 1.
           lv_codigo  = '2005'.
           lv_mensaje = |Contrato bloqueado por otro proceso. { lv_mensaje }|.
