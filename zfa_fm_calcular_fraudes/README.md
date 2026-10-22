@@ -307,6 +307,9 @@ activación real en el sistema es la que vale.
 - [ ] Base del IEE: antes o después de descuentos (hoy, después).
 - [ ] Cómo son los descuentos (hoy se asume que son en %).
 - [ ] Tipo real de `IV_ID_PROCESO_ATR`.
+- [ ] Si un cálculo manual de fraude ya hecho (ABRVORG 06) en el mismo
+      periodo tiene que bloquear un segundo expediente (hoy da 0109 por
+      varios cálculos) o hay que excluirlo de la búsqueda del original.
 - [ ] Serie `ZSERIE_NOD` de las facturas de fraude/avería en luz y gas
       (hoy `FE`) y si hay que rellenar `ZRECT_FORZADO`, `ZORIG_FACTURA`…
 - [ ] Códigos de resultado y valores de `EV_MODO_FACTURACION`.

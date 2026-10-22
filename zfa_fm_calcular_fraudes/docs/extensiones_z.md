@@ -33,3 +33,14 @@ primero.
 `x_no_message = 'X'`, que tapa el mensaje real con `E9 063` "Error al
 grabar". Para verlo: break dentro del estándar en la llamada de grabación,
 entrar y dar F7 hasta que salte el mensaje de verdad.
+
+## Borrar un cálculo manual de prueba
+
+Un cálculo manual **sin facturar** (sin documento de impresión) no se anula
+por EA13 ni EA15: esas dos trabajan por documento de impresión. Se **borra
+en la EA16** (cálculo manual) con el nº de documento de cálculo. Así se
+quitó el 550000002613 de QA.
+
+Hay que hacerlo antes de repetir una prueba en el mismo contrato y periodo.
+Si no, `buscar_calculo_original` también encuentra el cálculo manual y
+devuelve 0109.
