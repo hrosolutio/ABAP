@@ -1079,8 +1079,12 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
       lv_belzeile = lv_belzeile + 1.
       ls_erchz-belzeile   = lv_belzeile.
       ls_erchz-belzart    = ls_linea-belzart.
-      ls_erchz-ab         = ls_linea-ab.
-      ls_erchz-bis        = ls_linea-bis.
+      " Las líneas calculadas sin fechas propias (IEE, mínimo comunitario,
+      " conceptos ATR) van con el periodo del expediente
+      ls_erchz-ab         = COND #( WHEN ls_linea-ab IS NOT INITIAL THEN ls_linea-ab
+                                    ELSE ms_entrada-fecha_desde ).
+      ls_erchz-bis        = COND #( WHEN ls_linea-bis IS NOT INITIAL THEN ls_linea-bis
+                                    ELSE ms_entrada-fecha_hasta ).
       ls_erchz-i_abrmenge = ls_linea-cantidad.
       ls_erchz-preisbtr   = ls_linea-precio.
       ls_erchz-nettobtr   = ls_linea-importe.
