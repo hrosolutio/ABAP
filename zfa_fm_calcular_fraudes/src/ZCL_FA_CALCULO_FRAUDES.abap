@@ -142,6 +142,11 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
       gc_hvorg_manual       TYPE erch-hvorg    VALUE '0300',
       gc_belegart_manual    TYPE erch-belegart VALUE 'MN',
       gc_bergrund_manual    TYPE erch-bergrund VALUE '01',
+      " Serie del documento oficial. El evento R400 (ZFA_FM_ISU_SAMPLE_R400)
+      " saca la clase de documento de la primera letra: F -> FE (facturación
+      " normal), R -> RE, A -> AE, S -> SE; con otra cosa no factura
+      " TODO confirmar con Aleix la serie de fraudes/averías en luz y gas
+      gc_serie_nod          TYPE erch-zserie_nod VALUE 'FE',
 
       gc_modo_normal        TYPE char30 VALUE 'NORMAL',
       gc_modo_cero_descarte TYPE char30 VALUE 'IMPORTE_CERO_DESCARTE',
@@ -1089,7 +1094,8 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
           lv_belzeile  TYPE erchz-belzeile,
           lv_codigo    TYPE char4,
           lv_mensaje   TYPE string,
-          ls_factura   TYPE zfa_s_fraudes_factura.
+          ls_factura   TYPE zfa_s_fraudes_factura,
+          lt_lineas    TYPE ty_t_linea.
 
     FIELD-SYMBOLS <lv_campo> TYPE any.
 
@@ -1129,13 +1135,19 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     ls_auto-bill_doc-erch-hvorg    = gc_hvorg_manual.
     ls_auto-bill_doc-erch-belegart = gc_belegart_manual.
     ls_auto-bill_doc-erch-bergrund = gc_bergrund_manual.
+    ls_auto-bill_doc-erch-zserie_nod = gc_serie_nod.
     ls_auto-bill_doc-erch-abrdats  = sy-datum.
     ls_auto-bill_doc-erch-belegdat = sy-datum.
     ls_auto-bill_doc-erch-begabrpe = ms_entrada-fecha_desde.
     ls_auto-bill_doc-erch-endabrpe = ms_entrada-fecha_hasta.
     ls_auto-rea16-stichtag         = ms_entrada-fecha_hasta.
 
-    LOOP AT it_lineas INTO DATA(ls_linea).
+    " Las informativas (producto) primero, como las pone la EA20
+    lt_lineas = VALUE #( FOR ls_inf IN it_lineas WHERE ( tipo = gc_tipo_informativa ) ( ls_inf ) ).
+    lt_lineas = VALUE #( BASE lt_lineas
+                         FOR ls_resto IN it_lineas WHERE ( tipo <> gc_tipo_informativa ) ( ls_resto ) ).
+
+    LOOP AT lt_lineas INTO DATA(ls_linea).
       " Se parte de la línea original (misma operación, tarifa, unidad,
       " impuesto...) y solo se cambian fechas, cantidad, precio e importe.
       " La cantidad tiene que ir en I_ABRMENGE: FILL_OBJ_REA16_DATA la pasa

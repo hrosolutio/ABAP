@@ -38,8 +38,8 @@ flujo general y las validaciones de CUPS / contrato.
 | Cálculo luz (energía, prorrateo, descuentos, IEE, potencia) | Hecho, con ABAP Unit |
 | Cálculo gas (TV, prorrateo, descuentos, hidrocarburos) | Hecho; conceptos 1923/1924 **TODO** |
 | Factura a 0 (descarte / titular) | Hecho hasta la creación del cálculo |
-| Creación del cálculo manual | Hecha con `ISU_S_MANUBILL_CREATE`, heredando las líneas originales; falta probar en el sistema y las líneas sin original (EREPOS/GREPOS, PGINTR/PGIRAP, mínimo IEE nuevo) |
-| **Facturación del cálculo** (documento de impresión y oficial) | **TODO** |
+| Creación del cálculo manual | Hecha con `ISU_S_MANUBILL_CREATE`, heredando las líneas originales. **Probada en QA** (550000002613, luz). Faltan las líneas sin original (EREPOS/GREPOS, PGINTR/PGIRAP, mínimo IEE nuevo) |
+| **Facturación del cálculo** (documento de impresión y oficial) | **TODO**. A mano en EA19 fallaba por `ZSERIE_NOD` vacío (ya se rellena) |
 | Log y control de expediente duplicado | Hecho |
 | Mensaje en el formulario | Pendiente |
 
@@ -200,6 +200,16 @@ que saber interpretarlos.
      `registrar_log`. Solo hace `COMMIT` interno si `ERCH-NINVOICE` está
      marcado, que no es nuestro caso.
    - Devuelve el `BELNR` en `Y_NEW_BILL_DOC-ERCH-BELNR`.
+   - Cabecera de cálculo manual como los de EA20: `ABRVORG 06`,
+     `HVORG 0300`, `BELEGART MN`, `BERGRUND 01`, `KOFIZ` del contrato,
+     porción y unidad de lectura del último cálculo y **`ZSERIE_NOD = FE`**.
+     Sin serie no factura: el evento R400 (`ZFA_FM_ISU_SAMPLE_R400`) saca
+     la clase de documento de su primera letra (F → FE normal, R → RE,
+     A → AE, S → SE) y si no casa da "ERROR R400 - Campo ZSERIE_NOD
+     Inválido".
+   - Las líneas informativas (`EPROD`/`GPROD`) van las primeras, como en
+     EA20. La derivación CO-PA Z (`ZFI_FM_ISU_SAMPLE_TE760`) necesita el
+     producto o no deja grabar.
 10. **Transacción**: si algo falla se hace `ROLLBACK`. Siempre se graba una
     línea en `ZFA_FRAUD_LOG` y se hace el `COMMIT` al final.
 
@@ -295,6 +305,8 @@ activación real en el sistema es la que vale.
 - [ ] Base del IEE: antes o después de descuentos (hoy, después).
 - [ ] Cómo son los descuentos (hoy se asume que son en %).
 - [ ] Tipo real de `IV_ID_PROCESO_ATR`.
+- [ ] Serie `ZSERIE_NOD` de las facturas de fraude/avería en luz y gas
+      (hoy `FE`) y si hay que rellenar `ZRECT_FORZADO`, `ZORIG_FACTURA`…
 - [ ] Códigos de resultado y valores de `EV_MODO_FACTURACION`.
 - [ ] Mínimo del IEE: el DF dice 1 €/MWh; hay casos de 0,5 €/MWh.
 - [ ] Factor IEE cuando el cálculo original se facturó con el mínimo.
