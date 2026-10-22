@@ -139,6 +139,8 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
           mv_vkonto    TYPE vkont_kk,
           mv_sparte    TYPE sparte,
           mv_bukrs     TYPE bukrs,
+          mv_kofiz     TYPE ever-kofiz,
+          mv_gpartner  TYPE erch-gpartner,
           mt_conceptos TYPE ty_t_conceptos,
           " Líneas del cálculo original tal cual (ERCHZ), para heredar
           " operación, tarifa, unidad, etc. en el cálculo manual
@@ -352,7 +354,7 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     ENDIF.
 
     " 1.2 El contrato existe y su instalación es la del CUPS
-    SELECT SINGLE anlage, vkonto, sparte, bukrs, einzdat, auszdat
+    SELECT SINGLE anlage, vkonto, sparte, bukrs, kofiz, einzdat, auszdat
       FROM ever
       WHERE vertrag = @ms_entrada-contrato
       INTO @DATA(ls_ever).
@@ -388,6 +390,15 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     mv_vkonto = ls_ever-vkonto.
     mv_sparte = ls_ever-sparte.
     mv_bukrs  = ls_ever-bukrs.
+    mv_kofiz  = ls_ever-kofiz.
+
+    " Interlocutor de la cuenta contrato (para la cabecera del cálculo)
+    SELECT gpart
+      FROM fkkvkp
+      WHERE vkont = @mv_vkonto
+      INTO @mv_gpartner
+      UP TO 1 ROWS.
+    ENDSELECT.
 
     " 1.4 Factura ATR de tipo 06 u 11 y existente
     IF ms_entrada-tipo_factura_atr <> '06' AND ms_entrada-tipo_factura_atr <> '11'.
@@ -1057,6 +1068,8 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     ls_auto-bill_doc-erch-bukrs    = mv_bukrs.
     ls_auto-bill_doc-erch-sparte   = mv_sparte.
     ls_auto-bill_doc-erch-vkont    = mv_vkonto.
+    ls_auto-bill_doc-erch-kofiz    = mv_kofiz.
+    ls_auto-bill_doc-erch-gpartner = mv_gpartner.
     ls_auto-bill_doc-erch-begabrpe = ms_entrada-fecha_desde.
     ls_auto-bill_doc-erch-endabrpe = ms_entrada-fecha_hasta.
     ls_auto-rea16-stichtag         = ms_entrada-fecha_hasta.
