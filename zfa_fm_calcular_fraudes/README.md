@@ -57,6 +57,8 @@ src/
   ZCX_FA_FRAUDES.abap                        Excepción con código y descripción de resultado
 docs/
   DF_resumen.md                              Resumen del Diseño Funcional
+  conceptos.md                               Clasificación de conceptos (ZFA_FRAUD_CONC)
+  extensiones_z.md                           BAdIs/eventos Z y customizing que afectan al cálculo y la facturación
 ```
 
 ## Interfaz del servicio
