@@ -1223,6 +1223,7 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     ls_factura-calculo     = ls_new_doc-erch-belnr.
     ls_factura-consumo     = ms_entrada-consumo_total.
     ls_factura-importe     = sumar_importes( it_lineas ).
+    ls_factura-waers       = VALUE #( ls_auto-bill_doc-ierchz[ 1 ]-twaers OPTIONAL ).
     ls_factura-fecha_desde = ms_entrada-fecha_desde.
     ls_factura-fecha_hasta = ms_entrada-fecha_hasta.
     APPEND ls_factura TO rt_facturas.
