@@ -130,6 +130,15 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
       gc_tariftyp_plana_luz  TYPE eanlh-tariftyp VALUE 'E_PLANA',
       gc_tariftyp_plana_gas  TYPE eanlh-tariftyp VALUE 'G_PLANA',
 
+      " Cabecera de los cálculos manuales (vistos en los ERCH con
+      " MANBILLREL = X de calidad): tipo de cálculo 06, operación principal
+      " 0300, clase de documento MN, motivo 01
+      " TODO confirmar con Aleix el motivo (BERGRUND: 01 / 02)
+      gc_abrvorg_manual     TYPE erch-abrvorg  VALUE '06',
+      gc_hvorg_manual       TYPE erch-hvorg    VALUE '0300',
+      gc_belegart_manual    TYPE erch-belegart VALUE 'MN',
+      gc_bergrund_manual    TYPE erch-bergrund VALUE '01',
+
       gc_modo_normal        TYPE char30 VALUE 'NORMAL',
       gc_modo_cero_descarte TYPE char30 VALUE 'IMPORTE_CERO_DESCARTE',
       gc_modo_cero_titular  TYPE char30 VALUE 'IMPORTE_CERO_TITULAR'.
@@ -141,6 +150,8 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
           mv_bukrs     TYPE bukrs,
           mv_kofiz     TYPE ever-kofiz,
           mv_gpartner  TYPE erch-gpartner,
+          mv_portion   TYPE erch-portion,
+          mv_ableinh   TYPE erch-ableinh,
           mt_conceptos TYPE ty_t_conceptos,
           " Líneas del cálculo original tal cual (ERCHZ), para heredar
           " operación, tarifa, unidad, etc. en el cálculo manual
@@ -1070,6 +1081,25 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     ls_auto-bill_doc-erch-vkont    = mv_vkonto.
     ls_auto-bill_doc-erch-kofiz    = mv_kofiz.
     ls_auto-bill_doc-erch-gpartner = mv_gpartner.
+
+    " Porción y unidad de lectura: las del último cálculo del contrato
+    SELECT portion, ableinh
+      FROM erch
+      WHERE vertrag   = @ms_entrada-contrato
+        AND stornodat = '00000000'
+      ORDER BY endabrpe DESCENDING
+      INTO (@mv_portion, @mv_ableinh)
+      UP TO 1 ROWS.
+    ENDSELECT.
+
+    ls_auto-bill_doc-erch-portion  = mv_portion.
+    ls_auto-bill_doc-erch-ableinh  = mv_ableinh.
+    ls_auto-bill_doc-erch-abrvorg  = gc_abrvorg_manual.
+    ls_auto-bill_doc-erch-hvorg    = gc_hvorg_manual.
+    ls_auto-bill_doc-erch-belegart = gc_belegart_manual.
+    ls_auto-bill_doc-erch-bergrund = gc_bergrund_manual.
+    ls_auto-bill_doc-erch-abrdats  = sy-datum.
+    ls_auto-bill_doc-erch-belegdat = sy-datum.
     ls_auto-bill_doc-erch-begabrpe = ms_entrada-fecha_desde.
     ls_auto-bill_doc-erch-endabrpe = ms_entrada-fecha_hasta.
     ls_auto-rea16-stichtag         = ms_entrada-fecha_hasta.
