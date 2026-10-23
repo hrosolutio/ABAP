@@ -50,10 +50,16 @@ nº oficial (`EXBEL` vacío). La EA19 lo da todo en verde.
 - **Motivo:** validación Z **`ZCICLO` "Factura ciclo>1año"**, parámetro
   365 días. El periodo facturado (2024) tiene más de un año.
 - **Liberación:** en la EA05, botón "Liberar documento". **El documento
-  apartado (rango 62…) desaparece de ERDK y se crea uno definitivo con
-  número nuevo** (rango 60…), que es también el nº del documento FI-CA.
-  En QA: 620000001555 → 60000022223 (FPL9), FE 14,62, nº oficial
-  FE26390000002190.
+  apartado desaparece de ERDK y se crea uno definitivo con número nuevo.**
+  En QA:
+
+  | Qué | Número |
+  |---|---|
+  | Impresión apartado (provisional, rango 62…) | 620000001555 |
+  | Impresión definitivo `ERDK-OPBEL` (rango 61…) | 610000008573 |
+  | Documento FI-CA (FPL9, clase FE) | 60000022223 |
+  | Nº oficial `ERDK-EXBEL` | FE26390000002190 |
+  | `ERDK-TOTAL_AMNT` (con IVA) | 14,62 (12,08 neto + 21 %) |
 - **Para la RFC:** el número provisional no sirve de salida, porque cambia
   al liberar. Si la factura se aparta, la RFC solo puede devolver el
   cálculo y un estado de pendiente de liberar.

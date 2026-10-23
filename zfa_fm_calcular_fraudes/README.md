@@ -39,7 +39,7 @@ flujo general y las validaciones de CUPS / contrato.
 | Cálculo gas (TV, prorrateo, descuentos, hidrocarburos) | Hecho; conceptos 1923/1924 **TODO** |
 | Factura a 0 (descarte / titular) | Hecho hasta la creación del cálculo |
 | Creación del cálculo manual | Hecha con `ISU_S_MANUBILL_CREATE`, heredando las líneas originales. **Probada en QA** (550000002616, luz, con serie FE). Faltan las líneas sin original (EREPOS/GREPOS, PGINTR/PGIRAP, mínimo IEE nuevo) |
-| **Facturación del cálculo** (documento de impresión y oficial) | A mano en EA19 en QA (550000002616 → impresión 620000001555), pero **queda apartada por `ZCICLO`** (EA05). Falta facturar desde la RFC |
+| **Facturación del cálculo** (documento de impresión y oficial) | A mano en EA19 en QA (550000002616 → impresión 620000001555), queda apartada por `ZCICLO`; liberada en EA05 → impresión 610000008573, nº oficial FE26390000002190, contabilizada en FI-CA. Falta facturar desde la RFC |
 | Log y control de expediente duplicado | Hecho |
 | Mensaje en el formulario | Pendiente |
 
