@@ -39,6 +39,23 @@ procesos no cambia.
 **Probado en QA:** el cálculo 550000002616 sale con la serie y se factura
 en EA19 (documento de impresión 620000001555).
 
+## Descarte de la factura: validación ZCICLO (EA05)
+
+Facturado en la EA19, el documento de impresión 620000001555 quedó
+**apartado**: `ERDK-TOBRELEASD = X`, sin contabilizar en FI-CA y sin
+nº oficial (`EXBEL` vacío). La EA19 lo da todo en verde.
+
+- **Dónde se ve:** EA05 "Lista de documentos de cálculo y facturación
+  apartados".
+- **Motivo:** validación Z **`ZCICLO` "Factura ciclo>1año"**, parámetro
+  365 días. El periodo facturado (2024) tiene más de un año.
+- **Liberación:** en la EA05, botón "Liberar documento".
+- **Consecuencia:** casi todos los fraudes regularizan periodos antiguos,
+  así que se apartarán siempre. Falta decidir con Aleix:
+  1. excluir fraudes y averías de `ZCICLO` (por `ORIGDOC` 40-42);
+  2. que la RFC libere;
+  3. dejarlos apartados para que alguien los libere a mano en la EA05.
+
 ## Customizing estándar que también hay que tener en cuenta
 
 | Qué | Clave | Qué nos exige | Error si falta |

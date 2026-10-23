@@ -39,7 +39,7 @@ flujo general y las validaciones de CUPS / contrato.
 | Cálculo gas (TV, prorrateo, descuentos, hidrocarburos) | Hecho; conceptos 1923/1924 **TODO** |
 | Factura a 0 (descarte / titular) | Hecho hasta la creación del cálculo |
 | Creación del cálculo manual | Hecha con `ISU_S_MANUBILL_CREATE`, heredando las líneas originales. **Probada en QA** (550000002616, luz, con serie FE). Faltan las líneas sin original (EREPOS/GREPOS, PGINTR/PGIRAP, mínimo IEE nuevo) |
-| **Facturación del cálculo** (documento de impresión y oficial) | A mano en EA19 **OK** en QA (550000002616 → impresión 620000001555). Falta facturar desde la RFC |
+| **Facturación del cálculo** (documento de impresión y oficial) | A mano en EA19 en QA (550000002616 → impresión 620000001555), pero **queda apartada por `ZCICLO`** (EA05). Falta facturar desde la RFC |
 | Log y control de expediente duplicado | Hecho |
 | Mensaje en el formulario | Pendiente |
 
@@ -317,6 +317,11 @@ activación real en el sistema es la que vale.
       varios cálculos) o hay que excluirlo de la búsqueda del original.
 - [ ] `ORIGDOC`: ¿tipo ATR 06 = fraude (40) y 11 = avería (41)? ¿Cuándo
       es permuta (42)?
+- [ ] La factura queda apartada por la validación `ZCICLO` (ciclo > 1 año,
+      EA05). ¿Se excluyen fraudes y averías, libera la RFC o se liberan a
+      mano?
+- [ ] `IMPORTE` de salida: ¿neto del cálculo o total de la factura con
+      impuestos (`ERDK-TOTAL_AMNT`)?
 - [ ] OK a tocar la exit `ZXBI1U01` (bloque 1B, ver
       `docs/extensiones_z.md`).
 - [ ] Códigos de resultado y valores de `EV_MODO_FACTURACION`.
