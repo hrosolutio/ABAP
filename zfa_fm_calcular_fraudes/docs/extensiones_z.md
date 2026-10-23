@@ -49,7 +49,14 @@ nº oficial (`EXBEL` vacío). La EA19 lo da todo en verde.
   apartados".
 - **Motivo:** validación Z **`ZCICLO` "Factura ciclo>1año"**, parámetro
   365 días. El periodo facturado (2024) tiene más de un año.
-- **Liberación:** en la EA05, botón "Liberar documento".
+- **Liberación:** en la EA05, botón "Liberar documento". **El documento
+  apartado (rango 62…) desaparece de ERDK y se crea uno definitivo con
+  número nuevo** (rango 60…), que es también el nº del documento FI-CA.
+  En QA: 620000001555 → 60000022223 (FPL9), FE 14,62, nº oficial
+  FE26390000002190.
+- **Para la RFC:** el número provisional no sirve de salida, porque cambia
+  al liberar. Si la factura se aparta, la RFC solo puede devolver el
+  cálculo y un estado de pendiente de liberar.
 - **Consecuencia:** casi todos los fraudes regularizan periodos antiguos,
   así que se apartarán siempre. Falta decidir con Aleix:
   1. excluir fraudes y averías de `ZCICLO` (por `ORIGDOC` 40-42);
