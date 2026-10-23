@@ -7,7 +7,7 @@ primero.
 | Objeto | Cuándo salta | Qué hace | Qué nos exige | Error si falta |
 |---|---|---|---|---|
 | `ZFI_FM_ISU_SAMPLE_TE760` | Al **grabar** el cálculo (derivación CO-PA) | Rellena `WW001`/`WW002`. Busca en `x_bill_doc-ierchz` la línea `BELZART` `EPROD`/`GPROD`/`SPROD` y con su `ZTEXT` lee `ZFA_T_RATECAT` (`producto_sf = ztext`) | Copiar la línea de producto (tipo `IN` en `ZFA_FRAUD_CONC`) del cálculo original, también en la factura a 0 | `ZFA_MC_001/002` "No se ha encontrado el código de Producto" |
-| `ZFA_FM_ISU_SAMPLE_R400` | Al **facturar** (evento R400, EA19 o masiva) | Saca la clase de documento de `t_bill_doc-erch-zserie_nod(1)`: `F` → `FE` (facturación normal), `R` → `RE`, `A` → `AE`, `S` → `SE`. Exporta la clase a memoria (`ZFA_BLART`, `ZFA_BLART1`) para el evento 1190 | `ERCH-ZSERIE_NOD` relleno en la cabecera del cálculo (hoy `FE`, a confirmar con Aleix) | "ERROR R400 - Campo ZSERIE_NOD Inválido en la cabecera …" (`ZFA_MC_001/002`) |
+| `ZFA_FM_ISU_SAMPLE_R400` | Al **facturar** (evento R400, EA19 o masiva) | Saca la clase de documento de `t_bill_doc-erch-zserie_nod(1)`: `F` → `FE` (facturación normal), `R` → `RE`, `A` → `AE`, `S` → `SE`. Exporta la clase a memoria (`ZFA_BLART`, `ZFA_BLART1`) para el evento 1190 | `ERCH-ZSERIE_NOD` relleno en la cabecera del cálculo (lo pone la exit `ZXBI1U01`, ver abajo) | "ERROR R400 - Campo ZSERIE_NOD Inválido en la cabecera …" (`ZFA_MC_001/002`) |
 | Evento 1190 (FI-CA) | Al contabilizar la factura | Lee `ZFA_BLART`/`ZFA_BLART1` de memoria (los deja el R400) | Nada directo: depende de que el R400 haya ido bien | — |
 
 ## La serie: ZXBI1U01 (`EXIT_SAPLEA01_001`, ampliación `EBIA0001`)
@@ -35,6 +35,9 @@ con la misma lógica y los deja en memoria (`ZFA_FRAUDES_ERCH`) alrededor de
 `src/ZXBI1U01_bloque_fraudes.abap`) los recoge después de la
 funcionalidad 1. Sin nada en memoria no hace nada, así que el resto de
 procesos no cambia.
+
+**Probado en QA:** el cálculo 550000002616 sale con la serie y se factura
+en EA19 (documento de impresión 620000001555).
 
 ## Customizing estándar que también hay que tener en cuenta
 
