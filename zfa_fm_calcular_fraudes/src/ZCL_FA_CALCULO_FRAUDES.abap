@@ -364,14 +364,12 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     ENDIF.
 
     " 1.1 El CUPS existe
-    SELECT int_ui
+    SELECT SINGLE int_ui
       FROM euitrans
       WHERE ext_ui    = @ms_entrada-cups
         AND datefrom <= @ms_entrada-fecha_hasta
         AND dateto   >= @ms_entrada-fecha_desde
-      INTO @lv_int_ui
-      UP TO 1 ROWS.
-    ENDSELECT.
+      INTO @lv_int_ui.
     IF sy-subrc <> 0.
       RAISE EXCEPTION TYPE zcx_fa_fraudes
         EXPORTING codigo = '1001'
@@ -389,15 +387,13 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
                   texto  = |El contrato { ms_entrada-contrato } no existe|.
     ENDIF.
 
-    SELECT anlage
+    SELECT SINGLE anlage
       FROM euiinstln
       WHERE int_ui    = @lv_int_ui
         AND anlage    = @ls_ever-anlage
         AND datefrom <= @ms_entrada-fecha_hasta
         AND dateto   >= @ms_entrada-fecha_desde
-      INTO @lv_anlage
-      UP TO 1 ROWS.
-    ENDSELECT.
+      INTO @lv_anlage.
     IF sy-subrc <> 0.
       RAISE EXCEPTION TYPE zcx_fa_fraudes
         EXPORTING codigo = '1002'
@@ -418,12 +414,10 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     mv_kofiz  = ls_ever-kofiz.
 
     " Interlocutor de la cuenta contrato (para la cabecera del cálculo)
-    SELECT gpart
+    SELECT SINGLE gpart
       FROM fkkvkp
       WHERE vkont = @mv_vkonto
-      INTO @mv_gpartner
-      UP TO 1 ROWS.
-    ENDSELECT.
+      INTO @mv_gpartner.
 
     " 1.4 Factura ATR de tipo 06 u 11 y existente
     IF ms_entrada-tipo_factura_atr <> '06' AND ms_entrada-tipo_factura_atr <> '11'.
@@ -521,15 +515,13 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     IF gc_operando_reposicion IS NOT INITIAL.
       " TODO confirmar si basta con que exista el operando en el periodo
       " o hay que mirar su valor
-      SELECT anlage
+      SELECT SINGLE anlage
         FROM ettifn
         WHERE anlage  = @mv_anlage
           AND operand = @gc_operando_reposicion
           AND ab     <= @ms_entrada-fecha_hasta
           AND bis    >= @ms_entrada-fecha_desde
-        INTO @lv_anlage
-        UP TO 1 ROWS.
-      ENDSELECT.
+        INTO @lv_anlage.
       IF sy-subrc = 0.
         RAISE EXCEPTION TYPE zcx_fa_fraudes
           EXPORTING codigo = '0106'
@@ -538,15 +530,13 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     ENDIF.
 
     " 2.7 Tarifa Plana en el periodo: tipo de tarifa de la instalación
-    SELECT anlage
+    SELECT SINGLE anlage
       FROM eanlh
       WHERE anlage   = @mv_anlage
         AND tariftyp IN ( @gc_tariftyp_plana_luz, @gc_tariftyp_plana_gas )
         AND ab      <= @ms_entrada-fecha_hasta
         AND bis     >= @ms_entrada-fecha_desde
-      INTO @lv_anlage
-      UP TO 1 ROWS.
-    ENDSELECT.
+      INTO @lv_anlage.
     IF sy-subrc = 0.
       RAISE EXCEPTION TYPE zcx_fa_fraudes
         EXPORTING codigo = '0107'
@@ -589,10 +579,10 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
         AND stornodat  = '00000000'
         AND simulation = @space
       ORDER BY endabrpe DESCENDING
-      INTO @lv_belnr
+      INTO TABLE @DATA(lt_ultimo)
       UP TO 1 ROWS.
-    ENDSELECT.
-    IF lv_belnr IS NOT INITIAL.
+    IF lt_ultimo IS NOT INITIAL.
+      lv_belnr = lt_ultimo[ 1 ]-belnr.
       lt_original = leer_lineas_calculo( lv_belnr ).
       lt_original = lineas_tipo( it_lineas = lt_original iv_tipo = gc_tipo_informativa ).
       APPEND LINES OF lt_original TO lt_linea.
@@ -1134,9 +1124,12 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
       WHERE vertrag   = @ms_entrada-contrato
         AND stornodat = '00000000'
       ORDER BY endabrpe DESCENDING
-      INTO (@mv_portion, @mv_ableinh)
+      INTO TABLE @DATA(lt_ultimo)
       UP TO 1 ROWS.
-    ENDSELECT.
+    IF lt_ultimo IS NOT INITIAL.
+      mv_portion = lt_ultimo[ 1 ]-portion.
+      mv_ableinh = lt_ultimo[ 1 ]-ableinh.
+    ENDIF.
 
     ls_auto-bill_doc-erch-portion  = mv_portion.
     ls_auto-bill_doc-erch-ableinh  = mv_ableinh.
