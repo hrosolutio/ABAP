@@ -169,7 +169,10 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
           mt_conceptos TYPE ty_t_conceptos,
           " Líneas del cálculo original tal cual (ERCHZ), para heredar
           " operación, tarifa, unidad, etc. en el cálculo manual
-          mt_erchz_original TYPE STANDARD TABLE OF erchz WITH DEFAULT KEY.
+          mt_erchz_original TYPE STANDARD TABLE OF erchz WITH DEFAULT KEY,
+          " Cálculo y factura creados: se devuelven aunque luego falle algo,
+          " porque el cálculo ya está grabado
+          ms_factura   TYPE zfa_s_fraudes_factura.
 
     METHODS procesar
       RETURNING VALUE(rs_resultado) TYPE ty_resultado
@@ -250,8 +253,11 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
       RETURNING VALUE(rt_lineas) TYPE ty_t_linea.
 
     METHODS crear_calculo_manual
-      IMPORTING it_lineas          TYPE ty_t_linea
-      RETURNING VALUE(rt_facturas) TYPE zfa_t_fraudes_factura
+      IMPORTING it_lineas TYPE ty_t_linea
+      RAISING   zcx_fa_fraudes.
+
+    METHODS facturar
+      RETURNING VALUE(rv_apartado) TYPE abap_bool
       RAISING   zcx_fa_fraudes.
 
     METHODS registrar_log
@@ -283,6 +289,9 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
         CLEAR rs_resultado.
         rs_resultado-codigo      = lx_fraudes->codigo.
         rs_resultado-descripcion = lx_fraudes->texto.
+        IF ms_factura-calculo IS NOT INITIAL.
+          APPEND ms_factura TO rs_resultado-facturas.
+        ENDIF.
     ENDTRY.
 
     " 0xxx (factura creada o descarte) es OK; 1xxx y 2xxx son KO
@@ -310,29 +319,37 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     " integridad (si no, nunca se podría facturar un descarte a 0).
     IF ms_entrada-descarte = abap_true OR ms_entrada-marca_titular = abap_true.
       rs_resultado = facturar_importe_cero( ).
-      RETURN.
+    ELSE.
+      validar_integridad( ).
+
+      ls_calculo  = buscar_calculo_original( ).
+      lt_original = leer_lineas_calculo( ls_calculo-belnr ).
+
+      CASE mv_sparte.
+        WHEN gc_sparte_luz.
+          lt_lineas = calcular_luz( lt_original ).
+        WHEN gc_sparte_gas.
+          lt_lineas = calcular_gas( lt_original ).
+        WHEN OTHERS.
+          RAISE EXCEPTION TYPE zcx_fa_fraudes
+            EXPORTING codigo = '2002'
+                      texto  = |División { mv_sparte } no contemplada|.
+      ENDCASE.
+
+      crear_calculo_manual( lt_lineas ).
+      rs_resultado-codigo      = '0000'.
+      rs_resultado-descripcion = 'Factura creada correctamente'.
+      rs_resultado-modo        = gc_modo_normal.
     ENDIF.
 
-    validar_integridad( ).
-
-    ls_calculo  = buscar_calculo_original( ).
-    lt_original = leer_lineas_calculo( ls_calculo-belnr ).
-
-    CASE mv_sparte.
-      WHEN gc_sparte_luz.
-        lt_lineas = calcular_luz( lt_original ).
-      WHEN gc_sparte_gas.
-        lt_lineas = calcular_gas( lt_original ).
-      WHEN OTHERS.
-        RAISE EXCEPTION TYPE zcx_fa_fraudes
-          EXPORTING codigo = '2002'
-                    texto  = |División { mv_sparte } no contemplada|.
-    ENDCASE.
-
-    rs_resultado-facturas    = crear_calculo_manual( lt_lineas ).
-    rs_resultado-codigo      = '0000'.
-    rs_resultado-descripcion = 'Factura creada correctamente'.
-    rs_resultado-modo        = gc_modo_normal.
+    " Apartada (EA05): el documento de impresión es provisional y cambia
+    " al liberar, así que no se devuelve. El modo se mantiene.
+    " TODO decidir con Aleix qué hacer con las apartadas por ZCICLO
+    IF facturar( ) = abap_true.
+      rs_resultado-codigo      = '0003'.
+      rs_resultado-descripcion = |Factura creada y apartada por validación: pendiente de liberar en EA05 (cálculo { ms_factura-calculo })|.
+    ENDIF.
+    rs_resultado-facturas = VALUE #( ( ms_factura ) ).
 
   ENDMETHOD.
 
@@ -355,7 +372,7 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     SELECT SINGLE codigo
       FROM zfa_fraud_log
       WHERE id_expediente = @ms_entrada-id_expediente
-        AND codigo        IN ( '0000', '0001', '0002' )
+        AND codigo        IN ( '0000', '0001', '0002', '0003' )
       INTO @lv_codigo.
     IF sy-subrc = 0.
       RAISE EXCEPTION TYPE zcx_fa_fraudes
@@ -588,7 +605,7 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
       APPEND LINES OF lt_original TO lt_linea.
     ENDIF.
 
-    rs_resultado-facturas = crear_calculo_manual( lt_linea ).
+    crear_calculo_manual( lt_linea ).
 
     IF ms_entrada-descarte = abap_true.
       rs_resultado-codigo      = '0001'.
@@ -1089,7 +1106,6 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
           lv_belzeile  TYPE erchz-belzeile,
           lv_codigo    TYPE char4,
           lv_mensaje   TYPE string,
-          ls_factura   TYPE zfa_s_fraudes_factura,
           lt_lineas    TYPE ty_t_linea,
           lv_origdoc    TYPE erch-origdoc,
           lv_serie_nod  TYPE erch-zserie_nod,
@@ -1256,17 +1272,86 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
                   texto  = lv_mensaje.
     ENDIF.
 
-    " El cálculo queda grabado (en update task: el COMMIT lo hace
-    " registrar_log) y apuntado en EITR para facturar.
-    " TODO facturar el cálculo al momento y devolver documento de
-    " impresión (FACTURA) y documento oficial (DOC_OFICIAL).
-    ls_factura-calculo     = ls_new_doc-erch-belnr.
-    ls_factura-consumo     = ms_entrada-consumo_total.
-    ls_factura-importe     = sumar_importes( it_lineas ).
-    ls_factura-waers       = VALUE #( ls_auto-bill_doc-ierchz[ 1 ]-twaers OPTIONAL ).
-    ls_factura-fecha_desde = ms_entrada-fecha_desde.
-    ls_factura-fecha_hasta = ms_entrada-fecha_hasta.
-    APPEND ls_factura TO rt_facturas.
+    " El cálculo va en update task y la facturación hace sus propios
+    " COMMIT y lee EITR: se graba ya
+    COMMIT WORK AND WAIT.
+
+    " TODO confirmar con Aleix si IMPORTE es el neto del cálculo (hoy) o
+    " el total de la factura con impuestos (ERDK-TOTAL_AMNT)
+    ms_factura-calculo     = ls_new_doc-erch-belnr.
+    ms_factura-consumo     = ms_entrada-consumo_total.
+    ms_factura-importe     = sumar_importes( it_lineas ).
+    ms_factura-waers       = VALUE #( ls_auto-bill_doc-ierchz[ 1 ]-twaers OPTIONAL ).
+    ms_factura-fecha_desde = ms_entrada-fecha_desde.
+    ms_factura-fecha_hasta = ms_entrada-fecha_hasta.
+
+  ENDMETHOD.
+
+
+  METHOD facturar.
+
+    DATA: lt_eitr   TYPE STANDARD TABLE OF eitr WITH DEFAULT KEY,
+          lt_opbel  TYPE STANDARD TABLE OF inv_opbel WITH DEFAULT KEY,
+          ls_param  TYPE isu21_invoice_param,
+          lv_handle TYPE emsg_gen-handle,
+          lv_fikey  TYPE fikey_kk,
+          lv_opbel  TYPE erdk-opbel.
+
+    " Solo nuestro cálculo: con XT_EITR informado el FM no selecciona lo
+    " pendiente de la cuenta (es lo que hace el popup de la EA19)
+    SELECT *
+      FROM eitr
+      WHERE belnr = @ms_factura-calculo
+      INTO TABLE @lt_eitr.
+    IF lt_eitr IS INITIAL.
+      RAISE EXCEPTION TYPE zcx_fa_fraudes
+        EXPORTING codigo = '2007'
+                  texto  = |Cálculo { ms_factura-calculo } creado pero no está pendiente de facturar (EITR)|.
+    ENDIF.
+
+    " Clave de reconciliación del día con el formato que propone la EA19
+    " (AAMMDD-001); sin diálogo el FM la abre si no existe
+    " TODO confirmar la clave con Aleix / FI-CA
+    lv_fikey = |{ sy-datum+2(6) }-001|.
+
+    " Sin diálogo ni resultados: los errores salen por excepción y los
+    " mensajes quedan en el log de aplicación que abre el propio FM
+    CALL FUNCTION 'ISU_INV_SINGLE_PROCESSING'
+      EXPORTING
+        x_vkonto       = mv_vkonto
+        x_fikey        = lv_fikey
+        x_dialog       = space
+        x_show_results = space
+      TABLES
+        xt_eitr        = lt_eitr
+        yt_opbel       = lt_opbel
+      CHANGING
+        xy_param       = ls_param
+        xy_handle      = lv_handle
+      EXCEPTIONS
+        iu_error       = 1
+        system_error   = 2
+        error_message  = 3
+        OTHERS         = 4.
+    IF sy-subrc = 0.
+      lv_opbel = VALUE #( lt_opbel[ 1 ]-opbel OPTIONAL ).
+    ENDIF.
+    IF lv_opbel IS INITIAL.
+      RAISE EXCEPTION TYPE zcx_fa_fraudes
+        EXPORTING codigo = '2007'
+                  texto  = |Cálculo { ms_factura-calculo } creado pero no facturado: facturar en EA19 (ver log SLG1)|.
+    ENDIF.
+
+    SELECT SINGLE exbel, tobreleasd
+      FROM erdk
+      WHERE opbel = @lv_opbel
+      INTO @DATA(ls_erdk).
+
+    rv_apartado = xsdbool( ls_erdk-tobreleasd IS NOT INITIAL ).
+    IF rv_apartado = abap_false.
+      ms_factura-factura     = lv_opbel.
+      ms_factura-doc_oficial = ls_erdk-exbel.
+    ENDIF.
 
   ENDMETHOD.
 

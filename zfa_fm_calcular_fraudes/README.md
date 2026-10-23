@@ -39,7 +39,7 @@ flujo general y las validaciones de CUPS / contrato.
 | Cálculo gas (TV, prorrateo, descuentos, hidrocarburos) | Hecho; conceptos 1923/1924 **TODO** |
 | Factura a 0 (descarte / titular) | Hecho hasta la creación del cálculo |
 | Creación del cálculo manual | Hecha con `ISU_S_MANUBILL_CREATE`, heredando las líneas originales. **Probada en QA** (550000002616, luz, con serie FE). Faltan las líneas sin original (EREPOS/GREPOS, PGINTR/PGIRAP, mínimo IEE nuevo) |
-| **Facturación del cálculo** (documento de impresión y oficial) | A mano en EA19 en QA (550000002616 → impresión 620000001555), queda apartada por `ZCICLO`; liberada en EA05 → impresión 610000008573, nº oficial FE26390000002190, contabilizada en FI-CA. Falta facturar desde la RFC |
+| **Facturación del cálculo** (documento de impresión y oficial) | A mano en EA19 en QA (550000002616 → impresión 620000001555), queda apartada por `ZCICLO`; liberada en EA05 → impresión 610000008573, nº oficial FE26390000002190, contabilizada en FI-CA. Facturación desde la RFC hecha con `ISU_INV_SINGLE_PROCESSING` (solo nuestro `EITR`), **sin probar** |
 | Log y control de expediente duplicado | Hecho |
 | Mensaje en el formulario | Pendiente |
 
@@ -102,6 +102,7 @@ docs/
 | `0000` | OK | Factura creada |
 | `0001` | OK | Factura a importe 0 creada (flag descarte) |
 | `0002` | OK | Factura a importe 0 creada (titular erróneo) |
+| `0003` | OK | Factura creada pero apartada por validación (EA05): devuelve el cálculo, no la factura (el nº provisional cambia al liberar). El modo dice si es normal o a importe 0 |
 | `0101` | OK | Descarte: periodo migrado (Uptility / NI) |
 | `0102` | OK | Descarte: exención de impuestos |
 | `0103` | OK | Descarte: derecho al olvido |
@@ -125,6 +126,7 @@ docs/
 | `2003` | KO | Error creando el cálculo manual |
 | `2005` | KO | Contrato bloqueado por otro proceso (`FOREIGN_LOCK`) |
 | `2006` | KO | `KOFIZ` del contrato no válido para la serie del documento oficial |
+| `2007` | KO | Cálculo creado (ya grabado, se devuelve su `CALCULO`) pero no facturado: facturar a mano en EA19 |
 
 Los códigos son una propuesta: **confirmarlos con Aleix**, que la IA tiene
 que saber interpretarlos.
@@ -217,8 +219,18 @@ que saber interpretarlos.
    - Las líneas informativas (`EPROD`/`GPROD`) van las primeras, como en
      los cálculos manuales hechos a mano. La derivación CO-PA Z (`ZFI_FM_ISU_SAMPLE_TE760`) necesita el
      producto o no deja grabar.
-10. **Transacción**: si algo falla se hace `ROLLBACK`. Siempre se graba una
-    línea en `ZFA_FRAUD_LOG` y se hace el `COMMIT` al final.
+10. **Facturación** (`facturar`): `ISU_INV_SINGLE_PROCESSING` sin diálogo,
+    con `XT_EITR` = la fila de `EITR` de nuestro cálculo. Así no selecciona
+    lo pendiente de la cuenta, igual que el popup de la EA19. Clave de
+    reconciliación `AAMMDD-001` (la del día, como propone la EA19). El FM
+    hace sus propios `COMMIT`.
+    - `FACTURA` = `ERDK-OPBEL` y `DOC_OFICIAL` = `ERDK-EXBEL`.
+    - Si `ERDK-TOBRELEASD = X`, la factura queda apartada → código `0003`
+      sin factura.
+11. **Transacción**: el cálculo se graba (`COMMIT WORK AND WAIT`) antes de
+    facturar. Si la facturación falla, el cálculo ya no se deshace: se
+    devuelve `2007` con su BELNR. Si algo falla antes, `ROLLBACK`. Siempre
+    se graba una línea en `ZFA_FRAUD_LOG` con su `COMMIT` al final.
 
 ## Objetos DDIC a crear (SE11)
 
@@ -322,6 +334,12 @@ activación real en el sistema es la que vale.
       mano?
 - [ ] `IMPORTE` de salida: ¿neto del cálculo o total de la factura con
       impuestos (`ERDK-TOTAL_AMNT`)?
+- [ ] Clave de reconciliación para la facturación desde la RFC (hoy
+      `AAMMDD-001`, la que propone la EA19).
+- [ ] Reintento tras un `2007`: el cálculo manual queda grabado y un nuevo
+      intento del mismo expediente daría `0109` (dos cálculos en el
+      periodo). ¿Se factura a mano o se excluyen los manuales (`ABRVORG`
+      06) de la búsqueda del original?
 - [ ] OK a tocar la exit `ZXBI1U01` (bloque 1B, ver
       `docs/extensiones_z.md`).
 - [ ] Códigos de resultado y valores de `EV_MODO_FACTURACION`.
