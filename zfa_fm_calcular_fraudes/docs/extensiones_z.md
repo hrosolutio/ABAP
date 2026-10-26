@@ -73,6 +73,10 @@ nº oficial (`EXBEL` vacío). La EA19 lo da todo en verde.
     `MESSAGE i138`.
   - Si libera en fondo (`y_batch` interno), `Y_NEW_OPBEL` puede venir
     vacío.
+  - **Solo se libera si todos los apartados pendientes son `ZCICLO`**
+    (`ERDO`: `OPBEL`, `OUTCNSO`, `VALIDAT_IN` = validación, `MANOUTS_IN` =
+    apartado manual, `FREI_AM` = fecha de liberación). Cualquier otro
+    motivo se deja para revisar en la EA05.
 
 ## Customizing estándar que también hay que tener en cuenta
 

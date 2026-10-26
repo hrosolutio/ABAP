@@ -231,7 +231,10 @@ que saber interpretarlos.
     - Si `ERDK-TOBRELEASD = X` (apartada, normalmente por `ZCICLO`), **se
       libera** con `ISU_OUTSORT_INVOICE_RELEASE` (documento entero, como el
       botón de la EA05) y se devuelve el **documento nuevo**
-      (`Y_NEW_OPBEL`). Si la liberación falla → `0003`.
+      (`Y_NEW_OPBEL`). **Solo si todos los apartados pendientes en `ERDO`
+      son `VALIDAT_IN = ZCICLO`**. Con otra validación, un apartado manual
+      (`MANOUTS_IN`) o un error al liberar → `0003`, con los motivos en la
+      descripción, para revisar en la EA05.
     - `ERDK` se lee con reintentos (hasta 10 s), porque los FM hacen
       `COMMIT` sin esperar.
 11. **Transacción**: el cálculo se graba (`COMMIT WORK AND WAIT`) antes de

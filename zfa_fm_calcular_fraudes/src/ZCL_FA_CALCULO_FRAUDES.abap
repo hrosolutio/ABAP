@@ -158,6 +158,9 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
       gc_origdoc_fraude     TYPE erch-origdoc VALUE '40',
       gc_origdoc_averia     TYPE erch-origdoc VALUE '41',
       gc_tipo_atr_averia    TYPE char2 VALUE '11',
+      " Única validación de facturación cuyo apartado libera la RFC: los
+      " fraudes casi siempre son de periodos de hace más de un año
+      gc_validacion_ciclo   TYPE erdo-validat_in VALUE 'ZCICLO',
 
       gc_modo_normal        TYPE char30 VALUE 'NORMAL',
       gc_modo_cero          TYPE char30 VALUE 'IMPORTE_CERO'.
@@ -177,7 +180,9 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
           mt_erchz_original TYPE STANDARD TABLE OF erchz WITH DEFAULT KEY,
           " Cálculo y factura creados: se devuelven aunque luego falle algo,
           " porque el cálculo ya está grabado
-          ms_factura   TYPE zfa_s_fraudes_factura.
+          ms_factura   TYPE zfa_s_fraudes_factura,
+          " Motivos por los que la factura queda apartada sin liberar
+          mv_motivos_apartado TYPE string.
 
     METHODS procesar
       RETURNING VALUE(rs_resultado) TYPE ty_resultado
@@ -350,7 +355,7 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     " provisional y cambia al liberar, así que no se devuelve
     IF facturar( ) = abap_true.
       rs_resultado-codigo      = '0003'.
-      rs_resultado-descripcion = |Factura creada pero apartada y no se ha podido liberar: liberar en EA05 (cálculo { ms_factura-calculo })|.
+      rs_resultado-descripcion = |Factura creada pero apartada por{ mv_motivos_apartado }: revisar y liberar en EA05 (cálculo { ms_factura-calculo })|.
     ENDIF.
     rs_resultado-facturas = VALUE #( ( ms_factura ) ).
 
@@ -1338,6 +1343,25 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     " Al liberar se borra el documento provisional y se crea otro con
     " número nuevo, que es el que se devuelve (como el botón de la EA05)
     IF ls_erdk-tobreleasd IS NOT INITIAL.
+      " Solo si todos los apartados pendientes son de ZCICLO: cualquier
+      " otra validación o un apartado manual se deja para revisar en EA05
+      SELECT validat_in, manouts_in
+        FROM erdo
+        WHERE opbel   = @lv_opbel
+          AND frei_am = '00000000'
+        INTO TABLE @DATA(lt_apartados).
+      LOOP AT lt_apartados INTO DATA(ls_apartado)
+           WHERE validat_in <> gc_validacion_ciclo OR manouts_in IS NOT INITIAL.
+        mv_motivos_apartado = |{ mv_motivos_apartado } { ls_apartado-validat_in }{ ls_apartado-manouts_in }|.
+      ENDLOOP.
+      IF lt_apartados IS INITIAL.
+        mv_motivos_apartado = ' motivo desconocido (sin ERDO)'.
+      ENDIF.
+      IF mv_motivos_apartado IS NOT INITIAL.
+        rv_apartado = abap_true.
+        RETURN.
+      ENDIF.
+
       CALL FUNCTION 'ISU_OUTSORT_INVOICE_RELEASE'
         EXPORTING
           x_opbel       = lv_opbel
@@ -1356,6 +1380,7 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
       " Si falla o se libera en fondo (sin número nuevo) queda apartada
       " para liberarla a mano en la EA05
       IF sy-subrc <> 0 OR lv_nuevo IS INITIAL.
+        mv_motivos_apartado = | { gc_validacion_ciclo } (error al liberar)|.
         rv_apartado = abap_true.
         RETURN.
       ENDIF.
