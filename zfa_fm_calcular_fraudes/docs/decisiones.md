@@ -1,5 +1,18 @@
 # Decisiones funcionales recibidas
 
+## Respuestas de Aleix a las dudas de Héctor (26/10/2026)
+
+1. **Facturas bloqueadas:** "Si creas la factura debería salir
+   contabilizada directamente, solo en el caso de que haya un bloqueo en
+   cuenta contrato que lo impida."
+   → No contaba con `ZCICLO`. Hay que explicárselo y decidir: excluir
+   fraudes de `ZCICLO` o liberar desde la RFC.
+2. **Si falla la facturación:** "Devolver error y anular el cálculo" (a
+   confirmar con quien corresponda, pero es su propuesta).
+3. **Consumo ATR vs total:** lo controla la IA. SAP factura el consumo que
+   le llega. → Validación 1.5 eliminada.
+4. **Formulario:** "No toques el formulario" → fuera de alcance.
+
 ## Correo "Averías y fraude: DF" (Eliza Grosiak, 26/10/2026, reenviado por Aleix)
 
 Lo acordado en la reunión con la parte de la IA:
@@ -44,5 +57,3 @@ Lo acordado en la reunión con la parte de la IA:
   - a qué status;
   - con qué FM o clase.
 - **Reactiva:** si el ATR trae reactiva, ¿se descarta?
-- El **mensaje del formulario** en 5 idiomas, ¿sale de este desarrollo
-  (kanban)?

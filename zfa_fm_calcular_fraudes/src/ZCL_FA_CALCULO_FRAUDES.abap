@@ -187,9 +187,6 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
     METHODS existe_factura_atr
       RETURNING VALUE(rv_existe) TYPE abap_bool.
 
-    METHODS consumo_atr_correcto
-      RETURNING VALUE(rv_correcto) TYPE abap_bool.
-
     METHODS validar_integridad
       RAISING zcx_fa_fraudes.
 
@@ -449,12 +446,8 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
                   texto  = |La factura ATR { ms_entrada-num_factura_atr } no existe|.
     ENDIF.
 
-    " 1.5 Consumo de la factura ATR vs consumo total
-    IF consumo_atr_correcto( ) = abap_false.
-      RAISE EXCEPTION TYPE zcx_fa_fraudes
-        EXPORTING codigo = '1005'
-                  texto  = 'El consumo total no cuadra con el de la factura ATR'.
-    ENDIF.
+    " 1.5 Consumo ATR vs consumo total: lo controla la IA, que envía ya el
+    " consumo a facturar (correo de Eliza del 26/10, confirmado por Aleix)
 
     " Conceptos de facturación relevantes para la división del contrato
     SELECT *
@@ -504,14 +497,6 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     " comprobar en SE11 si existe; si no, buscar la tabla Z que usa el
     " elemento de datos ZLE_DE_FACTUR (where-used en SE11).
     rv_existe = abap_true.
-  ENDMETHOD.
-
-
-  METHOD consumo_atr_correcto.
-    " TODO el DF tiene esta validación "pendiente de detallar". Cuando
-    " Aleix la defina: leer el consumo de la factura ATR y compararlo con
-    " ms_entrada-consumo_total con la regla que se acuerde.
-    rv_correcto = abap_true.
   ENDMETHOD.
 
 

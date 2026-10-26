@@ -29,7 +29,7 @@ flujo general y las validaciones de CUPS / contrato.
 | Interfaz RFC | Hecha (cambios respecto a la de partida, ver más abajo) |
 | Validaciones de entrada 1.1-1.3 | Hechas |
 | Validación 1.4 (factura ATR) | Tipo 06/11 hecho; existencia **TODO** |
-| Validación 1.5 (consumo ATR) | **TODO**, pendiente de definir en el DF |
+| Validación 1.5 (consumo ATR) | Fuera: la hace la IA |
 | Validaciones de integridad 2.1-2.5 | **TODO**, falta el origen de cada dato |
 | Validación 2.6 (reposición) | Hecha, falta el operando |
 | Validación 2.7 (Tarifa Plana) | Hecha: tipo de tarifa `E_PLANA` / `G_PLANA` en `EANLH` |
@@ -41,7 +41,7 @@ flujo general y las validaciones de CUPS / contrato.
 | Creación del cálculo manual | Hecha con `ISU_S_MANUBILL_CREATE`, heredando las líneas originales. **Probada en QA** (550000002616, luz, con serie FE). Faltan las líneas sin original (EREPOS/GREPOS, PGINTR/PGIRAP, mínimo IEE nuevo) |
 | **Facturación del cálculo** (documento de impresión y oficial) | A mano en EA19 en QA (550000002616 → impresión 620000001555), queda apartada por `ZCICLO`; liberada en EA05 → impresión 610000008573, nº oficial FE26390000002190, contabilizada en FI-CA. Facturación desde la RFC hecha con `ISU_INV_SINGLE_PROCESSING` (solo nuestro `EITR`), **sin probar** |
 | Log y control de expediente duplicado | Hecho |
-| Mensaje en el formulario | Pendiente |
+| Mensaje en el formulario | **Fuera de alcance** (Aleix: no tocar el formulario) |
 
 > ⚠️ Los TODO de validación devuelven "no bloquea" para poder probar el
 > resto del flujo. **No pasar a QA hasta cerrarlos**: si no, se facturarían
@@ -118,7 +118,7 @@ docs/
 | `1002` | KO | El contrato no existe o no corresponde al CUPS |
 | `1003` | KO | El contrato no está activo en el periodo |
 | `1004` | KO | Factura ATR inexistente o de tipo distinto de 06/11 |
-| `1005` | KO | El consumo no cuadra con la factura ATR |
+| `1005` | — | (Sin uso: la validación de consumo la hace la IA) |
 | `1006` | KO | El expediente ya está facturado |
 | `1007` | KO | Fecha desde posterior a fecha hasta |
 | `1008` | KO | Contrato con energía por periodos sin consumos P1-P6 |
@@ -350,6 +350,5 @@ activación real en el sistema es la que vale.
 - [ ] Mínimo del IEE: el DF dice 1 €/MWh; hay casos de 0,5 €/MWh.
 - [ ] Factor IEE cuando el cálculo original se facturó con el mínimo.
 
-**Formulario:** mensaje en 5 idiomas para las facturas de fraude y averías.
-Falta saber la tecnología del formulario y cómo se identifica una factura de
-este tipo.
+**Formulario:** fuera de alcance. Aleix: "No toques el formulario, tenemos
+varias mejoras sobre él y es lo último que deberíamos hacer".
