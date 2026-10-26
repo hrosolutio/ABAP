@@ -16,8 +16,7 @@ FUNCTION zfa_fm_calcular_fraudesv2.
 *"     VALUE(IV_TIPO_FACTURA_ATR) TYPE  CHAR2
 *"     VALUE(IV_CONTRATO_SAP) TYPE  VERTRAG
 *"     VALUE(IV_ID_PROCESO_ATR) TYPE  CHAR2
-*"     VALUE(IV_DESCARTE) TYPE  XFELD OPTIONAL
-*"     VALUE(IV_MARCA_TITULAR) TYPE  XFELD OPTIONAL
+*"     VALUE(IV_FORZADO) TYPE  XFELD OPTIONAL
 *"     VALUE(IV_ID_EXPEDIENTE) TYPE  ZLE_DE_NUMEROEXPEDIENTE
 *"  EXPORTING
 *"     VALUE(EV_RESULTADO) TYPE  CHAR2
@@ -50,8 +49,7 @@ FUNCTION zfa_fm_calcular_fraudesv2.
                         tipo_factura_atr = iv_tipo_factura_atr
                         contrato         = iv_contrato_sap
                         id_proceso_atr   = iv_id_proceso_atr
-                        descarte         = iv_descarte
-                        marca_titular    = iv_marca_titular
+                        forzado          = iv_forzado
                         id_expediente    = iv_id_expediente ).
 
   ls_resultado = NEW zcl_fa_calculo_fraudes( )->ejecutar( ls_entrada ).

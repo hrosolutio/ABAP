@@ -76,21 +76,20 @@ docs/
 | `IV_TIPO_FACTURA_ATR` | Import | `CHAR2` | Sí | `06` u `11` |
 | `IV_CONTRATO_SAP` | Import | `VERTRAG` | Sí | Contrato |
 | `IV_ID_PROCESO_ATR` | Import | `CHAR2` | Sí | ID de proceso de la factura ATR (tipo por confirmar) |
-| `IV_DESCARTE` | Import | `XFELD` | No | Facturar a 0 un caso descartado |
-| `IV_MARCA_TITULAR` | Import | `XFELD` | No | Titular erróneo: facturar a 0 |
+| `IV_FORZADO` | Import | `XFELD` | No | Forzado: facturar a 0 (sustituye a descarte y titular erróneo) |
 | `IV_ID_EXPEDIENTE` | Import | `ZLE_DE_NUMEROEXPEDIENTE` | Sí | Nº de expediente |
 | `EV_RESULTADO` | Export | `CHAR2` | — | `OK` / `KO` |
 | `EV_CODIGO` | Export | `CHAR4` | — | Código numérico (tabla siguiente) |
 | `EV_DESCRIPCION` | Export | `STRING` | — | Descripción del resultado |
-| `EV_MODO_FACTURACION` | Export | `CHAR30` | — | `NORMAL`, `IMPORTE_CERO_DESCARTE`, `IMPORTE_CERO_TITULAR` o vacío |
+| `EV_MODO_FACTURACION` | Export | `CHAR30` | — | `NORMAL`, `IMPORTE_CERO` o vacío |
 | `ET_FACTURAS` | Export | `ZFA_T_FRAUDES_FACTURA` | — | Factura, cálculo, consumo, importe, documento oficial y fechas |
 
 ### Cambios respecto a la interfaz de partida
 
 - `IV_CONSUMO_P1..P6`: opcionales, como dice el DF, y tipados con `MENGE_D`
   (antes `MENGE`, que es una cantidad de maestro de material).
-- `IV_DESCARTE`: `XFELD` opcional (antes `CHAR2` obligatorio).
-- `IV_MARCA_TITULAR`: nuevo, no existía.
+- `IV_DESCARTE` e `IV_MARCA_TITULAR` → sustituidos por **`IV_FORZADO`**
+  (`XFELD` opcional), acordado con la IA el 26/10.
 - `EV_RESULTADO` pasa a ser `OK`/`KO` y el código va en `EV_CODIGO` (nuevo).
   Antes todo iba en un `CHAR4` y los descartes devolvían `0000`, igual que
   una factura creada, así que la IA no podía distinguirlos.
@@ -101,8 +100,8 @@ docs/
 | Código | Resultado | Significado |
 |---|---|---|
 | `0000` | OK | Factura creada |
-| `0001` | OK | Factura a importe 0 creada (flag descarte) |
-| `0002` | OK | Factura a importe 0 creada (titular erróneo) |
+| `0001` | OK | Factura a importe 0 creada (forzado) |
+| `0002` | — | (Sin uso: era titular erróneo) |
 | `0003` | OK | Factura creada pero apartada por validación (EA05): devuelve el cálculo, no la factura (el nº provisional cambia al liberar). El modo dice si es normal o a importe 0 |
 | `0101` | OK | Descarte: periodo migrado (Uptility / NI) |
 | `0102` | OK | Descarte: exención de impuestos |

@@ -5,8 +5,8 @@
 1. **Facturas bloqueadas:** "Si creas la factura debería salir
    contabilizada directamente, solo en el caso de que haya un bloqueo en
    cuenta contrato que lo impida."
-   → No contaba con `ZCICLO`. Hay que explicárselo y decidir: excluir
-   fraudes de `ZCICLO` o liberar desde la RFC.
+   → Decisión: **la factura sale contabilizada**. Las que aparta `ZCICLO`
+   (ciclo > 1 año) las libera la propia RFC.
 2. **Si falla la facturación:** "Devolver error y anular el cálculo" (a
    confirmar con quien corresponda, pero es su propuesta).
 3. **Consumo ATR vs total:** lo controla la IA. SAP factura el consumo que
@@ -19,7 +19,8 @@ Lo acordado en la reunión con la parte de la IA:
 
 1. **Interfaz:**
    - **Fuera** `IV_DESCARTE` e `IV_MARCA_TITULAR`.
-   - **Nuevo**: indicador de **Forzado** (`X` o vacío). Falta saber qué hace.
+   - **Nuevo**: indicador de **Forzado** (`X` o vacío) = **factura a 0**.
+     Sustituye a los dos flags (confirmado por Héctor).
 2. **Fechas:** la IA ya envía la intersección.
    - Desde = máx(inicio factura ATR, inicio expediente).
    - Hasta = mín(fin factura ATR, fin expediente).
@@ -49,9 +50,6 @@ Lo acordado en la reunión con la parte de la IA:
 
 ## Pendiente de aclarar
 
-- Qué hace el indicador de **Forzado**.
-- Quién decide ahora la **factura a importe 0**, ya que desaparecen los
-  flags de descarte y titular.
 - **Status del PDoc:**
   - qué PDoc es (cómo se llega desde nº factura ATR / ID proceso);
   - a qué status;

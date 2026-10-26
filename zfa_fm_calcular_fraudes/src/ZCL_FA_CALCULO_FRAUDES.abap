@@ -3,7 +3,7 @@
 *
 * Flujo (ver README para el detalle y los TODO pendientes):
 *   1. Validaciones de entrada               -> KO 1xxx
-*   2. Flag descarte / marca titular         -> factura a 0 (EREPOS/GREPOS)
+*   2. Indicador de forzado                  -> factura a 0 (EREPOS/GREPOS)
 *   3. Validaciones de integridad            -> OK 01xx (descarte)
 *   4. Cálculo original del periodo          -> OK 0108/0109 si no hay uno
 *   5. Importes según luz / gas              -> KO 2002 si falta algo
@@ -36,8 +36,7 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
         tipo_factura_atr TYPE char2,
         contrato         TYPE vertrag,
         id_proceso_atr   TYPE char2,
-        descarte         TYPE xfeld,
-        marca_titular    TYPE xfeld,
+        forzado          TYPE xfeld,
         id_expediente    TYPE zle_de_numeroexpediente,
       END OF ty_entrada,
 
@@ -154,8 +153,7 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
       gc_tipo_atr_averia    TYPE char2 VALUE '11',
 
       gc_modo_normal        TYPE char30 VALUE 'NORMAL',
-      gc_modo_cero_descarte TYPE char30 VALUE 'IMPORTE_CERO_DESCARTE',
-      gc_modo_cero_titular  TYPE char30 VALUE 'IMPORTE_CERO_TITULAR'.
+      gc_modo_cero          TYPE char30 VALUE 'IMPORTE_CERO'.
 
     DATA: ms_entrada   TYPE ty_entrada,
           mv_anlage    TYPE anlage,
@@ -309,12 +307,10 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
 
     validar_entrada( ).
 
-    " Con el flag de descarte o la marca de titular errónea se factura a
-    " 0 sin pasar por las validaciones de integridad: es la segunda
-    " llamada que hace la IA sobre un caso ya descartado.
-    " TODO confirmar con Aleix que el flag se salta las validaciones de
-    " integridad (si no, nunca se podría facturar un descarte a 0).
-    IF ms_entrada-descarte = abap_true OR ms_entrada-marca_titular = abap_true.
+    " Con el indicador de forzado (sustituye a los antiguos descarte y
+    " titular erróneo) se factura a 0 sin pasar por las validaciones de
+    " integridad: la IA ya ha decidido que el caso va a 0
+    IF ms_entrada-forzado = abap_true.
       rs_resultado = facturar_importe_cero( ).
     ELSE.
       validar_integridad( ).
@@ -592,15 +588,9 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
 
     crear_calculo_manual( lt_linea ).
 
-    IF ms_entrada-descarte = abap_true.
-      rs_resultado-codigo      = '0001'.
-      rs_resultado-descripcion = 'Factura a importe 0 (descarte) creada correctamente'.
-      rs_resultado-modo        = gc_modo_cero_descarte.
-    ELSE.
-      rs_resultado-codigo      = '0002'.
-      rs_resultado-descripcion = 'Factura a importe 0 (titular erróneo) creada correctamente'.
-      rs_resultado-modo        = gc_modo_cero_titular.
-    ENDIF.
+    rs_resultado-codigo      = '0001'.
+    rs_resultado-descripcion = 'Factura a importe 0 (forzada) creada correctamente'.
+    rs_resultado-modo        = gc_modo_cero.
 
   ENDMETHOD.
 
