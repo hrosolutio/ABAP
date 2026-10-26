@@ -80,6 +80,13 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
         endabrpe TYPE erch-endabrpe,
       END OF ty_calculo,
 
+      BEGIN OF ty_factura,
+        exbel       TYPE erdk-exbel,
+        tobreleasd  TYPE erdk-tobreleasd,
+        total_amnt  TYPE erdk-total_amnt,
+        total_waers TYPE erdk-total_waers,
+      END OF ty_factura,
+
       BEGIN OF ty_concepto_atr,
         concepto TYPE char4,
         importe  TYPE ty_importe,
@@ -255,6 +262,10 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
       RETURNING VALUE(rv_apartado) TYPE abap_bool
       RAISING   zcx_fa_fraudes.
 
+    METHODS leer_factura
+      IMPORTING iv_opbel          TYPE erdk-opbel
+      RETURNING VALUE(rs_factura) TYPE ty_factura.
+
     METHODS registrar_log
       IMPORTING is_resultado TYPE ty_resultado.
 
@@ -335,12 +346,11 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
       rs_resultado-modo        = gc_modo_normal.
     ENDIF.
 
-    " Apartada (EA05): el documento de impresión es provisional y cambia
-    " al liberar, así que no se devuelve. El modo se mantiene.
-    " TODO decidir con Aleix qué hacer con las apartadas por ZCICLO
+    " Apartada y sin poder liberarla (EA05): el documento de impresión es
+    " provisional y cambia al liberar, así que no se devuelve
     IF facturar( ) = abap_true.
       rs_resultado-codigo      = '0003'.
-      rs_resultado-descripcion = |Factura creada y apartada por validación: pendiente de liberar en EA05 (cálculo { ms_factura-calculo })|.
+      rs_resultado-descripcion = |Factura creada pero apartada y no se ha podido liberar: liberar en EA05 (cálculo { ms_factura-calculo })|.
     ENDIF.
     rs_resultado-facturas = VALUE #( ( ms_factura ) ).
 
@@ -1268,7 +1278,9 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
           ls_param  TYPE isu21_invoice_param,
           lv_handle TYPE emsg_gen-handle,
           lv_fikey  TYPE fikey_kk,
-          lv_opbel  TYPE erdk-opbel.
+          lv_opbel  TYPE erdk-opbel,
+          lv_nuevo  TYPE erdk-opbel,
+          ls_erdk   TYPE ty_factura.
 
     " Solo nuestro cálculo: con XT_EITR informado el FM no selecciona lo
     " pendiente de la cuenta (es lo que hace el popup de la EA19)
@@ -1315,20 +1327,62 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
                   texto  = |Cálculo { ms_factura-calculo } creado pero no facturado: facturar en EA19 (ver log SLG1)|.
     ENDIF.
 
-    SELECT SINGLE exbel, tobreleasd, total_amnt, total_waers
-      FROM erdk
-      WHERE opbel = @lv_opbel
-      INTO @DATA(ls_erdk).
+    ls_erdk = leer_factura( lv_opbel ).
 
     " El total no cambia al liberar un apartado: se devuelve siempre
     ms_factura-importe = ls_erdk-total_amnt.
     ms_factura-waers   = ls_erdk-total_waers.
 
-    rv_apartado = xsdbool( ls_erdk-tobreleasd IS NOT INITIAL ).
-    IF rv_apartado = abap_false.
-      ms_factura-factura     = lv_opbel.
-      ms_factura-doc_oficial = ls_erdk-exbel.
+    " Apartada por una validación (ZCICLO: ciclo > 1 año, casi siempre en
+    " fraudes): se libera ya, la factura tiene que salir contabilizada.
+    " Al liberar se borra el documento provisional y se crea otro con
+    " número nuevo, que es el que se devuelve (como el botón de la EA05)
+    IF ls_erdk-tobreleasd IS NOT INITIAL.
+      CALL FUNCTION 'ISU_OUTSORT_INVOICE_RELEASE'
+        EXPORTING
+          x_opbel       = lv_opbel
+          x_budat       = sy-datum
+          x_bldat       = sy-datum
+          x_create_log  = abap_true
+          x_fikey       = lv_fikey
+        IMPORTING
+          y_new_opbel   = lv_nuevo
+        EXCEPTIONS
+          not_found     = 1
+          foreign_lock  = 2
+          system_error  = 3
+          error_message = 4
+          OTHERS        = 5.
+      " Si falla o se libera en fondo (sin número nuevo) queda apartada
+      " para liberarla a mano en la EA05
+      IF sy-subrc <> 0 OR lv_nuevo IS INITIAL.
+        rv_apartado = abap_true.
+        RETURN.
+      ENDIF.
+      lv_opbel = lv_nuevo.
+      ls_erdk  = leer_factura( lv_opbel ).
     ENDIF.
+
+    ms_factura-factura     = lv_opbel.
+    ms_factura-doc_oficial = ls_erdk-exbel.
+
+  ENDMETHOD.
+
+
+  METHOD leer_factura.
+
+    " La facturación y la liberación hacen COMMIT sin esperar a la
+    " actualización: se reintenta unos segundos hasta que esté en BD
+    DO 10 TIMES.
+      SELECT SINGLE exbel, tobreleasd, total_amnt, total_waers
+        FROM erdk
+        WHERE opbel = @iv_opbel
+        INTO CORRESPONDING FIELDS OF @rs_factura.
+      IF sy-subrc = 0.
+        RETURN.
+      ENDIF.
+      WAIT UP TO 1 SECONDS.
+    ENDDO.
 
   ENDMETHOD.
 

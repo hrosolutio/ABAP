@@ -64,10 +64,15 @@ nº oficial (`EXBEL` vacío). La EA19 lo da todo en verde.
   al liberar. Si la factura se aparta, la RFC solo puede devolver el
   cálculo y un estado de pendiente de liberar.
 - **Consecuencia:** casi todos los fraudes regularizan periodos antiguos,
-  así que se apartarán siempre. Falta decidir con Aleix:
-  1. excluir fraudes y averías de `ZCICLO` (por `ORIGDOC` 40-42);
-  2. que la RFC libere;
-  3. dejarlos apartados para que alguien los libere a mano en la EA05.
+  así que se apartarán siempre. Decisión (Aleix): **tienen que salir
+  contabilizadas → la RFC libera** con `ISU_OUTSORT_INVOICE_RELEASE`.
+  - Lo usa el programa de la EA05 (`FORM release_doc_inv`).
+  - Documento entero: `X_OPBEL` sin `X_OUTCNSO`.
+  - Devuelve el número nuevo en `Y_NEW_OPBEL` y hace `COMMIT` él mismo.
+  - Con `X_CREATE_LOG = 'X'` abre su propio log y no lanza el
+    `MESSAGE i138`.
+  - Si libera en fondo (`y_batch` interno), `Y_NEW_OPBEL` puede venir
+    vacío.
 
 ## Customizing estándar que también hay que tener en cuenta
 

@@ -102,7 +102,7 @@ docs/
 | `0000` | OK | Factura creada |
 | `0001` | OK | Factura a importe 0 creada (forzado) |
 | `0002` | — | (Sin uso: era titular erróneo) |
-| `0003` | OK | Factura creada pero apartada por validación (EA05): devuelve el cálculo, no la factura (el nº provisional cambia al liberar). El modo dice si es normal o a importe 0 |
+| `0003` | OK | Factura creada y apartada, y la liberación automática ha fallado (o va en fondo): liberar a mano en EA05. Devuelve el cálculo y el importe, no la factura (el nº provisional cambia al liberar) |
 | `0101` | OK | Descarte: periodo migrado (Uptility / NI) |
 | `0102` | OK | Descarte: exención de impuestos |
 | `0103` | OK | Descarte: derecho al olvido |
@@ -228,8 +228,12 @@ que saber interpretarlos.
     - `IMPORTE` = **total de la factura con impuestos** (`ERDK-TOTAL_AMNT`,
       confirmado por Héctor), también si queda apartada. Con `2007` va
       vacío.
-    - Si `ERDK-TOBRELEASD = X`, la factura queda apartada → código `0003`
-      sin factura.
+    - Si `ERDK-TOBRELEASD = X` (apartada, normalmente por `ZCICLO`), **se
+      libera** con `ISU_OUTSORT_INVOICE_RELEASE` (documento entero, como el
+      botón de la EA05) y se devuelve el **documento nuevo**
+      (`Y_NEW_OPBEL`). Si la liberación falla → `0003`.
+    - `ERDK` se lee con reintentos (hasta 10 s), porque los FM hacen
+      `COMMIT` sin esperar.
 11. **Transacción**: el cálculo se graba (`COMMIT WORK AND WAIT`) antes de
     facturar. Si la facturación falla, el cálculo ya no se deshace: se
     devuelve `2007` con su BELNR. Si algo falla antes, `ROLLBACK`. Siempre
@@ -334,9 +338,7 @@ activación real en el sistema es la que vale.
       varios cálculos) o hay que excluirlo de la búsqueda del original.
 - [ ] `ORIGDOC`: ¿tipo ATR 06 = fraude (40) y 11 = avería (41)? ¿Cuándo
       es permuta (42)?
-- [ ] La factura queda apartada por la validación `ZCICLO` (ciclo > 1 año,
-      EA05). ¿Se excluyen fraudes y averías, libera la RFC o se liberan a
-      mano?
+- [x] ~~Facturas apartadas por `ZCICLO`~~: Aleix quiere que salgan contabilizadas → las libera la RFC.
 - [ ] Clave de reconciliación para la facturación desde la RFC (hoy
       `AAMMDD-001`, la que propone la EA19).
 - [ ] Reintento tras un `2007`: el cálculo manual queda grabado y un nuevo
