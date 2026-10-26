@@ -59,6 +59,7 @@ src/
 docs/
   DF_resumen.md                              Resumen del Diseño Funcional
   conceptos.md                               Clasificación de conceptos (ZFA_FRAUD_CONC)
+  decisiones.md                              Decisiones funcionales recibidas (correos)
   extensiones_z.md                           BAdIs/eventos Z y customizing que afectan al cálculo y la facturación
 ```
 
@@ -317,7 +318,9 @@ activación real en el sistema es la que vale.
 - [ ] Rellenar `ZFA_FRAUD_CONC` con los conceptos reales.
 
 **A definir con Aleix:**
-- [ ] Validación consumo ATR vs consumo total (pendiente en el DF).
+- [x] ~~Validación consumo ATR vs consumo total~~: la hace la IA (ver `docs/decisiones.md`).
+- [ ] Indicador de **Forzado** (sustituye a descarte y titular): qué hace y quién decide la factura a 0.
+- [ ] Actualizar el **status del PDoc** de la factura ATR: qué PDoc, qué status y con qué FM.
 - [ ] Origen de: periodo migrado, exención de impuestos, derecho al olvido,
       vulnerable/esencial y qué bloqueo de contrato o cuenta contrato.
 - [ ] Operando de reposición (y si basta con que exista) y tipo(s) de
