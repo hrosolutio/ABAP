@@ -1289,6 +1289,8 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
           lv_fikey  TYPE fikey_kk,
           lv_opbel  TYPE erdk-opbel,
           lv_nuevo  TYPE erdk-opbel,
+          lv_subrc  TYPE sy-subrc,
+          lv_msg    TYPE string,
           ls_erdk   TYPE ty_factura.
 
     " Solo nuestro cálculo: con XT_EITR informado el FM no selecciona lo
@@ -1379,8 +1381,16 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
           OTHERS        = 5.
       " Si falla o se libera en fondo (sin número nuevo) queda apartada
       " para liberarla a mano en la EA05
-      IF sy-subrc <> 0 OR lv_nuevo IS INITIAL.
-        mv_motivos_apartado = | { gc_validacion_ciclo } (error al liberar)|.
+      lv_subrc = sy-subrc.
+      IF lv_subrc <> 0 OR lv_nuevo IS INITIAL.
+        IF lv_subrc <> 0 AND sy-msgid IS NOT INITIAL.
+          MESSAGE ID sy-msgid TYPE 'E' NUMBER sy-msgno
+            WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4 INTO lv_msg.
+          lv_msg = |{ sy-msgid } { sy-msgno } { lv_msg }|.
+        ELSEIF lv_subrc = 0.
+          lv_msg = 'liberación en fondo, sin documento nuevo'.
+        ENDIF.
+        mv_motivos_apartado = | { gc_validacion_ciclo } (error al liberar, subrc { lv_subrc }: { lv_msg })|.
         rv_apartado = abap_true.
         RETURN.
       ENDIF.
