@@ -113,3 +113,9 @@ quitó el 550000002613 de QA.
 Hay que hacerlo antes de repetir una prueba en el mismo contrato y periodo.
 Si no, `buscar_calculo_original` también encuentra el cálculo manual y
 devuelve 0109.
+
+Un cálculo manual **ya facturado** no se puede borrar en la EA16 ("se está
+utilizando"). Se anula con la **EA13** sobre su documento de impresión
+definitivo. Anula la factura **y el cálculo**: queda `ERCH-STORNODAT`
+relleno y `buscar_calculo_original` ya no lo tiene en cuenta. Así se anuló
+en QA la 610000008573 / 550000002616.
