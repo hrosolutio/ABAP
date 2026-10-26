@@ -1276,11 +1276,9 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     " COMMIT y lee EITR: se graba ya
     COMMIT WORK AND WAIT.
 
-    " TODO confirmar con Aleix si IMPORTE es el neto del cálculo (hoy) o
-    " el total de la factura con impuestos (ERDK-TOTAL_AMNT)
+    " IMPORTE es el total de la factura con impuestos: lo pone facturar
     ms_factura-calculo     = ls_new_doc-erch-belnr.
     ms_factura-consumo     = ms_entrada-consumo_total.
-    ms_factura-importe     = sumar_importes( it_lineas ).
     ms_factura-waers       = VALUE #( ls_auto-bill_doc-ierchz[ 1 ]-twaers OPTIONAL ).
     ms_factura-fecha_desde = ms_entrada-fecha_desde.
     ms_factura-fecha_hasta = ms_entrada-fecha_hasta.
@@ -1342,10 +1340,14 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
                   texto  = |Cálculo { ms_factura-calculo } creado pero no facturado: facturar en EA19 (ver log SLG1)|.
     ENDIF.
 
-    SELECT SINGLE exbel, tobreleasd
+    SELECT SINGLE exbel, tobreleasd, total_amnt, total_waers
       FROM erdk
       WHERE opbel = @lv_opbel
       INTO @DATA(ls_erdk).
+
+    " El total no cambia al liberar un apartado: se devuelve siempre
+    ms_factura-importe = ls_erdk-total_amnt.
+    ms_factura-waers   = ls_erdk-total_waers.
 
     rv_apartado = xsdbool( ls_erdk-tobreleasd IS NOT INITIAL ).
     IF rv_apartado = abap_false.

@@ -225,6 +225,9 @@ que saber interpretarlos.
     reconciliación `AAMMDD-001` (la del día, como propone la EA19). El FM
     hace sus propios `COMMIT`.
     - `FACTURA` = `ERDK-OPBEL` y `DOC_OFICIAL` = `ERDK-EXBEL`.
+    - `IMPORTE` = **total de la factura con impuestos** (`ERDK-TOTAL_AMNT`,
+      confirmado por Héctor), también si queda apartada. Con `2007` va
+      vacío.
     - Si `ERDK-TOBRELEASD = X`, la factura queda apartada → código `0003`
       sin factura.
 11. **Transacción**: el cálculo se graba (`COMMIT WORK AND WAIT`) antes de
@@ -332,8 +335,6 @@ activación real en el sistema es la que vale.
 - [ ] La factura queda apartada por la validación `ZCICLO` (ciclo > 1 año,
       EA05). ¿Se excluyen fraudes y averías, libera la RFC o se liberan a
       mano?
-- [ ] `IMPORTE` de salida: ¿neto del cálculo o total de la factura con
-      impuestos (`ERDK-TOTAL_AMNT`)?
 - [ ] Clave de reconciliación para la facturación desde la RFC (hoy
       `AAMMDD-001`, la que propone la EA19).
 - [ ] Reintento tras un `2007`: el cálculo manual queda grabado y un nuevo
