@@ -1289,8 +1289,8 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
           lv_fikey  TYPE fikey_kk,
           lv_opbel  TYPE erdk-opbel,
           lv_nuevo  TYPE erdk-opbel,
-          lv_subrc  TYPE sy-subrc,
-          lv_msg    TYPE string,
+          lv_subrc   TYPE sy-subrc,
+          lv_mensaje TYPE bapi_msg,
           ls_erdk   TYPE ty_factura.
 
     " Solo nuestro cálculo: con XT_EITR informado el FM no selecciona lo
@@ -1364,33 +1364,34 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
         RETURN.
       ENDIF.
 
-      " Igual que la EA05 (FORM release_doc_inv): sin clave de
-      " reconciliación ni fechas, las pone el estándar. Pasándole la clave
-      " de la facturación devolvía SYSTEM_ERROR
-      CALL FUNCTION 'ISU_OUTSORT_INVOICE_RELEASE'
+      " En una sesión nueva (DESTINATION 'NONE'): en la misma sesión que
+      " la facturación el FM estándar da SYSTEM_ERROR; en una sesión limpia
+      " (EA05, SE37) libera bien. Antes se sueltan los bloqueos de esta
+      " sesión (todo está ya grabado) para que no choquen con los suyos.
+      CALL FUNCTION 'DEQUEUE_ALL'.
+      CALL FUNCTION 'ZFA_FM_FRAUDES_LIBERAR'
+        DESTINATION 'NONE'
         EXPORTING
-          x_opbel       = lv_opbel
-          x_create_log  = abap_true
+          iv_opbel              = lv_opbel
         IMPORTING
-          y_new_opbel   = lv_nuevo
+          ev_new_opbel          = lv_nuevo
+          ev_subrc              = lv_subrc
+          ev_mensaje            = lv_mensaje
         EXCEPTIONS
-          not_found     = 1
-          foreign_lock  = 2
-          system_error  = 3
-          error_message = 4
-          OTHERS        = 5.
+          system_failure        = 1 MESSAGE lv_mensaje
+          communication_failure = 2 MESSAGE lv_mensaje
+          OTHERS                = 3.
+      IF sy-subrc <> 0.
+        lv_subrc = sy-subrc.
+        lv_mensaje = |RFC: { lv_mensaje }|.
+      ENDIF.
       " Si falla o se libera en fondo (sin número nuevo) queda apartada
       " para liberarla a mano en la EA05
-      lv_subrc = sy-subrc.
       IF lv_subrc <> 0 OR lv_nuevo IS INITIAL.
-        IF lv_subrc <> 0 AND sy-msgid IS NOT INITIAL.
-          MESSAGE ID sy-msgid TYPE 'E' NUMBER sy-msgno
-            WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4 INTO lv_msg.
-          lv_msg = |{ sy-msgid } { sy-msgno } { lv_msg }|.
-        ELSEIF lv_subrc = 0.
-          lv_msg = 'liberación en fondo, sin documento nuevo'.
+        IF lv_subrc = 0.
+          lv_mensaje = 'liberación en fondo, sin documento nuevo'.
         ENDIF.
-        mv_motivos_apartado = | { gc_validacion_ciclo } (error al liberar, subrc { lv_subrc }: { lv_msg })|.
+        mv_motivos_apartado = | { gc_validacion_ciclo } (error al liberar, subrc { lv_subrc }: { lv_mensaje })|.
         rv_apartado = abap_true.
         RETURN.
       ENDIF.

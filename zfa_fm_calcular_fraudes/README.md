@@ -16,6 +16,7 @@ Plazo: **final de noviembre de 2026**.
 |---|---|
 | `ZFA_FM_CALCULAR_FRAUDESV2` (grupo de funciones `ZFA_FG_FRAUDES`) | **RFC nueva**, la de este desarrollo. Es la que se llama desde fuera: avisar a Aleix del nombre |
 | `ZFA_FM_CALCULAR_FRAUDES` | Versión de partida de Aleix (generada con IA). Se deja como está, solo como referencia |
+| `ZFA_FM_FRAUDES_LIBERAR` (grupo `ZFA_FG_FRAUDES`) | FM **de acceso remoto** que envuelve `ISU_OUTSORT_INVOICE_RELEASE`. La clase lo llama con `DESTINATION 'NONE'` para liberar la factura apartada en una sesión nueva |
 | `ZFA_FG_FRAUD_CONC` | Grupo de funciones del generador de actualización (SM30) de `ZFA_FRAUD_CONC` |
 
 ## Estado
@@ -52,6 +53,7 @@ flujo general y las validaciones de CUPS / contrato.
 ```
 src/
   ZFA_FM_CALCULAR_FRAUDESV2.abap             Módulo de función RFC (solo traslada parámetros)
+  ZFA_FM_FRAUDES_LIBERAR.abap                FM remoto para liberar la factura apartada en otra sesión
   ZCL_FA_CALCULO_FRAUDES.abap                Clase con toda la lógica
   ZCL_FA_CALCULO_FRAUDES.testclasses.abap    ABAP Unit de la parte de cálculo
   ZCX_FA_FRAUDES.abap                        Excepción con código y descripción de resultado
@@ -231,7 +233,9 @@ que saber interpretarlos.
       vacío.
     - Si `ERDK-TOBRELEASD = X` (apartada, normalmente por `ZCICLO`), **se
       libera** con `ISU_OUTSORT_INVOICE_RELEASE` (documento entero, como el
-      botón de la EA05) y se devuelve el **documento nuevo**
+      botón de la EA05), **en una sesión nueva** (`ZFA_FM_FRAUDES_LIBERAR`
+      con `DESTINATION 'NONE'`): en la misma sesión que la facturación da
+      `SYSTEM_ERROR` y se devuelve el **documento nuevo**
       (`Y_NEW_OPBEL`). **Solo si todos los apartados pendientes en `ERDO`
       son `VALIDAT_IN = ZCICLO`**. Con otra validación, un apartado manual
       (`MANOUTS_IN`) o un error al liberar → `0003`, con los motivos en la

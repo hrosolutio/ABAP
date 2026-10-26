@@ -77,6 +77,11 @@ nº oficial (`EXBEL` vacío). La EA19 lo da todo en verde.
     610000008684. Ojo: tras la excepción, `sy-msg` traía un EB 128
     ("documentos apartados") de la facturación, no el error real. El log
     queda en la SLG1, objeto `IU21`.
+  - **No funciona en la misma sesión que la facturación**: sin la clave
+    de reconciliación sigue dando `SYSTEM_ERROR` dentro de la RFC
+    (`PRUEBA012`), aunque en la SE37 con el mismo documento libera bien.
+    Se lanza en una sesión nueva con el FM remoto `ZFA_FM_FRAUDES_LIBERAR`
+    y `DESTINATION 'NONE'`, después de `DEQUEUE_ALL`.
   - Si libera en fondo (`y_batch` interno), `Y_NEW_OPBEL` puede venir
     vacío.
   - **Solo se libera si todos los apartados pendientes son `ZCICLO`**
