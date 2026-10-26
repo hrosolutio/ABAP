@@ -84,7 +84,7 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
         exbel       TYPE erdk-exbel,
         tobreleasd  TYPE erdk-tobreleasd,
         total_amnt  TYPE erdk-total_amnt,
-        total_waers TYPE erdk-total_waers,
+        total_waer  TYPE erdk-total_waer,
       END OF ty_factura,
 
       BEGIN OF ty_concepto_atr,
@@ -1336,7 +1336,7 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
 
     " El total no cambia al liberar un apartado: se devuelve siempre
     ms_factura-importe = ls_erdk-total_amnt.
-    ms_factura-waers   = ls_erdk-total_waers.
+    ms_factura-waers   = ls_erdk-total_waer.
 
     " Apartada por una validación (ZCICLO: ciclo > 1 año, casi siempre en
     " fraudes): se libera ya, la factura tiene que salir contabilizada.
@@ -1434,7 +1434,7 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     " La facturación y la liberación hacen COMMIT sin esperar a la
     " actualización: se reintenta unos segundos hasta que esté en BD
     DO 10 TIMES.
-      SELECT SINGLE exbel, tobreleasd, total_amnt, total_waers
+      SELECT SINGLE exbel, tobreleasd, total_amnt, total_waer
         FROM erdk
         WHERE opbel = @iv_opbel
         INTO CORRESPONDING FIELDS OF @rs_factura.
