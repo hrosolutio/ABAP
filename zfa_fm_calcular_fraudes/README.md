@@ -126,7 +126,8 @@ docs/
 | `2003` | KO | Error creando el cálculo manual |
 | `2005` | KO | Contrato bloqueado por otro proceso (`FOREIGN_LOCK`) |
 | `2006` | KO | `KOFIZ` del contrato no válido para la serie del documento oficial |
-| `2007` | KO | Cálculo creado (ya grabado, se devuelve su `CALCULO`) pero no facturado: facturar a mano en EA19 |
+| `2007` | KO | No se ha podido facturar: el cálculo manual se ha **borrado** (`ISU_S_MANUBILL_DELETE`), se puede reintentar |
+| `2008` | KO | No se ha podido facturar **ni borrar el cálculo**: se devuelve su `CALCULO` para borrarlo a mano en EA16 |
 
 Los códigos son una propuesta: **confirmarlos con Aleix**, que la IA tiene
 que saber interpretarlos.
@@ -238,8 +239,10 @@ que saber interpretarlos.
     - `ERDK` se lee con reintentos (hasta 10 s), porque los FM hacen
       `COMMIT` sin esperar.
 11. **Transacción**: el cálculo se graba (`COMMIT WORK AND WAIT`) antes de
-    facturar. Si la facturación falla, el cálculo ya no se deshace: se
-    devuelve `2007` con su BELNR. Si algo falla antes, `ROLLBACK`. Siempre
+    facturar. Si la facturación falla, se **borra el cálculo** con
+    `ISU_S_MANUBILL_DELETE` (sin diálogo; hace `COMMIT` él mismo y no borra
+    un cálculo facturado) → `2007`. Si tampoco se puede borrar → `2008`
+    con el BELNR. Si algo falla antes, `ROLLBACK`. Siempre
     se graba una línea en `ZFA_FRAUD_LOG` con su `COMMIT` al final.
 
 ## Objetos DDIC a crear (SE11)
@@ -344,10 +347,7 @@ activación real en el sistema es la que vale.
 - [x] ~~Facturas apartadas por `ZCICLO`~~: Aleix quiere que salgan contabilizadas → las libera la RFC.
 - [ ] Clave de reconciliación para la facturación desde la RFC (hoy
       `AAMMDD-001`, la que propone la EA19).
-- [ ] Reintento tras un `2007`: el cálculo manual queda grabado y un nuevo
-      intento del mismo expediente daría `0109` (dos cálculos en el
-      periodo). ¿Se factura a mano o se excluyen los manuales (`ABRVORG`
-      06) de la búsqueda del original?
+- [x] ~~Reintento tras un fallo de facturación~~: Aleix → devolver error y anular el cálculo (`2007`).
 - [ ] OK a tocar la exit `ZXBI1U01` (bloque 1B, ver
       `docs/extensiones_z.md`).
 - [ ] Códigos de resultado y valores de `EV_MODO_FACTURACION`.

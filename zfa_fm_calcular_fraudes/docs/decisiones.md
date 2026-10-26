@@ -7,8 +7,9 @@
    cuenta contrato que lo impida."
    → Decisión: **la factura sale contabilizada**. Las que aparta `ZCICLO`
    (ciclo > 1 año) las libera la propia RFC.
-2. **Si falla la facturación:** "Devolver error y anular el cálculo" (a
-   confirmar con quien corresponda, pero es su propuesta).
+2. **Si falla la facturación:** "Devolver error y anular el cálculo".
+   → Hecho: se borra con `ISU_S_MANUBILL_DELETE` y se devuelve `2007`
+   (o `2008` si no se puede borrar).
 3. **Consumo ATR vs total:** lo controla la IA. SAP factura el consumo que
    le llega. → Validación 1.5 eliminada.
 4. **Formulario:** "No toques el formulario" → fuera de alcance.

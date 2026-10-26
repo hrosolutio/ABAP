@@ -267,6 +267,10 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
       RETURNING VALUE(rv_apartado) TYPE abap_bool
       RAISING   zcx_fa_fraudes.
 
+    METHODS anular_calculo
+      IMPORTING iv_motivo TYPE string
+      RAISING   zcx_fa_fraudes.
+
     METHODS leer_factura
       IMPORTING iv_opbel          TYPE erdk-opbel
       RETURNING VALUE(rs_factura) TYPE ty_factura.
@@ -1294,9 +1298,7 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
       WHERE belnr = @ms_factura-calculo
       INTO TABLE @lt_eitr.
     IF lt_eitr IS INITIAL.
-      RAISE EXCEPTION TYPE zcx_fa_fraudes
-        EXPORTING codigo = '2007'
-                  texto  = |Cálculo { ms_factura-calculo } creado pero no está pendiente de facturar (EITR)|.
+      anular_calculo( |Cálculo { ms_factura-calculo } no pendiente de facturar (EITR)| ).
     ENDIF.
 
     " Clave de reconciliación del día con el formato que propone la EA19
@@ -1327,9 +1329,7 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
       lv_opbel = VALUE #( lt_opbel[ 1 ]-opbel OPTIONAL ).
     ENDIF.
     IF lv_opbel IS INITIAL.
-      RAISE EXCEPTION TYPE zcx_fa_fraudes
-        EXPORTING codigo = '2007'
-                  texto  = |Cálculo { ms_factura-calculo } creado pero no facturado: facturar en EA19 (ver log SLG1)|.
+      anular_calculo( |Error al facturar el cálculo { ms_factura-calculo } (ver log SLG1)| ).
     ENDIF.
 
     ls_erdk = leer_factura( lv_opbel ).
@@ -1390,6 +1390,41 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
 
     ms_factura-factura     = lv_opbel.
     ms_factura-doc_oficial = ls_erdk-exbel.
+
+  ENDMETHOD.
+
+
+  METHOD anular_calculo.
+
+    DATA lv_calculo TYPE erch-belnr.
+
+    " Si no se puede facturar se borra el cálculo manual (Aleix: devolver
+    " error y anular el cálculo): así un reintento del expediente no se
+    " encuentra con dos cálculos en el periodo. Hace COMMIT él mismo y no
+    " deja borrar un cálculo ya facturado.
+    lv_calculo = ms_factura-calculo.
+    CALL FUNCTION 'ISU_S_MANUBILL_DELETE'
+      EXPORTING
+        x_belnr       = lv_calculo
+        x_stichtag    = ms_entrada-fecha_hasta
+        x_no_dialog   = abap_true
+      EXCEPTIONS
+        not_found     = 1
+        foreign_lock  = 2
+        cancelled     = 3
+        general_fault = 4
+        error_message = 5
+        OTHERS        = 6.
+    IF sy-subrc = 0.
+      CLEAR ms_factura.
+      RAISE EXCEPTION TYPE zcx_fa_fraudes
+        EXPORTING codigo = '2007'
+                  texto  = |{ iv_motivo }. Cálculo { lv_calculo } borrado|.
+    ENDIF.
+
+    RAISE EXCEPTION TYPE zcx_fa_fraudes
+      EXPORTING codigo = '2008'
+                texto  = |{ iv_motivo }. No se ha podido borrar el cálculo { lv_calculo }: borrarlo en EA16|.
 
   ENDMETHOD.
 
