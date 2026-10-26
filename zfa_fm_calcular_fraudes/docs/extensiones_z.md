@@ -71,6 +71,12 @@ nº oficial (`EXBEL` vacío). La EA19 lo da todo en verde.
   - Devuelve el número nuevo en `Y_NEW_OPBEL` y hace `COMMIT` él mismo.
   - Con `X_CREATE_LOG = 'X'` abre su propio log y no lanza el
     `MESSAGE i138`.
+  - **Sin `X_FIKEY`, `X_BUDAT` ni `X_BLDAT`**, igual que la EA05. Con la
+    clave de la facturación (`AAMMDD-001`) devolvía `SYSTEM_ERROR`. En SE37
+    con solo `X_OPBEL` + `X_CREATE_LOG` libera bien: 620000001612 →
+    610000008684. Ojo: tras la excepción, `sy-msg` traía un EB 128
+    ("documentos apartados") de la facturación, no el error real. El log
+    queda en la SLG1, objeto `IU21`.
   - Si libera en fondo (`y_batch` interno), `Y_NEW_OPBEL` puede venir
     vacío.
   - **Solo se libera si todos los apartados pendientes son `ZCICLO`**

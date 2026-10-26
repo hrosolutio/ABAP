@@ -1365,8 +1365,8 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
       ENDIF.
 
       " Igual que la EA05 (FORM release_doc_inv): sin clave de
-      " reconciliación ni fechas, las pone el estándar. Con la clave de la
-      " facturación da SYSTEM_ERROR (EB 128)
+      " reconciliación ni fechas, las pone el estándar. Pasándole la clave
+      " de la facturación devolvía SYSTEM_ERROR
       CALL FUNCTION 'ISU_OUTSORT_INVOICE_RELEASE'
         EXPORTING
           x_opbel       = lv_opbel
