@@ -118,7 +118,7 @@ docs/
 | `1001` | KO | El CUPS no existe |
 | `1002` | KO | El contrato no existe o no corresponde al CUPS |
 | `1003` | KO | El contrato no está activo en el periodo |
-| `1004` | KO | Factura ATR inexistente o de tipo distinto de 06/11 |
+| `1004` | KO | Factura ATR inexistente o de tipo no válido (luz `06`/`11`, gas `AN`/`FR`) |
 | `1005` | — | (Sin uso: la validación de consumo la hace la IA) |
 | `1006` | KO | El expediente ya está facturado |
 | `1007` | KO | Fecha desde posterior a fecha hasta |
@@ -360,8 +360,7 @@ activación real en el sistema es la que vale.
 - [ ] Si un cálculo manual de fraude ya hecho (ABRVORG 06) en el mismo
       periodo tiene que bloquear un segundo expediente (hoy da 0109 por
       varios cálculos) o hay que excluirlo de la búsqueda del original.
-- [ ] `ORIGDOC`: ¿tipo ATR 06 = fraude (40) y 11 = avería (41)? ¿Cuándo
-      es permuta (42)?
+- [x] ~~Tipo ATR / `ORIGDOC`~~: luz 06 anomalía / 11 fraude, gas AN / FR (Eliza 27/10). ¿Permuta (42)? Fuera por ahora.
 - [x] ~~Facturas apartadas por `ZCICLO`~~: Aleix quiere que salgan contabilizadas → las libera la RFC.
 - [ ] Clave de reconciliación para la facturación desde la RFC (hoy
       `AAMMDD-001`, la que propone la EA19).

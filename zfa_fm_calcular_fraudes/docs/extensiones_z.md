@@ -107,7 +107,7 @@ nº oficial (`EXBEL` vacío). La EA19 lo da todo en verde.
 | `ZORIG_FACTURA` | — | Vacío |
 | `ZFECHA_OPER_CALC` | — | Hoy, como propone el popup de la EA16 |
 | `ZORIG_FECHA_OPER` | — | Vacío |
-| `ORIGDOC` (estándar) | 31-34, 40-42 | `40` fraude, `41` avería (tipo ATR 11) |
+| `ORIGDOC` (estándar) | 31-34, 40-42 | `40` fraude (tipo ATR `11` / `FR`), `41` avería (`06` / `AN`) |
 
 ## Truco para ver el error real
 

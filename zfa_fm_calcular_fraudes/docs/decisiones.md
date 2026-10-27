@@ -1,5 +1,14 @@
 # Decisiones funcionales recibidas
 
+## Tipo de factura ATR (correo de Eliza, 27/10/2026)
+
+- **Luz:** `06` = anomalía, `11` = fraude.
+- **Gas:** la factura ATR es siempre tipo `99` y se distingue por el tipo
+  de complementaria. La IA envía en `IV_TIPO_FACTURA_ATR`: `AN` = anomalía,
+  `FR` = fraude (propuesta de Eliza, aceptada en SAP).
+- `ORIGDOC`: fraude (`11`/`FR`) → `40`; anomalía (`06`/`AN`) → `41`.
+  Antes estaba al revés en la clase (se suponía 06 = fraude).
+
 ## Respuestas de Aleix a las dudas de Héctor (26/10/2026)
 
 1. **Facturas bloqueadas:** "Si creas la factura debería salir

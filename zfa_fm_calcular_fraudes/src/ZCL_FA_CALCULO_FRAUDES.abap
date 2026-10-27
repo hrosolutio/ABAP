@@ -155,11 +155,16 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
       " solo los rellena con el popup de EA16/EA17. Sin diálogo se los
       " pasamos por memoria (gc_memoria_erch) y la exit los recoge.
       " ORIGDOC 40 fraude / 41 avería -> serie F + letra del KOFIZ
-      " TODO confirmar con Aleix: tipo ATR 06 = fraude y 11 = avería
       gc_memoria_erch       TYPE char30 VALUE 'ZFA_FRAUDES_ERCH',
       gc_origdoc_fraude     TYPE erch-origdoc VALUE '40',
       gc_origdoc_averia     TYPE erch-origdoc VALUE '41',
-      gc_tipo_atr_averia    TYPE char2 VALUE '11',
+      " Tipo de factura ATR (correo de Eliza, 27/10): luz 06 anomalía y 11
+      " fraude; gas va siempre con tipo 99 y la IA envía en su lugar el
+      " tipo de complementaria, AN anomalía y FR fraude
+      gc_tipo_atr_anomalia_luz TYPE char2 VALUE '06',
+      gc_tipo_atr_fraude_luz   TYPE char2 VALUE '11',
+      gc_tipo_atr_anomalia_gas TYPE char2 VALUE 'AN',
+      gc_tipo_atr_fraude_gas   TYPE char2 VALUE 'FR',
       " Única validación de facturación cuyo apartado libera la RFC: los
       " fraudes casi siempre son de periodos de hace más de un año
       gc_validacion_ciclo   TYPE erdo-validat_in VALUE 'ZCICLO',
@@ -378,9 +383,10 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
 
   METHOD validar_entrada.
 
-    DATA: lv_codigo TYPE char4,
-          lv_int_ui TYPE int_ui,
-          lv_anlage TYPE anlage.
+    DATA: lv_codigo  TYPE char4,
+          lv_int_ui  TYPE int_ui,
+          lv_anlage  TYPE anlage,
+          lv_tipo_ok TYPE abap_bool.
 
     validar_obligatorios( ).
 
@@ -458,11 +464,16 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
       WHERE vkont = @mv_vkonto
       INTO @mv_gpartner.
 
-    " 1.4 Factura ATR de tipo 06 u 11 y existente
-    IF ms_entrada-tipo_factura_atr <> '06' AND ms_entrada-tipo_factura_atr <> '11'.
+    " 1.4 Factura ATR de anomalía o fraude (según la división) y existente
+    lv_tipo_ok = SWITCH #( mv_sparte
+                   WHEN gc_sparte_luz THEN xsdbool( ms_entrada-tipo_factura_atr = gc_tipo_atr_anomalia_luz OR
+                                                    ms_entrada-tipo_factura_atr = gc_tipo_atr_fraude_luz )
+                   WHEN gc_sparte_gas THEN xsdbool( ms_entrada-tipo_factura_atr = gc_tipo_atr_anomalia_gas OR
+                                                    ms_entrada-tipo_factura_atr = gc_tipo_atr_fraude_gas ) ).
+    IF lv_tipo_ok = abap_false.
       RAISE EXCEPTION TYPE zcx_fa_fraudes
         EXPORTING codigo = '1004'
-                  texto  = |Tipo de factura ATR { ms_entrada-tipo_factura_atr } no válido (06 u 11)|.
+                  texto  = |Tipo de factura ATR { ms_entrada-tipo_factura_atr } no válido (luz 06/11, gas AN/FR)|.
     ENDIF.
 
     IF existe_factura_atr( ) = abap_false.
@@ -1194,9 +1205,10 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     " Campos Z (ver gc_memoria_erch): misma lógica que el popup de la
     " exit para un ORIGDOC 40-43: serie F + letra del KOFIZ, sin forzar
     " y fecha de operación la de hoy
-    lv_origdoc = COND #( WHEN ms_entrada-tipo_factura_atr = gc_tipo_atr_averia
-                         THEN gc_origdoc_averia
-                         ELSE gc_origdoc_fraude ).
+    lv_origdoc = COND #( WHEN ms_entrada-tipo_factura_atr = gc_tipo_atr_fraude_luz OR
+                              ms_entrada-tipo_factura_atr = gc_tipo_atr_fraude_gas
+                         THEN gc_origdoc_fraude
+                         ELSE gc_origdoc_averia ).
     lv_serie_nod = SWITCH #( mv_kofiz
                              WHEN 'DP' THEN 'FE'     " Península
                              WHEN 'DC' THEN 'FC'     " Canarias
