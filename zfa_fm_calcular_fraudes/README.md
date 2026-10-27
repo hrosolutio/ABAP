@@ -38,8 +38,8 @@ flujo general y las validaciones de CUPS / contrato.
 | Lectura de líneas del cálculo | Hecha: `DBERCHZ1..8` juntadas en `ERCHZ` |
 | Cálculo luz (energía, prorrateo, descuentos, IEE, potencia) | Hecho, con ABAP Unit |
 | Cálculo gas (TV, prorrateo, descuentos, hidrocarburos) | Hecho; conceptos 1923/1924 **TODO** |
-| Factura a 0 (descarte / titular) | Hecho hasta la creación del cálculo |
-| Creación del cálculo manual | Hecha con `ISU_S_MANUBILL_CREATE`, heredando las líneas originales. **Probada en QA** (550000002616, luz, con serie FE). Las líneas sin original (EREPOS/GREPOS, mínimo IEE nuevo) se copian de un cálculo **plantilla configurado en STVARV** (`ZFA_FRAUDES_PLANTILLA_<concepto>`), **sin probar**. Falta PGINTR/PGIRAP |
+| Factura a 0 (`IV_FORZADO`) | **Probada en QA** (`PRUEBA014`, luz): EREPOS con plantilla de STVARV → 550000002621 → 610000008705, FE26390000002316, importe 0, código `0001` |
+| Creación del cálculo manual | Hecha con `ISU_S_MANUBILL_CREATE`, heredando las líneas originales. **Probada en QA** (550000002616, luz, con serie FE). Las líneas sin original (EREPOS/GREPOS, mínimo IEE nuevo) se copian de un cálculo **plantilla configurado en STVARV** (`ZFA_FRAUDES_PLANTILLA_<concepto>`); EREPOS probada en QA. Falta PGINTR/PGIRAP |
 | **Facturación del cálculo** (documento de impresión y oficial) | **Probada de punta a punta en QA desde la RFC** (`PRUEBA013`, luz): cálculo 550000002620 → factura apartada por `ZCICLO` → liberada en sesión nueva → impresión **610000008701**, nº oficial **FE26390000002313**, 14,62 EUR, código `0000` |
 | Log y control de expediente duplicado | Hecho |
 | Mensaje en el formulario | **Fuera de alcance** (Aleix: no tocar el formulario) |
