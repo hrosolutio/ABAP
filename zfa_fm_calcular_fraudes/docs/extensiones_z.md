@@ -82,6 +82,8 @@ nº oficial (`EXBEL` vacío). La EA19 lo da todo en verde.
     (`PRUEBA012`), aunque en la SE37 con el mismo documento libera bien.
     Se lanza en una sesión nueva con el FM remoto `ZFA_FM_FRAUDES_LIBERAR`
     y `DESTINATION 'NONE'`, después de `DEQUEUE_ALL`.
+    **Funciona** (`PRUEBA013`): cálculo 550000002620 → 610000008701,
+    FE26390000002313.
   - Si libera en fondo (`y_batch` interno), `Y_NEW_OPBEL` puede venir
     vacío.
   - **Solo se libera si todos los apartados pendientes son `ZCICLO`**
