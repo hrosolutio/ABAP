@@ -39,7 +39,7 @@ flujo general y las validaciones de CUPS / contrato.
 | Cálculo luz (energía, prorrateo, descuentos, IEE, potencia) | Hecho, con ABAP Unit |
 | Cálculo gas (TV, prorrateo, descuentos, hidrocarburos) | Hecho; conceptos 1923/1924 **TODO** |
 | Factura a 0 (descarte / titular) | Hecho hasta la creación del cálculo |
-| Creación del cálculo manual | Hecha con `ISU_S_MANUBILL_CREATE`, heredando las líneas originales. **Probada en QA** (550000002616, luz, con serie FE). Faltan las líneas sin original (EREPOS/GREPOS, PGINTR/PGIRAP, mínimo IEE nuevo) |
+| Creación del cálculo manual | Hecha con `ISU_S_MANUBILL_CREATE`, heredando las líneas originales. **Probada en QA** (550000002616, luz, con serie FE). Las líneas sin original (EREPOS/GREPOS, mínimo IEE nuevo) se copian de un cálculo **plantilla configurado en STVARV** (`ZFA_FRAUDES_PLANTILLA_<concepto>`), **sin probar**. Falta PGINTR/PGIRAP |
 | **Facturación del cálculo** (documento de impresión y oficial) | **Probada de punta a punta en QA desde la RFC** (`PRUEBA013`, luz): cálculo 550000002620 → factura apartada por `ZCICLO` → liberada en sesión nueva → impresión **610000008701**, nº oficial **FE26390000002313**, 14,62 EUR, código `0000` |
 | Log y control de expediente duplicado | Hecho |
 | Mensaje en el formulario | **Fuera de alcance** (Aleix: no tocar el formulario) |
@@ -248,6 +248,20 @@ que saber interpretarlos.
     un cálculo facturado) → `2007`. Si tampoco se puede borrar → `2008`
     con el BELNR. Si algo falla antes, `ROLLBACK`. Siempre
     se graba una línea en `ZFA_FRAUD_LOG` con su `COMMIT` al final.
+
+## Configuración en STVARV
+
+Parámetros (tipo `P`) con el cálculo del que se copia la línea de los
+conceptos que no vienen en el cálculo original. **Uno por sistema**: el
+número de documento cambia entre QA y producción.
+
+| Parámetro | Valor en QA | Uso |
+|---|---|---|
+| `ZFA_FRAUDES_PLANTILLA_EREPOS` | `510000001125` | Reposición luz (factura a 0) |
+| `ZFA_FRAUDES_PLANTILLA_GREPOS` | `510000000408` | Reposición gas (factura a 0) |
+
+Sin el parámetro, la línea va sin plantilla (solo concepto, fechas y
+cantidad) y lo más probable es que falle al grabar el cálculo.
 
 ## Objetos DDIC a crear (SE11)
 

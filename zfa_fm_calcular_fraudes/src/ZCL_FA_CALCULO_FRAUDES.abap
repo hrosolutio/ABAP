@@ -93,7 +93,9 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
       END OF ty_concepto_atr,
       ty_t_concepto_atr TYPE STANDARD TABLE OF ty_concepto_atr WITH DEFAULT KEY,
 
-      ty_t_conceptos TYPE STANDARD TABLE OF zfa_fraud_conc WITH DEFAULT KEY.
+      ty_t_conceptos TYPE STANDARD TABLE OF zfa_fraud_conc WITH DEFAULT KEY,
+
+      ty_t_erchz     TYPE STANDARD TABLE OF erchz WITH DEFAULT KEY.
 
     CONSTANTS:
       gc_ok                 TYPE char2 VALUE 'OK',
@@ -177,7 +179,7 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
           mt_conceptos TYPE ty_t_conceptos,
           " Líneas del cálculo original tal cual (ERCHZ), para heredar
           " operación, tarifa, unidad, etc. en el cálculo manual
-          mt_erchz_original TYPE STANDARD TABLE OF erchz WITH DEFAULT KEY,
+          mt_erchz_original TYPE ty_t_erchz,
           " Cálculo y factura creados: se devuelven aunque luego falle algo,
           " porque el cálculo ya está grabado
           ms_factura   TYPE zfa_s_fraudes_factura,
@@ -212,6 +214,14 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
       IMPORTING iv_belnr         TYPE erch-belnr
       RETURNING VALUE(rt_lineas) TYPE ty_t_linea
       RAISING   zcx_fa_fraudes.
+
+    METHODS leer_erchz
+      IMPORTING iv_belnr        TYPE erch-belnr
+      RETURNING VALUE(rt_erchz) TYPE ty_t_erchz.
+
+    METHODS plantilla_linea
+      IMPORTING iv_belzart      TYPE erchz-belzart
+      RETURNING VALUE(rs_erchz) TYPE erchz.
 
     METHODS calcular_luz
       IMPORTING it_original      TYPE ty_t_linea
@@ -648,11 +658,10 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
   ENDMETHOD.
 
 
-  METHOD leer_lineas_calculo.
+  METHOD leer_erchz.
 
     DATA: lr_tabla TYPE REF TO data,
-          lv_tabla TYPE tabname,
-          ls_linea TYPE ty_linea.
+          lv_tabla TYPE tabname.
 
     FIELD-SYMBOLS: <lt_tabla>     TYPE STANDARD TABLE,
                    <ls_fila>      TYPE any,
@@ -665,8 +674,6 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     " todas con clave BELNR + BELZEILE. Se juntan en una ERCHZ por línea.
     " TODO si aparece el FM estándar que lee el documento entero en
     " ISU2A_BILL_DOC, usarlo en lugar de esto.
-    CLEAR mt_erchz_original.
-
     DO 8 TIMES.
       lv_tabla = |DBERCHZ{ sy-index }|.
       TRY.
@@ -684,10 +691,10 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
 
       LOOP AT <lt_tabla> ASSIGNING <ls_fila>.
         ASSIGN COMPONENT 'BELZEILE' OF STRUCTURE <ls_fila> TO <lv_belzeile>.
-        READ TABLE mt_erchz_original ASSIGNING <ls_erchz>
+        READ TABLE rt_erchz ASSIGNING <ls_erchz>
           WITH KEY belzeile = <lv_belzeile>.
         IF sy-subrc <> 0.
-          APPEND INITIAL LINE TO mt_erchz_original ASSIGNING <ls_erchz>.
+          APPEND INITIAL LINE TO rt_erchz ASSIGNING <ls_erchz>.
         ENDIF.
         MOVE-CORRESPONDING <ls_fila> TO <ls_erchz>.
 
@@ -700,6 +707,43 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
         ENDIF.
       ENDLOOP.
     ENDDO.
+
+  ENDMETHOD.
+
+
+  METHOD plantilla_linea.
+
+    DATA: lv_belnr     TYPE erch-belnr,
+          lv_parametro TYPE tvarvc-name.
+
+    " Para las líneas que no están en el cálculo original (EREPOS/GREPOS,
+    " mínimo del IEE...) se copia una línea real del concepto: operación,
+    " tarifa, esquema, unidad, impuesto... El cálculo que sirve de
+    " plantilla se configura en STVARV (ZFA_FRAUDES_PLANTILLA_<concepto>)
+    " porque DBERCHZ1 no tiene índice por BELZART.
+    lv_parametro = |ZFA_FRAUDES_PLANTILLA_{ iv_belzart }|.
+    SELECT SINGLE low
+      FROM tvarvc
+      WHERE name = @lv_parametro
+        AND type = 'P'
+      INTO @lv_belnr.
+    IF sy-subrc <> 0 OR lv_belnr IS INITIAL.
+      RETURN.
+    ENDIF.
+
+    DATA(lt_erchz) = leer_erchz( lv_belnr ).
+    READ TABLE lt_erchz INTO rs_erchz WITH KEY belzart = iv_belzart.
+
+  ENDMETHOD.
+
+
+  METHOD leer_lineas_calculo.
+
+    DATA ls_linea TYPE ty_linea.
+
+    FIELD-SYMBOLS <ls_erchz> TYPE erchz.
+
+    mt_erchz_original = leer_erchz( iv_belnr ).
 
     " Solo interesan las líneas cuyo concepto está en ZFA_FRAUD_CONC.
     " Cantidad en I_ABRMENGE, precio unitario en PREISBTR e importe en
@@ -1187,11 +1231,16 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
       IF ls_linea-belzeile IS NOT INITIAL.
         READ TABLE mt_erchz_original INTO ls_erchz
           WITH KEY belzeile = ls_linea-belzeile.
+      ELSE.
+        " Línea sin original (EREPOS/GREPOS, mínimo del IEE...): plantilla
+        " de una línea real del concepto, con el tipo de tarifa del contrato
+        " TODO PGINTR/PGIRAP cuando se sepa de dónde salen
+        ls_erchz = plantilla_linea( ls_linea-belzart ).
+        READ TABLE mt_erchz_original INTO DATA(ls_contrato) INDEX 1.
+        IF sy-subrc = 0.
+          ls_erchz-tariftyp = ls_contrato-tariftyp.
+        ENDIF.
       ENDIF.
-      " TODO líneas sin original (EREPOS/GREPOS, PGINTR/PGIRAP, mínimo
-      " comunitario cuando el original llevaba IEE): copiar los datos de una
-      " reposición real o de la línea de IEE (operación TVORG, MASSBILL,
-      " MWSKZ, TWAERS...)
       CLEAR: ls_erchz-belnr.
       lv_belzeile = lv_belzeile + 1.
       ls_erchz-belzeile   = lv_belzeile.
