@@ -257,7 +257,8 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
       RAISING   zcx_fa_fraudes.
 
     METHODS leer_conceptos_atr
-      RETURNING VALUE(rt_conceptos) TYPE ty_t_concepto_atr.
+      RETURNING VALUE(rt_conceptos) TYPE ty_t_concepto_atr
+      RAISING   zcx_fa_fraudes.
 
     METHODS prorratear
       IMPORTING iv_consumo       TYPE ty_cantidad
