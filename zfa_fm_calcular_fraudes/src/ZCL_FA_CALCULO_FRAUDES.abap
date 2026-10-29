@@ -568,7 +568,11 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
 
     DATA lv_anlage TYPE anlage.
 
-    DATA lv_loobj1 TYPE dfkklocks-loobj1.
+    " Solo se comprueba si existe la fila
+    DATA: lv_loobj1   TYPE dfkklocks-loobj1,
+          lv_contrato TYPE vertrag ##NEEDED,
+          lv_partner  TYPE bu_partner ##NEEDED,
+          lv_bloqueo  TYPE dfkklocks-loobj1 ##NEEDED.
 
     " Orígenes de los datos: correo de Aleix del 29/10
 
@@ -586,7 +590,7 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
       WHERE contrato = @ms_entrada-contrato
         AND ab      <= @ms_entrada-fecha_hasta
         AND bis     >= @ms_entrada-fecha_desde
-      INTO @DATA(lv_contrato).
+      INTO @lv_contrato.
     IF sy-subrc = 0.
       RAISE EXCEPTION TYPE zcx_fa_fraudes
         EXPORTING codigo = '0102'
@@ -598,7 +602,7 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     SELECT SINGLE partner
       FROM zco_t_ofusc_clie
       WHERE partner = @mv_gpartner
-      INTO @DATA(lv_partner).
+      INTO @lv_partner.
     IF sy-subrc = 0.
       RAISE EXCEPTION TYPE zcx_fa_fraudes
         EXPORTING codigo = '0103'
@@ -638,7 +642,7 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
         AND loobj1 = @lv_loobj1
         AND fdate <= @ms_entrada-fecha_hasta
         AND tdate >= @ms_entrada-fecha_desde
-      INTO @DATA(lv_bloqueo).
+      INTO @lv_bloqueo.
     IF sy-subrc = 0.
       RAISE EXCEPTION TYPE zcx_fa_fraudes
         EXPORTING codigo = '0105'
