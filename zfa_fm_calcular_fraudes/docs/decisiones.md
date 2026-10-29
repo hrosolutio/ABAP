@@ -6,7 +6,11 @@
 - Cabecera en `/IDXGC/PRST_INHD`: el nº de factura ATR es
   `CODIGOFISCALFACTURA`.
 - Conceptos en `/IDXGC/PRST_CHRG`: `CONCEPTOREPERCUTIBLE` = `1923` / `1924`.
-- Falta saber el campo de unión entre las dos tablas y el del importe.
+- Unión por `PROC_REF` + `PROC_STEP_REF` (clave de las dos tablas).
+  Importe en `IMPORTETOTALCONCEPTOREPERCUTIB` (texto).
+- `/IDXGC/PRST_INHD` tiene el índice `ZCF` por `CODIGOFISCALFACTURA`.
+- `PROC_REF` es el **PDoc** (documento de proceso); `PROC_STEP_REF`, el
+  paso. El CUPS está en `/IDXGC/PRST_CHRG-EXT_UI`.
 
 **Validaciones de integridad (descartes):**
 

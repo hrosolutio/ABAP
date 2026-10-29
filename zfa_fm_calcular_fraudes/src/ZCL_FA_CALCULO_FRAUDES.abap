@@ -549,7 +549,7 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
   METHOD existe_factura_atr.
     " Cabecera de la factura ATR recibida (Aleix 29/10). Se guarda el paso
     " de proceso para leer luego sus conceptos en /IDXGC/PRST_CHRG
-    " TODO CODIGOFISCALFACTURA no es clave: comprobar que tiene índice
+    " Por el índice ZCF (CODIGOFISCALFACTURA)
     SELECT proc_ref, proc_step_ref
       FROM /idxgc/prst_inhd
       WHERE codigofiscalfactura = @ms_entrada-num_factura_atr
