@@ -17,6 +17,7 @@ FUNCTION zfa_fm_calcular_fraudesv2.
 *"     VALUE(IV_CONTRATO_SAP) TYPE  VERTRAG
 *"     VALUE(IV_ID_PROCESO_ATR) TYPE  CHAR2
 *"     VALUE(IV_FORZADO) TYPE  XFELD OPTIONAL
+*"     VALUE(IV_SOLO_CALCULO) TYPE  XFELD OPTIONAL
 *"     VALUE(IV_ID_EXPEDIENTE) TYPE  ZLE_DE_NUMEROEXPEDIENTE
 *"  EXPORTING
 *"     VALUE(EV_RESULTADO) TYPE  CHAR2
@@ -24,6 +25,7 @@ FUNCTION zfa_fm_calcular_fraudesv2.
 *"     VALUE(EV_DESCRIPCION) TYPE  STRING
 *"     VALUE(EV_MODO_FACTURACION) TYPE  CHAR30
 *"     VALUE(ET_FACTURAS) TYPE  ZFA_T_FRAUDES_FACTURA
+*"     VALUE(ET_LINEAS) TYPE  ZFA_T_FRAUDES_LINEA
 *"----------------------------------------------------------------------
 * Facturación automática de averías y fraudes (DF "Automatización de
 * averías y fraude", v1.0). Toda la lógica está en
@@ -33,7 +35,7 @@ FUNCTION zfa_fm_calcular_fraudesv2.
   DATA: ls_entrada   TYPE zcl_fa_calculo_fraudes=>ty_entrada,
         ls_resultado TYPE zcl_fa_calculo_fraudes=>ty_resultado.
 
-  CLEAR: ev_resultado, ev_codigo, ev_descripcion, ev_modo_facturacion, et_facturas.
+  CLEAR: ev_resultado, ev_codigo, ev_descripcion, ev_modo_facturacion, et_facturas, et_lineas.
 
   ls_entrada = VALUE #( cups             = iv_cups
                         fecha_desde      = iv_fecha_desde
@@ -50,6 +52,7 @@ FUNCTION zfa_fm_calcular_fraudesv2.
                         contrato         = iv_contrato_sap
                         id_proceso_atr   = iv_id_proceso_atr
                         forzado          = iv_forzado
+                        solo_calculo     = iv_solo_calculo
                         id_expediente    = iv_id_expediente ).
 
   ls_resultado = NEW zcl_fa_calculo_fraudes( )->ejecutar( ls_entrada ).
@@ -59,5 +62,6 @@ FUNCTION zfa_fm_calcular_fraudesv2.
   ev_descripcion       = ls_resultado-descripcion.
   ev_modo_facturacion  = ls_resultado-modo.
   et_facturas          = ls_resultado-facturas.
+  et_lineas            = ls_resultado-lineas.
 
 ENDFUNCTION.

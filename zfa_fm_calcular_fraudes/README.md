@@ -79,12 +79,14 @@ docs/
 | `IV_CONTRATO_SAP` | Import | `VERTRAG` | Sí | Contrato |
 | `IV_ID_PROCESO_ATR` | Import | `CHAR2` | Sí | ID de proceso de la factura ATR (tipo por confirmar) |
 | `IV_FORZADO` | Import | `XFELD` | No | Forzado: facturar a 0 (sustituye a descarte y titular erróneo) |
+| `IV_SOLO_CALCULO` | Import | `XFELD` | No | Solo calcular: devuelve el detalle **sin grabar nada** (ni cálculo ni factura) |
 | `IV_ID_EXPEDIENTE` | Import | `ZLE_DE_NUMEROEXPEDIENTE` | Sí | Nº de expediente |
 | `EV_RESULTADO` | Export | `CHAR2` | — | `OK` / `KO` |
 | `EV_CODIGO` | Export | `CHAR4` | — | Código numérico (tabla siguiente) |
 | `EV_DESCRIPCION` | Export | `STRING` | — | Descripción del resultado |
 | `EV_MODO_FACTURACION` | Export | `CHAR30` | — | `NORMAL`, `IMPORTE_CERO` o vacío |
 | `ET_FACTURAS` | Export | `ZFA_T_FRAUDES_FACTURA` | — | Factura, cálculo, consumo, importe, documento oficial y fechas |
+| `ET_LINEAS` | Export | `ZFA_T_FRAUDES_LINEA` | — | Solo con `IV_SOLO_CALCULO`: detalle por concepto (importe neto) |
 
 ### Cambios respecto a la interfaz de partida
 
@@ -104,6 +106,7 @@ docs/
 | `0000` | OK | Factura creada |
 | `0001` | OK | Factura a importe 0 creada (forzado) |
 | `0002` | — | (Sin uso: era titular erróneo) |
+| `0010` | OK | Solo cálculo (`IV_SOLO_CALCULO`): detalle en `ET_LINEAS`, total neto en `ET_FACTURAS-IMPORTE`, sin grabar nada. No cuenta como expediente facturado |
 | `0003` | OK | Factura creada y apartada, y la liberación automática ha fallado (o va en fondo): liberar a mano en EA05. Devuelve el cálculo y el importe, no la factura (el nº provisional cambia al liberar) |
 | `0101` | OK | Descarte: periodo migrado (Uptility / NI) |
 | `0102` | OK | Descarte: exención de impuestos |
@@ -279,6 +282,20 @@ cantidad) y lo más probable es que falle al grabar el cálculo.
 | `WAERS` | `WAERS` | |
 | `FECHA_DESDE` | `DATUM` | |
 | `FECHA_HASTA` | `DATUM` | |
+
+**Estructura `ZFA_S_FRAUDES_LINEA`** + tipo de tabla **`ZFA_T_FRAUDES_LINEA`**
+(salida `ET_LINEAS` del modo solo cálculo):
+
+| Campo | Tipo | Comentario |
+|---|---|---|
+| `BELZART` | `BELZART` | Concepto (clase de posición) |
+| `TIPO` | `CHAR2` | Tipo en `ZFA_FRAUD_CONC` (EN, PO, IE…) |
+| `DESDE` | `ABZEITSCH` | |
+| `HASTA` | `BISZEITSCH` | |
+| `CANTIDAD` | `DEC 15,3` (tipo predefinido) | Como `CONSUMO` |
+| `PRECIO` | `DEC 16,8` (tipo predefinido) | Precio unitario |
+| `IMPORTE` | `BETRW_KK` | Referencia a `WAERS`. Neto, sin IVA |
+| `WAERS` | `WAERS` | |
 
 **Tabla `ZFA_FRAUD_CONC`** (customizing, mantenible con SM30): qué es cada
 concepto del cálculo.

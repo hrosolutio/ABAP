@@ -37,6 +37,7 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
         contrato         TYPE vertrag,
         id_proceso_atr   TYPE char2,
         forzado          TYPE xfeld,
+        solo_calculo     TYPE xfeld,
         id_expediente    TYPE zle_de_numeroexpediente,
       END OF ty_entrada,
 
@@ -46,6 +47,7 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
         descripcion TYPE string,
         modo        TYPE char30,
         facturas    TYPE zfa_t_fraudes_factura,
+        lineas      TYPE zfa_t_fraudes_linea,
       END OF ty_resultado.
 
     METHODS ejecutar
@@ -225,8 +227,8 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
     METHODS validar_integridad
       RAISING zcx_fa_fraudes.
 
-    METHODS facturar_importe_cero
-      RETURNING VALUE(rs_resultado) TYPE ty_resultado
+    METHODS lineas_importe_cero
+      RETURNING VALUE(rt_lineas) TYPE ty_t_linea
       RAISING   zcx_fa_fraudes.
 
     METHODS buscar_calculo_original
@@ -357,7 +359,8 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
 
     DATA: ls_calculo  TYPE ty_calculo,
           lt_original TYPE ty_t_linea,
-          lt_lineas   TYPE ty_t_linea.
+          lt_lineas   TYPE ty_t_linea,
+          lv_waers    TYPE waers.
 
     validar_entrada( ).
 
@@ -365,7 +368,10 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     " titular erróneo) se factura a 0 sin pasar por las validaciones de
     " integridad: la IA ya ha decidido que el caso va a 0
     IF ms_entrada-forzado = abap_true.
-      rs_resultado = facturar_importe_cero( ).
+      lt_lineas = lineas_importe_cero( ).
+      rs_resultado-codigo      = '0001'.
+      rs_resultado-descripcion = 'Factura a importe 0 (forzada) creada correctamente'.
+      rs_resultado-modo        = gc_modo_cero.
     ELSE.
       validar_integridad( ).
 
@@ -383,11 +389,39 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
                       texto  = |División { mv_sparte } no contemplada|.
       ENDCASE.
 
-      crear_calculo_manual( lt_lineas ).
       rs_resultado-codigo      = '0000'.
       rs_resultado-descripcion = 'Factura creada correctamente'.
       rs_resultado-modo        = gc_modo_normal.
     ENDIF.
+
+    lv_waers = VALUE #( mt_erchz_original[ 1 ]-twaers OPTIONAL ).
+
+    " Solo cálculo: se devuelve el detalle sin grabar nada en SAP (ni
+    " cálculo manual ni factura). Importe neto: los impuestos de la
+    " factura (IVA) los calcula la facturación
+    IF ms_entrada-solo_calculo = abap_true.
+      rs_resultado-codigo      = '0010'.
+      rs_resultado-descripcion = 'Cálculo realizado sin facturar (importe neto, sin IVA)'.
+      rs_resultado-lineas      = VALUE #( FOR ls_linea IN lt_lineas
+                                          ( belzart  = ls_linea-belzart
+                                            tipo     = ls_linea-tipo
+                                            desde    = COND #( WHEN ls_linea-ab IS NOT INITIAL THEN ls_linea-ab
+                                                               ELSE ms_entrada-fecha_desde )
+                                            hasta    = COND #( WHEN ls_linea-bis IS NOT INITIAL THEN ls_linea-bis
+                                                               ELSE ms_entrada-fecha_hasta )
+                                            cantidad = ls_linea-cantidad
+                                            precio   = ls_linea-precio
+                                            importe  = ls_linea-importe
+                                            waers    = lv_waers ) ).
+      rs_resultado-facturas    = VALUE #( ( consumo     = ms_entrada-consumo_total
+                                            importe     = sumar_importes( lt_lineas )
+                                            waers       = lv_waers
+                                            fecha_desde = ms_entrada-fecha_desde
+                                            fecha_hasta = ms_entrada-fecha_hasta ) ).
+      RETURN.
+    ENDIF.
+
+    crear_calculo_manual( lt_lineas ).
 
     " Apartada y sin poder liberarla (EA05): el documento de impresión es
     " provisional y cambia al liberar, así que no se devuelve
@@ -686,10 +720,9 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
   ENDMETHOD.
 
 
-  METHOD facturar_importe_cero.
+  METHOD lineas_importe_cero.
 
     DATA: ls_linea    TYPE ty_linea,
-          lt_linea    TYPE ty_t_linea,
           lt_original TYPE ty_t_linea,
           lv_belnr    TYPE erch-belnr.
 
@@ -709,7 +742,7 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     ls_linea-ab       = ms_entrada-fecha_desde.
     ls_linea-bis      = ms_entrada-fecha_hasta.
     ls_linea-cantidad = ms_entrada-consumo_total.
-    APPEND ls_linea TO lt_linea.
+    APPEND ls_linea TO rt_lineas.
 
     " Las líneas informativas (producto, etc.) se toman del último cálculo
     " del contrato
@@ -725,14 +758,8 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
       lv_belnr = lt_ultimo[ 1 ]-belnr.
       lt_original = leer_lineas_calculo( lv_belnr ).
       lt_original = lineas_tipo( it_lineas = lt_original iv_tipo = gc_tipo_informativa ).
-      APPEND LINES OF lt_original TO lt_linea.
+      APPEND LINES OF lt_original TO rt_lineas.
     ENDIF.
-
-    crear_calculo_manual( lt_linea ).
-
-    rs_resultado-codigo      = '0001'.
-    rs_resultado-descripcion = 'Factura a importe 0 (forzada) creada correctamente'.
-    rs_resultado-modo        = gc_modo_cero.
 
   ENDMETHOD.
 
