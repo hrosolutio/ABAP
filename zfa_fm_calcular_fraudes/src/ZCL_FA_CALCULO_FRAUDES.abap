@@ -1050,7 +1050,7 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
 
     " Conceptos repercutibles 1923 / 1924 de la factura ATR (Aleix 29/10).
     " El importe viene en texto (formato del fichero ATR)
-    SELECT conceptorepercutible, importetotalconcepto
+    SELECT conceptorepercutible, importetotalconceptorepercutib
       FROM /idxgc/prst_chrg
       WHERE proc_ref             = @mv_proc_ref
         AND proc_step_ref        = @mv_proc_step_ref
@@ -1058,7 +1058,7 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
       INTO TABLE @DATA(lt_cargos).
 
     LOOP AT lt_cargos INTO DATA(ls_cargo).
-      lv_texto = ls_cargo-importetotalconcepto.
+      lv_texto = ls_cargo-importetotalconceptorepercutib.
       REPLACE ALL OCCURRENCES OF ',' IN lv_texto WITH '.'.
       CONDENSE lv_texto NO-GAPS.
       CLEAR ls_importe.
@@ -1068,7 +1068,7 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
         CATCH cx_sy_conversion_no_number.
           RAISE EXCEPTION TYPE zcx_fa_fraudes
             EXPORTING codigo = '2002'
-                      texto  = |Importe no numérico en el concepto ATR { ls_cargo-conceptorepercutible }: { ls_cargo-importetotalconcepto }|.
+                      texto  = |Importe no numérico en el concepto ATR { ls_cargo-conceptorepercutible }: { ls_cargo-importetotalconceptorepercutib }|.
       ENDTRY.
       APPEND ls_importe TO rt_conceptos.
     ENDLOOP.
