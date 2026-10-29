@@ -1,5 +1,45 @@
 # Decisiones funcionales recibidas
 
+## Respuestas de Aleix (29/10/2026)
+
+**Factura ATR y conceptos 1923/1924 (gas):**
+- Cabecera en `/IDXGC/PRST_INHD`: el nº de factura ATR es
+  `CODIGOFISCALFACTURA`.
+- Conceptos en `/IDXGC/PRST_CHRG`: `CONCEPTOREPERCUTIBLE` = `1923` / `1924`.
+- Falta saber el campo de unión entre las dos tablas y el del importe.
+
+**Validaciones de integridad (descartes):**
+
+| Validación | Origen |
+|---|---|
+| 2.1 Periodo migrado | `EVER-XVERA = 'X'` y fecha hasta < `EVER-EINZDAT_ALT` |
+| 2.2 Exención de impuestos | Contrato en `ZFA_T_CIE` para las fechas (ab–bis) |
+| 2.3 Derecho al olvido | Cliente en `ZCO_T_OFUSC_CLIE` |
+| 2.4 Vulnerable / esencial | `EANL-ZZVITAL` ≠ `00`, filtrando por las fechas de inicio y fin de vital |
+| 2.5 Bloqueo cuenta contrato | `DFKKLOCKS`, `LOTYP = '06'`, `LOOBJ1` = vkont + gpart |
+| 2.5 Bloqueo contrato | `EVER-ABRSPERR` ≠ blanco |
+
+**Códigos de resultado:** inventados por SAP. Eliza (29/10): les valen;
+solo necesitan saber qué códigos indican factura emitida y cuáles no.
+
+## Modo de facturación (Eliza, Teams 29/10/2026)
+
+Valores que espera la IA en `EV_MODO_FACTURACION`:
+- `FACTURACION TOTAL`
+- `FACTURACION PARCIAL`
+- `DESCARTE - DERECHO AL OLVIDO`
+- `DESCARTE - EMPLEADO`
+- `DESCARTE - VULNERABILIDAD`
+- `DESCARTE - CADUCADO`
+- `DESCARTE - REPOSICION`
+- `DESCARTE - ANOMALIA TP`
+- `DESCARTE - NO TITULAR`
+
+Pendiente de aclarar con Eliza: qué es `PARCIAL`, `EMPLEADO`, `CADUCADO`
+y `NO TITULAR`, y qué modo llevan nuestros descartes que no están en la
+lista (migrado, exención, bloqueos, sin cálculo, varios cálculos).
+
+
 ## Tipo de factura ATR (correo de Eliza, 27/10/2026)
 
 - **Luz:** `06` = anomalía, `11` = fraude.
