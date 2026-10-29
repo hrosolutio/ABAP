@@ -80,6 +80,19 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
         endabrpe TYPE erch-endabrpe,
       END OF ty_calculo,
 
+      BEGIN OF ty_ever,
+        anlage      TYPE ever-anlage,
+        vkonto      TYPE ever-vkonto,
+        sparte      TYPE ever-sparte,
+        bukrs       TYPE ever-bukrs,
+        kofiz       TYPE ever-kofiz,
+        einzdat     TYPE ever-einzdat,
+        auszdat     TYPE ever-auszdat,
+        xvera       TYPE ever-xvera,
+        einzdat_alt TYPE ever-einzdat_alt,
+        abrsperr    TYPE ever-abrsperr,
+      END OF ty_ever,
+
       BEGIN OF ty_factura,
         exbel       TYPE erdk-exbel,
         tobreleasd  TYPE erdk-tobreleasd,
@@ -181,6 +194,11 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
           mv_gpartner  TYPE erch-gpartner,
           mv_portion   TYPE erch-portion,
           mv_ableinh   TYPE erch-ableinh,
+          " Datos del contrato para las validaciones de integridad
+          ms_ever      TYPE ty_ever,
+          " Factura ATR (paso de proceso de /IDXGC/PRST_INHD)
+          mv_proc_ref      TYPE /idxgc/prst_inhd-proc_ref,
+          mv_proc_step_ref TYPE /idxgc/prst_inhd-proc_step_ref,
           mt_conceptos TYPE ty_t_conceptos,
           " Líneas del cálculo original tal cual (ERCHZ), para heredar
           " operación, tarifa, unidad, etc. en el cálculo manual
@@ -422,10 +440,11 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     ENDIF.
 
     " 1.2 El contrato existe y su instalación es la del CUPS
-    SELECT SINGLE anlage, vkonto, sparte, bukrs, kofiz, einzdat, auszdat
+    SELECT SINGLE anlage, vkonto, sparte, bukrs, kofiz, einzdat, auszdat,
+                  xvera, einzdat_alt, abrsperr
       FROM ever
       WHERE vertrag = @ms_entrada-contrato
-      INTO @DATA(ls_ever).
+      INTO @ms_ever.
     IF sy-subrc <> 0.
       RAISE EXCEPTION TYPE zcx_fa_fraudes
         EXPORTING codigo = '1002'
@@ -435,7 +454,7 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     SELECT SINGLE anlage
       FROM euiinstln
       WHERE int_ui    = @lv_int_ui
-        AND anlage    = @ls_ever-anlage
+        AND anlage    = @ms_ever-anlage
         AND datefrom <= @ms_entrada-fecha_hasta
         AND dateto   >= @ms_entrada-fecha_desde
       INTO @lv_anlage.
@@ -446,17 +465,17 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     ENDIF.
 
     " 1.3 Contrato activo en todo el periodo
-    IF ls_ever-einzdat > ms_entrada-fecha_desde OR ls_ever-auszdat < ms_entrada-fecha_hasta.
+    IF ms_ever-einzdat > ms_entrada-fecha_desde OR ms_ever-auszdat < ms_entrada-fecha_hasta.
       RAISE EXCEPTION TYPE zcx_fa_fraudes
         EXPORTING codigo = '1003'
                   texto  = |El contrato { ms_entrada-contrato } no está activo en el periodo|.
     ENDIF.
 
-    mv_anlage = ls_ever-anlage.
-    mv_vkonto = ls_ever-vkonto.
-    mv_sparte = ls_ever-sparte.
-    mv_bukrs  = ls_ever-bukrs.
-    mv_kofiz  = ls_ever-kofiz.
+    mv_anlage = ms_ever-anlage.
+    mv_vkonto = ms_ever-vkonto.
+    mv_sparte = ms_ever-sparte.
+    mv_bukrs  = ms_ever-bukrs.
+    mv_kofiz  = ms_ever-kofiz.
 
     " Interlocutor de la cuenta contrato (para la cabecera del cálculo)
     SELECT SINGLE gpart
@@ -528,11 +547,20 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
 
 
   METHOD existe_factura_atr.
-    " TODO localizar dónde se guardan las facturas ATR (06/11). La
-    " versión de partida usaba /IDXGC/PRST_INHD-CODIGOFISCALFACTURA:
-    " comprobar en SE11 si existe; si no, buscar la tabla Z que usa el
-    " elemento de datos ZLE_DE_FACTUR (where-used en SE11).
-    rv_existe = abap_true.
+    " Cabecera de la factura ATR recibida (Aleix 29/10). Se guarda el paso
+    " de proceso para leer luego sus conceptos en /IDXGC/PRST_CHRG
+    " TODO CODIGOFISCALFACTURA no es clave: comprobar que tiene índice
+    SELECT proc_ref, proc_step_ref
+      FROM /idxgc/prst_inhd
+      WHERE codigofiscalfactura = @ms_entrada-num_factura_atr
+      ORDER BY proc_ref DESCENDING
+      INTO TABLE @DATA(lt_factura)
+      UP TO 1 ROWS.
+    IF lt_factura IS NOT INITIAL.
+      mv_proc_ref      = lt_factura[ 1 ]-proc_ref.
+      mv_proc_step_ref = lt_factura[ 1 ]-proc_step_ref.
+      rv_existe = abap_true.
+    ENDIF.
   ENDMETHOD.
 
 
@@ -540,14 +568,83 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
 
     DATA lv_anlage TYPE anlage.
 
-    " TODO 2.1 Periodo migrado (Uptility / NI): origen del dato pendiente
-    "      de Aleix. Descarte -> '0101'.
-    " TODO 2.2 Exención de impuestos: origen pendiente. Descarte -> '0102'.
-    " TODO 2.3 Derecho al olvido: origen pendiente. Descarte -> '0103'.
-    " TODO 2.4 Vulnerable / esencial en el periodo: origen pendiente.
-    "      Descarte -> '0104'.
-    " TODO 2.5 Bloqueo de contrato / cuenta contrato: confirmar qué
-    "      bloqueo (facturación, cobro, ...). Descarte -> '0105'.
+    DATA lv_loobj1 TYPE dfkklocks-loobj1.
+
+    " Orígenes de los datos: correo de Aleix del 29/10
+
+    " 2.1 Periodo migrado: contrato traído de otro sistema y periodo
+    " anterior a su alta en el sistema antiguo
+    IF ms_ever-xvera = abap_true AND ms_entrada-fecha_hasta < ms_ever-einzdat_alt.
+      RAISE EXCEPTION TYPE zcx_fa_fraudes
+        EXPORTING codigo = '0101'
+                  texto  = 'Descarte: periodo migrado (facturado en el sistema antiguo)'.
+    ENDIF.
+
+    " 2.2 Exención de impuestos: CIE del contrato vigente en el periodo
+    SELECT SINGLE contrato
+      FROM zfa_t_cie
+      WHERE contrato = @ms_entrada-contrato
+        AND ab      <= @ms_entrada-fecha_hasta
+        AND bis     >= @ms_entrada-fecha_desde
+      INTO @DATA(lv_contrato).
+    IF sy-subrc = 0.
+      RAISE EXCEPTION TYPE zcx_fa_fraudes
+        EXPORTING codigo = '0102'
+                  texto  = 'Descarte: contrato con exención de impuestos (CIE) en el periodo'.
+    ENDIF.
+
+    " 2.3 Derecho al olvido: cliente con solicitud de ofuscación
+    " TODO confirmar si cuenta cualquier solicitud o solo las procesadas
+    SELECT SINGLE partner
+      FROM zco_t_ofusc_clie
+      WHERE partner = @mv_gpartner
+      INTO @DATA(lv_partner).
+    IF sy-subrc = 0.
+      RAISE EXCEPTION TYPE zcx_fa_fraudes
+        EXPORTING codigo = '0103'
+                  texto  = 'Descarte: cliente con derecho al olvido'.
+    ENDIF.
+
+    " 2.4 Esencialidad o vulnerabilidad (pobreza energética) en el periodo
+    " TODO confirmar los valores de ZZVULNERABLE que cuentan
+    SELECT SINGLE zzvital, zzinicio_vital, zzfin_vital,
+                  zzvulnerable, zzinicio_vulner, zzfin_vulner
+      FROM eanl
+      WHERE anlage = @mv_anlage
+      INTO @DATA(ls_eanl).
+    IF ( ls_eanl-zzvital IS NOT INITIAL AND ls_eanl-zzvital <> '00'
+         AND ls_eanl-zzinicio_vital <= ms_entrada-fecha_hasta
+         AND ( ls_eanl-zzfin_vital >= ms_entrada-fecha_desde OR ls_eanl-zzfin_vital IS INITIAL ) )
+    OR ( ls_eanl-zzvulnerable IS NOT INITIAL AND ls_eanl-zzvulnerable <> '00'
+         AND ls_eanl-zzinicio_vulner <= ms_entrada-fecha_hasta
+         AND ( ls_eanl-zzfin_vulner >= ms_entrada-fecha_desde OR ls_eanl-zzfin_vulner IS INITIAL ) ).
+      RAISE EXCEPTION TYPE zcx_fa_fraudes
+        EXPORTING codigo = '0104'
+                  texto  = 'Descarte: cliente vulnerable o esencial en el periodo'.
+    ENDIF.
+
+    " 2.5 Bloqueos: cualquier bloqueo de la cuenta contrato vigente en el
+    " periodo, o bloqueo de cálculo en el contrato
+    IF ms_ever-abrsperr IS NOT INITIAL.
+      RAISE EXCEPTION TYPE zcx_fa_fraudes
+        EXPORTING codigo = '0105'
+                  texto  = |Descarte: contrato con bloqueo de cálculo ({ ms_ever-abrsperr })|.
+    ENDIF.
+
+    lv_loobj1 = |{ mv_vkonto }{ mv_gpartner }|.
+    SELECT SINGLE loobj1
+      FROM dfkklocks
+      WHERE lotyp  = '06'
+        AND loobj1 = @lv_loobj1
+        AND fdate <= @ms_entrada-fecha_hasta
+        AND tdate >= @ms_entrada-fecha_desde
+      INTO @DATA(lv_bloqueo).
+    IF sy-subrc = 0.
+      RAISE EXCEPTION TYPE zcx_fa_fraudes
+        EXPORTING codigo = '0105'
+                  texto  = 'Descarte: cuenta contrato bloqueada en el periodo'.
+    ENDIF.
+
 
     " 2.6 Operando de reposición activo en el periodo
     IF gc_operando_reposicion IS NOT INITIAL.
@@ -943,10 +1040,35 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
 
 
   METHOD leer_conceptos_atr.
-    " TODO leer de la factura ATR (ms_entrada-num_factura_atr) los
-    " conceptos 1923 y 1924 con su importe. Depende de dónde estén las
-    " facturas ATR (ver existe_factura_atr).
-    CLEAR rt_conceptos.
+
+    DATA: lv_texto   TYPE string,
+          ls_importe TYPE ty_concepto_atr.
+
+    " Conceptos repercutibles 1923 / 1924 de la factura ATR (Aleix 29/10).
+    " El importe viene en texto (formato del fichero ATR)
+    SELECT conceptorepercutible, importetotalconcepto
+      FROM /idxgc/prst_chrg
+      WHERE proc_ref             = @mv_proc_ref
+        AND proc_step_ref        = @mv_proc_step_ref
+        AND conceptorepercutible IN ( @gc_concepto_atr_1923, @gc_concepto_atr_1924 )
+      INTO TABLE @DATA(lt_cargos).
+
+    LOOP AT lt_cargos INTO DATA(ls_cargo).
+      lv_texto = ls_cargo-importetotalconcepto.
+      REPLACE ALL OCCURRENCES OF ',' IN lv_texto WITH '.'.
+      CONDENSE lv_texto NO-GAPS.
+      CLEAR ls_importe.
+      ls_importe-concepto = ls_cargo-conceptorepercutible.
+      TRY.
+          ls_importe-importe = lv_texto.
+        CATCH cx_sy_conversion_no_number.
+          RAISE EXCEPTION TYPE zcx_fa_fraudes
+            EXPORTING codigo = '2002'
+                      texto  = |Importe no numérico en el concepto ATR { ls_cargo-conceptorepercutible }: { ls_cargo-importetotalconcepto }|.
+      ENDTRY.
+      APPEND ls_importe TO rt_conceptos.
+    ENDLOOP.
+
   ENDMETHOD.
 
 
