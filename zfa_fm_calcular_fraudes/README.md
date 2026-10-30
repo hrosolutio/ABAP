@@ -84,7 +84,7 @@ docs/
 | `EV_RESULTADO` | Export | `CHAR2` | — | `OK` / `KO` |
 | `EV_CODIGO` | Export | `CHAR4` | — | Código numérico (tabla siguiente) |
 | `EV_DESCRIPCION` | Export | `STRING` | — | Descripción del resultado |
-| `EV_MODO_FACTURACION` | Export | `CHAR30` | — | `NORMAL`, `IMPORTE_CERO` o vacío |
+| `EV_MODO_FACTURACION` | Export | `CHAR30` | — | Valores de la IA: `FACTURACION TOTAL` (0000/0001/0003/0010), `DESCARTE - DERECHO AL OLVIDO` (0103), `DESCARTE - VULNERABILIDAD` (0104), `DESCARTE - REPOSICION` (0106), `DESCARTE - ANOMALIA TP` (0107); vacío en errores y en los descartes sin modo definido |
 | `ET_FACTURAS` | Export | `ZFA_T_FRAUDES_FACTURA` | — | Factura, cálculo, consumo, importe, documento oficial y fechas |
 | `ET_LINEAS` | Export | `ZFA_T_FRAUDES_LINEA` | — | Solo con `IV_SOLO_CALCULO`: detalle por concepto (importe neto) |
 

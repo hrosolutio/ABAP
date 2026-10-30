@@ -26,6 +26,14 @@
 **Códigos de resultado:** inventados por SAP. Eliza (29/10): les valen;
 solo necesitan saber qué códigos indican factura emitida y cuáles no.
 
+## Correo de Eliza (30/10/2026)
+
+- Confirma la lista de modos de facturación (abajo).
+- Lista de facturas emitidas por factura ATR, con nº de documento,
+  nº oficial, fecha desde, fecha hasta, consumo e importe → es `ET_FACTURAS`.
+- Parámetro de entrada para que la IA indique si SAP hace o no la
+  facturación completa → `IV_SOLO_CALCULO`.
+
 ## Modo de facturación (Eliza, Teams 29/10/2026)
 
 Valores que espera la IA en `EV_MODO_FACTURACION`:

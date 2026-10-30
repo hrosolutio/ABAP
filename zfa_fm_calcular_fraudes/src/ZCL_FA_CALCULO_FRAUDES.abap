@@ -184,8 +184,12 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
       " fraudes casi siempre son de periodos de hace más de un año
       gc_validacion_ciclo   TYPE erdo-validat_in VALUE 'ZCICLO',
 
-      gc_modo_normal        TYPE char30 VALUE 'NORMAL',
-      gc_modo_cero          TYPE char30 VALUE 'IMPORTE_CERO'.
+      " Modos de facturación que espera la IA (correo de Eliza, 30/10)
+      gc_modo_total         TYPE char30 VALUE 'FACTURACION TOTAL',
+      gc_modo_olvido        TYPE char30 VALUE 'DESCARTE - DERECHO AL OLVIDO',
+      gc_modo_vulnerable    TYPE char30 VALUE 'DESCARTE - VULNERABILIDAD',
+      gc_modo_reposicion    TYPE char30 VALUE 'DESCARTE - REPOSICION',
+      gc_modo_tarifa_plana  TYPE char30 VALUE 'DESCARTE - ANOMALIA TP'.
 
     DATA: ms_entrada   TYPE ty_entrada,
           mv_anlage    TYPE anlage,
@@ -349,6 +353,18 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     rs_resultado-resultado = COND #( WHEN rs_resultado-codigo(1) = '0' THEN gc_ok
                                      ELSE gc_ko ).
 
+    " Modo de facturación según el resultado
+    " TODO con Eliza: qué es FACTURACION PARCIAL (¿la forzada a 0?),
+    " de dónde salen EMPLEADO, CADUCADO y NO TITULAR, y qué modo llevan
+    " migrado (0101), exención (0102), bloqueos (0105) y sin cálculo
+    " original (0108/0109); hoy van vacíos
+    rs_resultado-modo = SWITCH #( rs_resultado-codigo
+                          WHEN '0000' OR '0001' OR '0003' OR '0010' THEN gc_modo_total
+                          WHEN '0103' THEN gc_modo_olvido
+                          WHEN '0104' THEN gc_modo_vulnerable
+                          WHEN '0106' THEN gc_modo_reposicion
+                          WHEN '0107' THEN gc_modo_tarifa_plana ).
+
     " Graba el log y hace el COMMIT de todo lo anterior
     registrar_log( rs_resultado ).
 
@@ -371,7 +387,6 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
       lt_lineas = lineas_importe_cero( ).
       rs_resultado-codigo      = '0001'.
       rs_resultado-descripcion = 'Factura a importe 0 (forzada) creada correctamente'.
-      rs_resultado-modo        = gc_modo_cero.
     ELSE.
       validar_integridad( ).
 
@@ -391,7 +406,6 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
 
       rs_resultado-codigo      = '0000'.
       rs_resultado-descripcion = 'Factura creada correctamente'.
-      rs_resultado-modo        = gc_modo_normal.
     ENDIF.
 
     lv_waers = VALUE #( mt_erchz_original[ 1 ]-twaers OPTIONAL ).
