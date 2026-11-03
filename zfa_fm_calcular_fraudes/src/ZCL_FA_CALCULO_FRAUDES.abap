@@ -47,7 +47,7 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
         descripcion TYPE string,
         modo        TYPE char30,
         facturas    TYPE zfa_t_fraudes_factura,
-        lineas      TYPE zfa_t_fraudes_linea,
+        lineas      TYPE zfa_tt_fraudes_linea,
       END OF ty_resultado.
 
     METHODS ejecutar

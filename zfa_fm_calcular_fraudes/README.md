@@ -62,6 +62,8 @@ docs/
   DF_resumen.md                              Resumen del Diseño Funcional
   conceptos.md                               Clasificación de conceptos (ZFA_FRAUD_CONC)
   decisiones.md                              Decisiones funcionales recibidas (correos)
+  plan_pruebas.md                            Casos de prueba en QA y resultado esperado
+  transporte.md                              Objetos y configuración para el transporte
   extensiones_z.md                           BAdIs/eventos Z y customizing que afectan al cálculo y la facturación
 ```
 
@@ -86,7 +88,7 @@ docs/
 | `EV_DESCRIPCION` | Export | `STRING` | — | Descripción del resultado |
 | `EV_MODO_FACTURACION` | Export | `CHAR30` | — | Valores de la IA: `FACTURACION TOTAL` (0000/0001/0003/0010), `DESCARTE - DERECHO AL OLVIDO` (0103), `DESCARTE - VULNERABILIDAD` (0104), `DESCARTE - REPOSICION` (0106), `DESCARTE - ANOMALIA TP` (0107); vacío en errores y en los descartes sin modo definido |
 | `ET_FACTURAS` | Export | `ZFA_T_FRAUDES_FACTURA` | — | Factura, cálculo, consumo, importe, documento oficial y fechas |
-| `ET_LINEAS` | Export | `ZFA_T_FRAUDES_LINEA` | — | Solo con `IV_SOLO_CALCULO`: detalle por concepto (importe neto) |
+| `ET_LINEAS` | Export | `ZFA_TT_FRAUDES_LINEA` | — | Solo con `IV_SOLO_CALCULO`: detalle por concepto (importe neto) |
 
 ### Cambios respecto a la interfaz de partida
 
@@ -283,7 +285,7 @@ cantidad) y lo más probable es que falle al grabar el cálculo.
 | `FECHA_DESDE` | `DATUM` | |
 | `FECHA_HASTA` | `DATUM` | |
 
-**Estructura `ZFA_S_FRAUDES_LINEA`** + tipo de tabla **`ZFA_T_FRAUDES_LINEA`**
+**Estructura `ZFA_S_FRAUDES_LINEA`** + tipo de tabla **`ZFA_TT_FRAUDES_LINEA`**
 (salida `ET_LINEAS` del modo solo cálculo):
 
 | Campo | Tipo | Comentario |

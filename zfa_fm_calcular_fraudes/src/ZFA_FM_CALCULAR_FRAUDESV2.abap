@@ -25,7 +25,7 @@ FUNCTION zfa_fm_calcular_fraudesv2.
 *"     VALUE(EV_DESCRIPCION) TYPE  STRING
 *"     VALUE(EV_MODO_FACTURACION) TYPE  CHAR30
 *"     VALUE(ET_FACTURAS) TYPE  ZFA_T_FRAUDES_FACTURA
-*"     VALUE(ET_LINEAS) TYPE  ZFA_T_FRAUDES_LINEA
+*"     VALUE(ET_LINEAS) TYPE  ZFA_TT_FRAUDES_LINEA
 *"----------------------------------------------------------------------
 * Facturación automática de averías y fraudes (DF "Automatización de
 * averías y fraude", v1.0). Toda la lógica está en
