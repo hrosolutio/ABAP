@@ -135,6 +135,8 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
       " (p. ej. EPROD/GPROD: la derivación CO-PA de ZFI_FM_ISU_SAMPLE_TE760
       " saca de ahí el producto y sin ella no se puede grabar)
       gc_tipo_informativa   TYPE char2 VALUE 'IN',
+      " Línea de IVA en la salida del modo solo cálculo
+      gc_tipo_iva           TYPE char2 VALUE 'IV',
 
       " Conceptos fijos indicados en el DF
       gc_belzart_erepos     TYPE dberchz1-belzart VALUE 'EREPOS',
@@ -251,6 +253,12 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
     METHODS plantilla_linea
       IMPORTING iv_belzart      TYPE erchz-belzart
       RETURNING VALUE(rs_erchz) TYPE erchz.
+
+    METHODS lineas_simulacion
+      IMPORTING it_lineas        TYPE ty_t_linea
+                iv_waers         TYPE waers
+      RETURNING VALUE(rt_salida) TYPE zfa_tt_fraudes_linea
+      RAISING   zcx_fa_fraudes.
 
     METHODS calcular_luz
       IMPORTING it_original      TYPE ty_t_linea
@@ -410,25 +418,18 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
 
     lv_waers = VALUE #( mt_erchz_original[ 1 ]-twaers OPTIONAL ).
 
-    " Solo cálculo: se devuelve el detalle sin grabar nada en SAP (ni
-    " cálculo manual ni factura). Importe neto: los impuestos de la
-    " factura (IVA) los calcula la facturación
+    " Solo cálculo: se devuelve el detalle, con el IVA, sin grabar nada en
+    " SAP (ni cálculo manual ni factura). El total es con IVA, igual que
+    " cuando se factura
     IF ms_entrada-solo_calculo = abap_true.
       rs_resultado-codigo      = '0010'.
-      rs_resultado-descripcion = 'Cálculo realizado sin facturar (importe neto, sin IVA)'.
-      rs_resultado-lineas      = VALUE #( FOR ls_linea IN lt_lineas
-                                          ( belzart  = ls_linea-belzart
-                                            tipo     = ls_linea-tipo
-                                            desde    = COND #( WHEN ls_linea-ab IS NOT INITIAL THEN ls_linea-ab
-                                                               ELSE ms_entrada-fecha_desde )
-                                            hasta    = COND #( WHEN ls_linea-bis IS NOT INITIAL THEN ls_linea-bis
-                                                               ELSE ms_entrada-fecha_hasta )
-                                            cantidad = ls_linea-cantidad
-                                            precio   = ls_linea-precio
-                                            importe  = ls_linea-importe
-                                            waers    = lv_waers ) ).
+      rs_resultado-descripcion = 'Cálculo realizado sin facturar'.
+      rs_resultado-lineas      = lineas_simulacion( it_lineas = lt_lineas
+                                                    iv_waers  = lv_waers ).
       rs_resultado-facturas    = VALUE #( ( consumo     = ms_entrada-consumo_total
-                                            importe     = sumar_importes( lt_lineas )
+                                            importe     = REDUCE #( INIT lv_total TYPE betrw_kk
+                                                                    FOR ls_salida IN rs_resultado-lineas
+                                                                    NEXT lv_total = lv_total + ls_salida-importe )
                                             waers       = lv_waers
                                             fecha_desde = ms_entrada-fecha_desde
                                             fecha_hasta = ms_entrada-fecha_hasta ) ).
@@ -1665,6 +1666,90 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     RAISE EXCEPTION TYPE zcx_fa_fraudes
       EXPORTING codigo = '2008'
                 texto  = |{ iv_motivo }. No se ha podido borrar el cálculo { lv_calculo }: borrarlo en EA16|.
+
+  ENDMETHOD.
+
+
+  METHOD lineas_simulacion.
+
+    TYPES: BEGIN OF ty_base_iva,
+             mwskz TYPE erchz-mwskz,
+             base  TYPE ty_importe,
+           END OF ty_base_iva.
+
+    DATA: lt_bases   TYPE STANDARD TABLE OF ty_base_iva WITH DEFAULT KEY,
+          ls_salida  TYPE zfa_s_fraudes_linea,
+          ls_erchz   TYPE erchz,
+          lt_mwdat   TYPE STANDARD TABLE OF rtax1u15 WITH DEFAULT KEY,
+          lv_base    TYPE wrbtr,
+          lv_cuota   TYPE wrbtr.
+
+    FIELD-SYMBOLS <ls_base> TYPE ty_base_iva.
+
+    " Líneas netas, cada una con el indicador de IVA de su línea en SAP: la
+    " del cálculo original o, si es nueva, la de la plantilla (STVARV)
+    LOOP AT it_lineas INTO DATA(ls_linea).
+      CLEAR ls_erchz.
+      IF ls_linea-belzeile IS NOT INITIAL.
+        READ TABLE mt_erchz_original INTO ls_erchz WITH KEY belzeile = ls_linea-belzeile.
+      ELSE.
+        ls_erchz = plantilla_linea( ls_linea-belzart ).
+      ENDIF.
+
+      ls_salida = VALUE #( belzart  = ls_linea-belzart
+                           tipo     = ls_linea-tipo
+                           desde    = COND #( WHEN ls_linea-ab IS NOT INITIAL THEN ls_linea-ab
+                                              ELSE ms_entrada-fecha_desde )
+                           hasta    = COND #( WHEN ls_linea-bis IS NOT INITIAL THEN ls_linea-bis
+                                              ELSE ms_entrada-fecha_hasta )
+                           cantidad = ls_linea-cantidad
+                           precio   = ls_linea-precio
+                           importe  = ls_linea-importe
+                           mwskz    = ls_erchz-mwskz
+                           waers    = iv_waers ).
+      APPEND ls_salida TO rt_salida.
+
+      IF ls_erchz-mwskz IS NOT INITIAL.
+        READ TABLE lt_bases ASSIGNING <ls_base> WITH KEY mwskz = ls_erchz-mwskz.
+        IF sy-subrc <> 0.
+          APPEND VALUE #( mwskz = ls_erchz-mwskz ) TO lt_bases ASSIGNING <ls_base>.
+        ENDIF.
+        <ls_base>-base = <ls_base>-base + ls_linea-importe.
+      ENDIF.
+    ENDLOOP.
+
+    " IVA sobre la suma de cada indicador, como en la factura. Una línea
+    " de tipo IV por indicador: base en CANTIDAD, % en PRECIO y cuota
+    LOOP AT lt_bases ASSIGNING <ls_base> WHERE base <> 0.
+      lv_base = <ls_base>-base.
+      CLEAR: lv_cuota, lt_mwdat.
+      CALL FUNCTION 'CALCULATE_TAX_FROM_NET_AMOUNT'
+        EXPORTING
+          i_bukrs           = mv_bukrs
+          i_mwskz           = <ls_base>-mwskz
+          i_waers           = iv_waers
+          i_wrbtr           = lv_base
+        IMPORTING
+          e_fwste           = lv_cuota
+        TABLES
+          t_mwdat           = lt_mwdat
+        EXCEPTIONS
+          OTHERS            = 1.
+      IF sy-subrc <> 0.
+        RAISE EXCEPTION TYPE zcx_fa_fraudes
+          EXPORTING codigo = '2009'
+                    texto  = |No se ha podido calcular el IVA del indicador { <ls_base>-mwskz }|.
+      ENDIF.
+
+      APPEND VALUE #( tipo     = gc_tipo_iva
+                      desde    = ms_entrada-fecha_desde
+                      hasta    = ms_entrada-fecha_hasta
+                      cantidad = <ls_base>-base
+                      precio   = VALUE #( lt_mwdat[ 1 ]-msatz OPTIONAL )
+                      importe  = lv_cuota
+                      mwskz    = <ls_base>-mwskz
+                      waers    = iv_waers ) TO rt_salida.
+    ENDLOOP.
 
   ENDMETHOD.
 

@@ -1,5 +1,11 @@
 # Decisiones funcionales recibidas
 
+## Solo cálculo con IVA (06/11/2026)
+
+Los cálculos que se devuelven sin facturar (`IV_SOLO_CALCULO`) tienen que ir
+**con IVA**. Se calcula con `CALCULATE_TAX_FROM_NET_AMOUNT` por indicador
+(`ERCHZ-MWSKZ` de la línea original o de la plantilla).
+
 ## Respuestas de Aleix (29/10/2026)
 
 **Factura ATR y conceptos 1923/1924 (gas):**

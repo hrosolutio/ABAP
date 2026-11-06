@@ -31,7 +31,7 @@ Parámetros comunes, salvo que se indique otra cosa:
 | # | Caso | Entrada | Esperado | ✓ |
 |---|---|---|---|---|
 | 20 | Luz fraude | tipo `11` | `0000`, `FACTURACION TOTAL`, `ERCH-ORIGDOC = 40`, `ZSERIE_NOD = FE` | |
-| 21 | Solo cálculo | tipo `11`, `IV_SOLO_CALCULO = X` | `0010`, `ET_LINEAS` con el detalle, `ET_FACTURAS` sin factura; nada nuevo en la EA22 | |
+| 21 | Solo cálculo | tipo `11`, `IV_SOLO_CALCULO = X` | `0010`, `ET_LINEAS` con el detalle y una línea `IV` (21 %), `ET_FACTURAS-IMPORTE` = el total de la prueba 20 (con IVA), sin factura; nada nuevo en la EA22 | |
 | 22 | Luz anomalía | tipo `06` | `0000`, `ORIGDOC = 41` | |
 | 23 | Tipo de otra división | luz con tipo `FR` | `1004`, sin crear nada | |
 | 24 | Factura ATR inexistente | `IV_NUM_FACTURA_ATR = PRUEBA` | `1004` | |

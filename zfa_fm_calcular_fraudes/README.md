@@ -88,7 +88,7 @@ docs/
 | `EV_DESCRIPCION` | Export | `STRING` | — | Descripción del resultado |
 | `EV_MODO_FACTURACION` | Export | `CHAR30` | — | Valores de la IA: `FACTURACION TOTAL` (0000/0001/0003/0010), `DESCARTE - DERECHO AL OLVIDO` (0103), `DESCARTE - VULNERABILIDAD` (0104), `DESCARTE - REPOSICION` (0106), `DESCARTE - ANOMALIA TP` (0107); vacío en errores y en los descartes sin modo definido |
 | `ET_FACTURAS` | Export | `ZFA_T_FRAUDES_FACTURA` | — | Factura, cálculo, consumo, importe, documento oficial y fechas |
-| `ET_LINEAS` | Export | `ZFA_TT_FRAUDES_LINEA` | — | Solo con `IV_SOLO_CALCULO`: detalle por concepto (importe neto) |
+| `ET_LINEAS` | Export | `ZFA_TT_FRAUDES_LINEA` | — | Solo con `IV_SOLO_CALCULO`: detalle por concepto (neto) y líneas de IVA |
 
 ### Cambios respecto a la interfaz de partida
 
@@ -108,7 +108,7 @@ docs/
 | `0000` | OK | Factura creada |
 | `0001` | OK | Factura a importe 0 creada (forzado) |
 | `0002` | — | (Sin uso: era titular erróneo) |
-| `0010` | OK | Solo cálculo (`IV_SOLO_CALCULO`): detalle en `ET_LINEAS`, total neto en `ET_FACTURAS-IMPORTE`, sin grabar nada. No cuenta como expediente facturado |
+| `0010` | OK | Solo cálculo (`IV_SOLO_CALCULO`): detalle con IVA en `ET_LINEAS`, total con IVA en `ET_FACTURAS-IMPORTE`, sin grabar nada. No cuenta como expediente facturado |
 | `0003` | OK | Factura creada y apartada, y la liberación automática ha fallado (o va en fondo): liberar a mano en EA05. Devuelve el cálculo y el importe, no la factura (el nº provisional cambia al liberar) |
 | `0101` | OK | Descarte: periodo migrado (Uptility / NI) |
 | `0102` | OK | Descarte: exención de impuestos |
@@ -134,6 +134,7 @@ docs/
 | `2005` | KO | Contrato bloqueado por otro proceso (`FOREIGN_LOCK`) |
 | `2006` | KO | `KOFIZ` del contrato no válido para la serie del documento oficial |
 | `2007` | KO | No se ha podido facturar: el cálculo manual se ha **borrado** (`ISU_S_MANUBILL_DELETE`), se puede reintentar |
+| `2009` | KO | Solo cálculo: no se ha podido calcular el IVA de un indicador |
 | `2008` | KO | No se ha podido facturar **ni borrar el cálculo**: se devuelve su `CALCULO` para borrarlo a mano en EA16 |
 
 Los códigos son una propuesta: **confirmarlos con Aleix**, que la IA tiene
@@ -296,8 +297,14 @@ cantidad) y lo más probable es que falle al grabar el cálculo.
 | `HASTA` | `BISZEITSCH` | |
 | `CANTIDAD` | `DEC 15,3` (tipo predefinido) | Como `CONSUMO` |
 | `PRECIO` | `DEC 16,8` (tipo predefinido) | Precio unitario |
-| `IMPORTE` | `BETRW_KK` | Referencia a `WAERS`. Neto, sin IVA |
+| `IMPORTE` | `BETRW_KK` | Referencia a `WAERS`. Neto; en las líneas `IV`, la cuota de IVA |
+| `MWSKZ` | `MWSKZ` | Indicador de IVA de la línea |
 | `WAERS` | `WAERS` | |
+
+Además de las líneas del cálculo, `ET_LINEAS` lleva **una línea de tipo
+`IV` por indicador de IVA**: `CANTIDAD` = base, `PRECIO` = % e `IMPORTE` =
+cuota. El IVA se calcula con `CALCULATE_TAX_FROM_NET_AMOUNT` sobre la suma
+de cada indicador, como la factura.
 
 **Tabla `ZFA_FRAUD_CONC`** (customizing, mantenible con SM30): qué es cada
 concepto del cálculo.
