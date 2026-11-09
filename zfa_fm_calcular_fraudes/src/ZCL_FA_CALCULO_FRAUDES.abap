@@ -150,9 +150,9 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
       " (mismo precio que la línea EMIC de los cálculos reales)
       gc_iee_minimo_kwh     TYPE ty_precio VALUE '0.001',
 
-      " TODO pedir a Aleix el operando de reposición. Mientras esté vacío
-      " la validación no se hace.
-      gc_operando_reposicion TYPE ettifn-operand VALUE '',
+      " Operandos de reposición (Aleix 09/11)
+      gc_operando_repos_luz TYPE ettifn-operand VALUE 'E_REPOSICI',
+      gc_operando_repos_gas TYPE ettifn-operand VALUE 'G_REPOSICI',
 
       " Tipos de tarifa de Tarifa Plana (vistos en ERCHZ-TARIFTYP de
       " cálculos reales). TODO confirmar con Aleix que no hay más
@@ -200,6 +200,8 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
           mv_bukrs     TYPE bukrs,
           mv_kofiz     TYPE ever-kofiz,
           mv_gpartner  TYPE erch-gpartner,
+          " Marca de vulnerable en la cuenta contrato (FKKVKP-ZZVULNERABLE_CC)
+          mv_vulnerable_cc TYPE fkkvkp-zzvulnerable_cc,
           mv_portion   TYPE erch-portion,
           mv_ableinh   TYPE erch-ableinh,
           " Datos del contrato para las validaciones de integridad
@@ -227,8 +229,8 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
     METHODS validar_obligatorios
       RAISING zcx_fa_fraudes.
 
-    METHODS existe_factura_atr
-      RETURNING VALUE(rv_existe) TYPE abap_bool.
+    METHODS validar_factura_atr
+      RAISING zcx_fa_fraudes.
 
     METHODS validar_integridad
       RAISING zcx_fa_fraudes.
@@ -528,10 +530,10 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     mv_kofiz  = ms_ever-kofiz.
 
     " Interlocutor de la cuenta contrato (para la cabecera del cálculo)
-    SELECT SINGLE gpart
+    SELECT SINGLE gpart, zzvulnerable_cc
       FROM fkkvkp
       WHERE vkont = @mv_vkonto
-      INTO @mv_gpartner.
+      INTO (@mv_gpartner, @mv_vulnerable_cc).
 
     " 1.4 Factura ATR de anomalía o fraude (según la división) y existente
     lv_tipo_ok = SWITCH #( mv_sparte
@@ -545,11 +547,7 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
                   texto  = |Tipo de factura ATR { ms_entrada-tipo_factura_atr } no válido (luz 06/11, gas AN/FR)|.
     ENDIF.
 
-    IF existe_factura_atr( ) = abap_false.
-      RAISE EXCEPTION TYPE zcx_fa_fraudes
-        EXPORTING codigo = '1004'
-                  texto  = |La factura ATR { ms_entrada-num_factura_atr } no existe|.
-    ENDIF.
+    validar_factura_atr( ).
 
     " 1.5 Consumo ATR vs consumo total: lo controla la IA, que envía ya el
     " consumo a facturar (correo de Eliza del 26/10, confirmado por Aleix)
@@ -596,27 +594,46 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
   ENDMETHOD.
 
 
-  METHOD existe_factura_atr.
-    " Cabecera de la factura ATR recibida (Aleix 29/10). Se guarda el paso
-    " de proceso para leer luego sus conceptos en /IDXGC/PRST_CHRG
-    " Por el índice ZCF (CODIGOFISCALFACTURA)
+  METHOD validar_factura_atr.
+
+    " Cabecera de la factura ATR recibida, por el índice ZCF
+    " (CODIGOFISCALFACTURA). Puede haber varios pasos de proceso con el
+    " mismo número: vale el que sea del CUPS del expediente, que va en las
+    " líneas de cargos (Aleix 09/11)
     SELECT proc_ref, proc_step_ref
       FROM /idxgc/prst_inhd
       WHERE codigofiscalfactura = @ms_entrada-num_factura_atr
-      ORDER BY proc_ref DESCENDING
-      INTO TABLE @DATA(lt_factura)
-      UP TO 1 ROWS.
-    IF lt_factura IS NOT INITIAL.
-      mv_proc_ref      = lt_factura[ 1 ]-proc_ref.
-      mv_proc_step_ref = lt_factura[ 1 ]-proc_step_ref.
-      rv_existe = abap_true.
+      INTO TABLE @DATA(lt_factura).
+    IF lt_factura IS INITIAL.
+      RAISE EXCEPTION TYPE zcx_fa_fraudes
+        EXPORTING codigo = '1004'
+                  texto  = |La factura ATR { ms_entrada-num_factura_atr } no existe|.
     ENDIF.
+
+    SELECT proc_ref, proc_step_ref
+      FROM /idxgc/prst_chrg
+      FOR ALL ENTRIES IN @lt_factura
+      WHERE proc_ref      = @lt_factura-proc_ref
+        AND proc_step_ref = @lt_factura-proc_step_ref
+        AND ext_ui        = @ms_entrada-cups
+      INTO TABLE @DATA(lt_cups).
+    IF lt_cups IS INITIAL.
+      RAISE EXCEPTION TYPE zcx_fa_fraudes
+        EXPORTING codigo = '1004'
+                  texto  = |La factura ATR { ms_entrada-num_factura_atr } no es del CUPS { ms_entrada-cups }|.
+    ENDIF.
+
+    SORT lt_cups BY proc_ref DESCENDING.
+    mv_proc_ref      = lt_cups[ 1 ]-proc_ref.
+    mv_proc_step_ref = lt_cups[ 1 ]-proc_step_ref.
+
   ENDMETHOD.
 
 
   METHOD validar_integridad.
 
-    DATA lv_anlage TYPE anlage.
+    DATA: lv_anlage   TYPE anlage,
+          lv_operando TYPE ettifn-operand.
 
     " Solo se comprueba si existe la fila
     DATA: lv_loobj1   TYPE dfkklocks-loobj1,
@@ -624,7 +641,7 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
           lv_partner  TYPE bu_partner ##NEEDED,
           lv_bloqueo  TYPE dfkklocks-loobj1 ##NEEDED.
 
-    " Orígenes de los datos: correo de Aleix del 29/10
+    " Orígenes de los datos: correos de Aleix del 29/10 y 09/11
 
     " 2.1 Periodo migrado: contrato traído de otro sistema y periodo
     " anterior a su alta en el sistema antiguo
@@ -647,8 +664,8 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
                   texto  = 'Descarte: contrato con exención de impuestos (CIE) en el periodo'.
     ENDIF.
 
-    " 2.3 Derecho al olvido: cliente con solicitud de ofuscación
-    " TODO confirmar si cuenta cualquier solicitud o solo las procesadas
+    " 2.3 Derecho al olvido: cliente con solicitud de ofuscación, esté o
+    " no procesada (Aleix 09/11)
     SELECT SINGLE partner
       FROM zco_t_ofusc_clie
       WHERE partner = @mv_gpartner
@@ -659,19 +676,16 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
                   texto  = 'Descarte: cliente con derecho al olvido'.
     ENDIF.
 
-    " 2.4 Esencialidad o vulnerabilidad (pobreza energética) en el periodo
-    " TODO confirmar los valores de ZZVULNERABLE que cuentan
-    SELECT SINGLE zzvital, zzinicio_vital, zzfin_vital,
-                  zzvulnerable, zzinicio_vulner, zzfin_vulner
+    " 2.4 Vulnerable (marca en la cuenta contrato) o esencial (ZZVITAL de
+    " la instalación distinto de 00, vigente en el periodo) (Aleix 09/11)
+    SELECT SINGLE zzvital, zzinicio_vital, zzfin_vital
       FROM eanl
       WHERE anlage = @mv_anlage
       INTO @DATA(ls_eanl).
-    IF ( ls_eanl-zzvital IS NOT INITIAL AND ls_eanl-zzvital <> '00'
+    IF mv_vulnerable_cc IS NOT INITIAL
+    OR ( ls_eanl-zzvital IS NOT INITIAL AND ls_eanl-zzvital <> '00'
          AND ls_eanl-zzinicio_vital <= ms_entrada-fecha_hasta
-         AND ( ls_eanl-zzfin_vital >= ms_entrada-fecha_desde OR ls_eanl-zzfin_vital IS INITIAL ) )
-    OR ( ls_eanl-zzvulnerable IS NOT INITIAL AND ls_eanl-zzvulnerable <> '00'
-         AND ls_eanl-zzinicio_vulner <= ms_entrada-fecha_hasta
-         AND ( ls_eanl-zzfin_vulner >= ms_entrada-fecha_desde OR ls_eanl-zzfin_vulner IS INITIAL ) ).
+         AND ( ls_eanl-zzfin_vital >= ms_entrada-fecha_desde OR ls_eanl-zzfin_vital IS INITIAL ) ).
       RAISE EXCEPTION TYPE zcx_fa_fraudes
         EXPORTING codigo = '0104'
                   texto  = 'Descarte: cliente vulnerable o esencial en el periodo'.
@@ -701,21 +715,22 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
 
 
     " 2.6 Operando de reposición activo en el periodo
-    IF gc_operando_reposicion IS NOT INITIAL.
-      " TODO confirmar si basta con que exista el operando en el periodo
-      " o hay que mirar su valor
-      SELECT SINGLE anlage
-        FROM ettifn
-        WHERE anlage  = @mv_anlage
-          AND operand = @gc_operando_reposicion
-          AND ab     <= @ms_entrada-fecha_hasta
-          AND bis    >= @ms_entrada-fecha_desde
-        INTO @lv_anlage.
-      IF sy-subrc = 0.
-        RAISE EXCEPTION TYPE zcx_fa_fraudes
-          EXPORTING codigo = '0106'
-                    texto  = 'Descarte: operando de reposición activo en el periodo'.
-      ENDIF.
+    " TODO confirmar con Aleix si basta con que exista el operando en el
+    " periodo o hay que mirar su valor
+    lv_operando = SWITCH #( mv_sparte
+                    WHEN gc_sparte_luz THEN gc_operando_repos_luz
+                    WHEN gc_sparte_gas THEN gc_operando_repos_gas ).
+    SELECT SINGLE anlage
+      FROM ettifn
+      WHERE anlage  = @mv_anlage
+        AND operand = @lv_operando
+        AND ab     <= @ms_entrada-fecha_hasta
+        AND bis    >= @ms_entrada-fecha_desde
+      INTO @lv_anlage.
+    IF sy-subrc = 0.
+      RAISE EXCEPTION TYPE zcx_fa_fraudes
+        EXPORTING codigo = '0106'
+                  texto  = 'Descarte: operando de reposición activo en el periodo'.
     ENDIF.
 
     " 2.7 Tarifa Plana en el periodo: tipo de tarifa de la instalación

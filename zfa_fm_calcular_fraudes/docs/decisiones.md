@@ -1,5 +1,17 @@
 # Decisiones funcionales recibidas
 
+## Respuestas de Aleix (09/11/2026)
+
+| Pregunta | Respuesta | En el código |
+|---|---|---|
+| Operando de reposición (2.6) | `E_REPOSICI` (luz) / `G_REPOSICI` (gas) | `ETTIFN` con el operando de la división vigente en el periodo → `0106` |
+| Derecho al olvido | Cualquier fila de `ZCO_T_OFUSC_CLIE` | Sin filtro por `PROCESADO` |
+| Vulnerable | `FKKVKP-ZZVULNERABLE_CC` con valor; esencial si `EANL-ZZVITAL` ≠ `00` | Ya no se mira `EANL-ZZVULNERABLE` |
+| Factura ATR y CUPS | Validar que la factura ATR sea del CUPS | `/IDXGC/PRST_CHRG-EXT_UI` = CUPS en algún paso de esa factura → si no, `1004` |
+
+Pendiente de Eliza: FACTURACION PARCIAL, EMPLEADO / CADUCADO / NO TITULAR
+y status del PDoc.
+
 ## Solo cálculo con IVA (06/11/2026)
 
 Los cálculos que se devuelven sin facturar (`IV_SOLO_CALCULO`) tienen que ir

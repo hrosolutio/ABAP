@@ -11,7 +11,9 @@ Parámetros comunes, salvo que se indique otra cosa:
 | Cuenta contrato | 2000157509 | 2000016381 |
 
 - `IV_NUM_FACTURA_ATR`: un `CODIGOFISCALFACTURA` real de
-  `/IDXGC/PRST_INHD` (la RFC valida que exista).
+  `/IDXGC/PRST_INHD` **del mismo CUPS** (la RFC valida que exista y que en
+  `/IDXGC/PRST_CHRG` tenga `EXT_UI` = CUPS). En QA el CUPS de luz de prueba
+  no tiene facturas ATR: hay que buscar otro contrato que sí tenga.
 - `IV_ID_EXPEDIENTE`: uno nuevo en cada prueba. Los que acaban en
   `0000`/`0001`/`0003` no se pueden repetir (`1006`).
 - Después de cada prueba que factura, anular la factura en la EA13 antes
@@ -34,7 +36,8 @@ Parámetros comunes, salvo que se indique otra cosa:
 | 21 | Solo cálculo | tipo `11`, `IV_SOLO_CALCULO = X` | `0010`, `ET_LINEAS` con el detalle y una línea `IV` (21 %), `ET_FACTURAS-IMPORTE` = el total de la prueba 20 (con IVA), sin factura; nada nuevo en la EA22 | |
 | 22 | Luz anomalía | tipo `06` | `0000`, `ORIGDOC = 41` | |
 | 23 | Tipo de otra división | luz con tipo `FR` | `1004`, sin crear nada | |
-| 24 | Factura ATR inexistente | `IV_NUM_FACTURA_ATR = PRUEBA` | `1004` | |
+| 24 | Factura ATR inexistente | `IV_NUM_FACTURA_ATR = PRUEBA` | `1004` no existe | |
+| 24b | Factura ATR de otro CUPS | Una factura real de otro CUPS | `1004` no es del CUPS | |
 | 25 | Gas fraude | gas, tipo `FR` | `0000`, `ORIGDOC = 40` | |
 | 26 | Solo cálculo a 0 | `IV_FORZADO = X`, `IV_SOLO_CALCULO = X` | `0010`, líneas `EREPOS` + `EPROD` a 0 | |
 | 27 | Expediente repetido | repetir el de la prueba 20 | `1006` | |
@@ -49,9 +52,10 @@ periodo del expediente.
 | 30 | Migrado | `EVER-XVERA = X`, periodo anterior a `EINZDAT_ALT` | `0101` |
 | 31 | Exención | Contrato en `ZFA_T_CIE` vigente en el periodo | `0102` |
 | 32 | Olvido | Interlocutor en `ZCO_T_OFUSC_CLIE-PARTNER` | `0103`, `DESCARTE - DERECHO AL OLVIDO` |
-| 33 | Vital / vulnerable | `EANL-ZZVITAL` o `ZZVULNERABLE` con fechas en el periodo | `0104`, `DESCARTE - VULNERABILIDAD` |
+| 33 | Vital / vulnerable | `FKKVKP-ZZVULNERABLE_CC` informado, o `EANL-ZZVITAL` ≠ 00 con fechas en el periodo | `0104`, `DESCARTE - VULNERABILIDAD` |
 | 34 | Bloqueo contrato | `EVER-ABRSPERR` informado | `0105` |
 | 35 | Bloqueo cuenta contrato | `DFKKLOCKS` `LOTYP 06` vigente en el periodo | `0105` |
+| 35b | Reposición | `ETTIFN` con operando `E_REPOSICI`/`G_REPOSICI` en el periodo | `0106`, `DESCARTE - REPOSICION` |
 | 36 | Tarifa Plana | `EANLH-TARIFTYP` `E_PLANA`/`G_PLANA` en el periodo | `0107`, `DESCARTE - ANOMALIA TP` |
 | 37 | Sin cálculo original | Periodo sin cálculo del contrato | `0108` |
 
@@ -61,4 +65,3 @@ periodo del expediente.
   ATR de gas con esos conceptos y un cálculo plantilla en STVARV.
 - Descuentos (luz y gas) y prorrateo por cambio de precio: los cálculos
   de prueba no los tienen. Solo cubiertos por ABAP Unit.
-- Reposición (`0106`): falta el operando.

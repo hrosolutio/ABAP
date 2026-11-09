@@ -123,7 +123,7 @@ docs/
 | `1001` | KO | El CUPS no existe |
 | `1002` | KO | El contrato no existe o no corresponde al CUPS |
 | `1003` | KO | El contrato no está activo en el periodo |
-| `1004` | KO | Factura ATR inexistente o de tipo no válido (luz `06`/`11`, gas `AN`/`FR`) |
+| `1004` | KO | Factura ATR inexistente, de otro CUPS o de tipo no válido (luz `06`/`11`, gas `AN`/`FR`) |
 | `1005` | — | (Sin uso: la validación de consumo la hace la IA) |
 | `1006` | KO | El expediente ya está facturado |
 | `1007` | KO | Fecha desde posterior a fecha hasta |
@@ -378,8 +378,7 @@ activación real en el sistema es la que vale.
 - [ ] Actualizar el **status del PDoc** de la factura ATR: qué PDoc, qué status y con qué FM.
 - [ ] Origen de: periodo migrado, exención de impuestos, derecho al olvido,
       vulnerable/esencial y qué bloqueo de contrato o cuenta contrato.
-- [ ] Operando de reposición (y si basta con que exista) y tipo(s) de
-      tarifa de Tarifa Plana.
+- [x] ~~Operando de reposición~~: `E_REPOSICI` / `G_REPOSICI`. Falta: ¿basta con que exista o hay que mirar su valor? ¿`E_PLANA`/`G_PLANA` son todas las tarifas planas?
 - [ ] Que el flag de descarte se salta las validaciones de integridad.
 - [ ] Qué hacer si el periodo abarca varios cálculos (hoy se descarta).
 - [ ] Base del IEE: antes o después de descuentos (hoy, después).
