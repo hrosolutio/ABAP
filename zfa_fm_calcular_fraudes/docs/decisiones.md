@@ -15,8 +15,13 @@ y status del PDoc.
 ## Solo cálculo con IVA (06/11/2026)
 
 Los cálculos que se devuelven sin facturar (`IV_SOLO_CALCULO`) tienen que ir
-**con IVA**. Se calcula con `CALCULATE_TAX_FROM_NET_AMOUNT` por indicador
-(`ERCHZ-MWSKZ` de la línea original o de la plantilla).
+**con IVA**. Se calcula con `CALCULATE_TAX_FROM_NET_AMOUNT` por indicador.
+
+Prueba 21 (11/11): `ERCHZ-MWSKZ` y `ERCHZ-TWAERS` vienen vacíos en BD (el
+indicador lo pone la facturación). Ahora:
+- `MWSKZ`: de `ERDZ` de la factura del cálculo original (`BELNR`), por
+  concepto; si el concepto no estaba en esa factura, el primero que haya.
+- `WAERS`: `T001-WAERS` de la sociedad del contrato.
 
 ## Respuestas de Aleix (29/10/2026)
 

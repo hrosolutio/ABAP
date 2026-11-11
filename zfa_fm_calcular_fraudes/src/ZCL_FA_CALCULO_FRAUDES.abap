@@ -110,7 +110,12 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
 
       ty_t_conceptos TYPE STANDARD TABLE OF zfa_fraud_conc WITH DEFAULT KEY,
 
-      ty_t_erchz     TYPE STANDARD TABLE OF erchz WITH DEFAULT KEY.
+      ty_t_erchz     TYPE STANDARD TABLE OF erchz WITH DEFAULT KEY,
+      BEGIN OF ty_iva,
+        belzart TYPE erdz-belzart,
+        mwskz   TYPE erdz-mwskz,
+      END OF ty_iva,
+      ty_t_iva       TYPE STANDARD TABLE OF ty_iva WITH DEFAULT KEY.
 
     CONSTANTS:
       gc_ok                 TYPE char2 VALUE 'OK',
@@ -213,6 +218,7 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
           " Líneas del cálculo original tal cual (ERCHZ), para heredar
           " operación, tarifa, unidad, etc. en el cálculo manual
           mt_erchz_original TYPE ty_t_erchz,
+          mv_belnr_original TYPE erch-belnr,
           " Cálculo y factura creados: se devuelven aunque luego falle algo,
           " porque el cálculo ya está grabado
           ms_factura   TYPE zfa_s_fraudes_factura,
@@ -255,6 +261,9 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
     METHODS plantilla_linea
       IMPORTING iv_belzart      TYPE erchz-belzart
       RETURNING VALUE(rs_erchz) TYPE erchz.
+
+    METHODS indicadores_iva
+      RETURNING VALUE(rt_iva) TYPE ty_t_iva.
 
     METHODS lineas_simulacion
       IMPORTING it_lineas        TYPE ty_t_linea
@@ -401,6 +410,7 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
       validar_integridad( ).
 
       ls_calculo  = buscar_calculo_original( ).
+      mv_belnr_original = ls_calculo-belnr.
       lt_original = leer_lineas_calculo( ls_calculo-belnr ).
 
       CASE mv_sparte.
@@ -418,7 +428,11 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
       rs_resultado-descripcion = 'Factura creada correctamente'.
     ENDIF.
 
-    lv_waers = VALUE #( mt_erchz_original[ 1 ]-twaers OPTIONAL ).
+    " ERCHZ-TWAERS va vacío en BD: moneda de la sociedad
+    SELECT SINGLE waers
+      FROM t001
+      WHERE bukrs = @mv_bukrs
+      INTO @lv_waers.
 
     " Solo cálculo: se devuelve el detalle, con el IVA, sin grabar nada en
     " SAP (ni cálculo manual ni factura). El total es con IVA, igual que
@@ -1679,6 +1693,25 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
   ENDMETHOD.
 
 
+  METHOD indicadores_iva.
+
+    " TODO confirmar en SE11 que ERDZ tiene índice por BELNR
+    IF mv_belnr_original IS INITIAL.
+      RETURN.
+    ENDIF.
+
+    SELECT belzart, mwskz
+      FROM erdz
+      WHERE belnr = @mv_belnr_original
+        AND mwskz <> @space
+      INTO TABLE @rt_iva.
+
+    SORT rt_iva BY belzart.
+    DELETE ADJACENT DUPLICATES FROM rt_iva COMPARING belzart.
+
+  ENDMETHOD.
+
+
   METHOD lineas_simulacion.
 
     TYPES: BEGIN OF ty_base_iva,
@@ -1695,14 +1728,18 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
 
     FIELD-SYMBOLS <ls_base> TYPE ty_base_iva.
 
-    " Líneas netas, cada una con el indicador de IVA de su línea en SAP: la
-    " del cálculo original o, si es nueva, la de la plantilla (STVARV)
+    " ERCHZ-MWSKZ va vacío: el indicador lo pone la facturación. Se coge
+    " el de la factura del cálculo original, por concepto; si el concepto
+    " no estaba (EREPOS, mínimo IEE...), el primero de esa factura
+    DATA(lt_iva) = indicadores_iva( ).
+
     LOOP AT it_lineas INTO DATA(ls_linea).
       CLEAR ls_erchz.
-      IF ls_linea-belzeile IS NOT INITIAL.
-        READ TABLE mt_erchz_original INTO ls_erchz WITH KEY belzeile = ls_linea-belzeile.
+      READ TABLE lt_iva INTO DATA(ls_iva) WITH KEY belzart = ls_linea-belzart BINARY SEARCH.
+      IF sy-subrc = 0.
+        ls_erchz-mwskz = ls_iva-mwskz.
       ELSE.
-        ls_erchz = plantilla_linea( ls_linea-belzart ).
+        ls_erchz-mwskz = VALUE #( lt_iva[ 1 ]-mwskz OPTIONAL ).
       ENDIF.
 
       ls_salida = VALUE #( belzart  = ls_linea-belzart
