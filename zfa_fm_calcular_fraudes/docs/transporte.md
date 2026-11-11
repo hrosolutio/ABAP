@@ -28,6 +28,7 @@ Lista para revisar que la orden lleva todo. Marcar al incluir.
 | Contenido de `ZFA_FRAUD_CONC` | Ejecutar `ZFA_R_CARGA_FRAUD_CONC` en cada sistema (sin `P_TEST`) o transportar las entradas | |
 | `ZFA_FRAUDES_PLANTILLA_EREPOS` | STVARV. Un cálculo real con línea `EREPOS` **de ese sistema** | |
 | `ZFA_FRAUDES_PLANTILLA_GREPOS` | STVARV. Ídem con `GREPOS` | |
+| `ZFA_FRAUDES_MWSKZ` | STVARV. Indicador de IVA (21 %) para el solo cálculo | |
 | `ZFA_FRAUDES_PLANTILLA_PGINTR` / `_PGIRAP` | STVARV. Ídem, si se facturan conceptos ATR 1923/1924 en gas | |
 
 ## Antes de pasar

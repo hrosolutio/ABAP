@@ -110,12 +110,7 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
 
       ty_t_conceptos TYPE STANDARD TABLE OF zfa_fraud_conc WITH DEFAULT KEY,
 
-      ty_t_erchz     TYPE STANDARD TABLE OF erchz WITH DEFAULT KEY,
-      BEGIN OF ty_iva,
-        belzart TYPE dberdz-belzart,
-        mwskz   TYPE dberdz-mwskz,
-      END OF ty_iva,
-      ty_t_iva       TYPE STANDARD TABLE OF ty_iva WITH DEFAULT KEY.
+      ty_t_erchz     TYPE STANDARD TABLE OF erchz WITH DEFAULT KEY.
 
     CONSTANTS:
       gc_ok                 TYPE char2 VALUE 'OK',
@@ -218,7 +213,6 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
           " Líneas del cálculo original tal cual (ERCHZ), para heredar
           " operación, tarifa, unidad, etc. en el cálculo manual
           mt_erchz_original TYPE ty_t_erchz,
-          mv_belnr_original TYPE erch-belnr,
           " Cálculo y factura creados: se devuelven aunque luego falle algo,
           " porque el cálculo ya está grabado
           ms_factura   TYPE zfa_s_fraudes_factura,
@@ -262,8 +256,9 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
       IMPORTING iv_belzart      TYPE erchz-belzart
       RETURNING VALUE(rs_erchz) TYPE erchz.
 
-    METHODS indicadores_iva
-      RETURNING VALUE(rt_iva) TYPE ty_t_iva.
+    METHODS indicador_iva
+      RETURNING VALUE(rv_mwskz) TYPE mwskz
+      RAISING   zcx_fa_fraudes.
 
     METHODS lineas_simulacion
       IMPORTING it_lineas        TYPE ty_t_linea
@@ -410,7 +405,6 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
       validar_integridad( ).
 
       ls_calculo  = buscar_calculo_original( ).
-      mv_belnr_original = ls_calculo-belnr.
       lt_original = leer_lineas_calculo( ls_calculo-belnr ).
 
       CASE mv_sparte.
@@ -1693,23 +1687,20 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
   ENDMETHOD.
 
 
-  METHOD indicadores_iva.
+  METHOD indicador_iva.
 
-    " Las posiciones de factura (DBERDZ) guardan el cálculo del que vienen
-    " en BACKDOCNO.
-    " TODO confirmar en SE11 que DBERDZ tiene índice por BACKDOCNO
-    IF mv_belnr_original IS INITIAL.
-      RETURN.
+    " ERCHZ-MWSKZ va vacío (el indicador lo pone la facturación) y todas
+    " las líneas llevan el mismo IVA: se configura en STVARV
+    SELECT SINGLE low
+      FROM tvarvc
+      WHERE name = 'ZFA_FRAUDES_MWSKZ'
+        AND type = 'P'
+      INTO @rv_mwskz.
+    IF sy-subrc <> 0 OR rv_mwskz IS INITIAL.
+      RAISE EXCEPTION TYPE zcx_fa_fraudes
+        EXPORTING codigo = '2009'
+                  texto  = 'Falta el indicador de IVA en STVARV (ZFA_FRAUDES_MWSKZ)'.
     ENDIF.
-
-    SELECT belzart, mwskz
-      FROM dberdz
-      WHERE backdocno = @mv_belnr_original
-        AND mwskz <> @space
-      INTO TABLE @rt_iva.
-
-    SORT rt_iva BY belzart.
-    DELETE ADJACENT DUPLICATES FROM rt_iva COMPARING belzart.
 
   ENDMETHOD.
 
@@ -1723,26 +1714,16 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
 
     DATA: lt_bases   TYPE STANDARD TABLE OF ty_base_iva WITH DEFAULT KEY,
           ls_salida  TYPE zfa_s_fraudes_linea,
-          ls_erchz   TYPE erchz,
+          lv_mwskz   TYPE mwskz,
           lt_mwdat   TYPE STANDARD TABLE OF rtax1u15 WITH DEFAULT KEY,
           lv_base    TYPE wrbtr,
           lv_cuota   TYPE wrbtr.
 
     FIELD-SYMBOLS <ls_base> TYPE ty_base_iva.
 
-    " ERCHZ-MWSKZ va vacío: el indicador lo pone la facturación. Se coge
-    " el de la factura (DBERDZ) del cálculo original, por concepto; si el concepto
-    " no estaba (EREPOS, mínimo IEE...), el primero de esa factura
-    DATA(lt_iva) = indicadores_iva( ).
+    lv_mwskz = indicador_iva( ).
 
     LOOP AT it_lineas INTO DATA(ls_linea).
-      CLEAR ls_erchz.
-      READ TABLE lt_iva INTO DATA(ls_iva) WITH KEY belzart = ls_linea-belzart BINARY SEARCH.
-      IF sy-subrc = 0.
-        ls_erchz-mwskz = ls_iva-mwskz.
-      ELSE.
-        ls_erchz-mwskz = VALUE #( lt_iva[ 1 ]-mwskz OPTIONAL ).
-      ENDIF.
 
       ls_salida = VALUE #( belzart  = ls_linea-belzart
                            tipo     = ls_linea-tipo
@@ -1753,14 +1734,14 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
                            cantidad = ls_linea-cantidad
                            precio   = ls_linea-precio
                            importe  = ls_linea-importe
-                           mwskz    = ls_erchz-mwskz
+                           mwskz    = lv_mwskz
                            waers    = iv_waers ).
       APPEND ls_salida TO rt_salida.
 
-      IF ls_erchz-mwskz IS NOT INITIAL.
-        READ TABLE lt_bases ASSIGNING <ls_base> WITH KEY mwskz = ls_erchz-mwskz.
+      IF lv_mwskz IS NOT INITIAL.
+        READ TABLE lt_bases ASSIGNING <ls_base> WITH KEY mwskz = lv_mwskz.
         IF sy-subrc <> 0.
-          APPEND VALUE #( mwskz = ls_erchz-mwskz ) TO lt_bases ASSIGNING <ls_base>.
+          APPEND VALUE #( mwskz = lv_mwskz ) TO lt_bases ASSIGNING <ls_base>.
         ENDIF.
         <ls_base>-base = <ls_base>-base + ls_linea-importe.
       ENDIF.

@@ -19,9 +19,9 @@ Los cálculos que se devuelven sin facturar (`IV_SOLO_CALCULO`) tienen que ir
 
 Prueba 21 (11/11): `ERCHZ-MWSKZ` y `ERCHZ-TWAERS` vienen vacíos en BD (el
 indicador lo pone la facturación). Ahora:
-- `MWSKZ`: de `DBERDZ` (posiciones de factura; `ERDZ` es solo estructura)
-  de la factura del cálculo original (`BACKDOCNO` = nº de cálculo), por
-  concepto; si el concepto no estaba en esa factura, el primero que haya.
+- `MWSKZ`: parámetro STVARV `ZFA_FRAUDES_MWSKZ` (todas las líneas llevan el
+  mismo IVA). Sin él → `2009`. Descartado leerlo de las facturas:
+  `DBERDZ` no tiene índice por `BACKDOCNO`.
 - `WAERS`: `T001-WAERS` de la sociedad del contrato.
 
 ## Respuestas de Aleix (29/10/2026)
