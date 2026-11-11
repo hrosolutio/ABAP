@@ -112,8 +112,8 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
 
       ty_t_erchz     TYPE STANDARD TABLE OF erchz WITH DEFAULT KEY,
       BEGIN OF ty_iva,
-        belzart TYPE erdz-belzart,
-        mwskz   TYPE erdz-mwskz,
+        belzart TYPE dberdz-belzart,
+        mwskz   TYPE dberdz-mwskz,
       END OF ty_iva,
       ty_t_iva       TYPE STANDARD TABLE OF ty_iva WITH DEFAULT KEY.
 
@@ -1695,14 +1695,16 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
 
   METHOD indicadores_iva.
 
-    " TODO confirmar en SE11 que ERDZ tiene índice por BELNR
+    " Las posiciones de factura (DBERDZ) guardan el cálculo del que vienen
+    " en BACKDOCNO.
+    " TODO confirmar en SE11 que DBERDZ tiene índice por BACKDOCNO
     IF mv_belnr_original IS INITIAL.
       RETURN.
     ENDIF.
 
     SELECT belzart, mwskz
-      FROM erdz
-      WHERE belnr = @mv_belnr_original
+      FROM dberdz
+      WHERE backdocno = @mv_belnr_original
         AND mwskz <> @space
       INTO TABLE @rt_iva.
 
@@ -1729,7 +1731,7 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     FIELD-SYMBOLS <ls_base> TYPE ty_base_iva.
 
     " ERCHZ-MWSKZ va vacío: el indicador lo pone la facturación. Se coge
-    " el de la factura del cálculo original, por concepto; si el concepto
+    " el de la factura (DBERDZ) del cálculo original, por concepto; si el concepto
     " no estaba (EREPOS, mínimo IEE...), el primero de esa factura
     DATA(lt_iva) = indicadores_iva( ).
 
