@@ -597,10 +597,10 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
   METHOD validar_factura_atr.
 
     " Cabecera de la factura ATR recibida, por el índice ZCF
-    " (CODIGOFISCALFACTURA). Puede haber varios pasos de proceso con el
-    " mismo número: vale el que sea del CUPS del expediente, que va en las
-    " líneas de cargos (Aleix 09/11)
-    SELECT proc_ref, proc_step_ref
+    " (CODIGOFISCALFACTURA). Tiene que ser del CUPS del expediente (Aleix
+    " 09/11): en la cabecera va la instalación, que es la del CUPS y el
+    " contrato ya validados (EXT_UI de /IDXGC/PRST_CHRG va vacío)
+    SELECT proc_ref, proc_step_ref, anlage
       FROM /idxgc/prst_inhd
       WHERE codigofiscalfactura = @ms_entrada-num_factura_atr
       INTO TABLE @DATA(lt_factura).
@@ -610,22 +610,16 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
                   texto  = |La factura ATR { ms_entrada-num_factura_atr } no existe|.
     ENDIF.
 
-    SELECT proc_ref, proc_step_ref
-      FROM /idxgc/prst_chrg
-      FOR ALL ENTRIES IN @lt_factura
-      WHERE proc_ref      = @lt_factura-proc_ref
-        AND proc_step_ref = @lt_factura-proc_step_ref
-        AND ext_ui        = @ms_entrada-cups
-      INTO TABLE @DATA(lt_cups).
-    IF lt_cups IS INITIAL.
+    DELETE lt_factura WHERE anlage <> mv_anlage.
+    IF lt_factura IS INITIAL.
       RAISE EXCEPTION TYPE zcx_fa_fraudes
         EXPORTING codigo = '1004'
                   texto  = |La factura ATR { ms_entrada-num_factura_atr } no es del CUPS { ms_entrada-cups }|.
     ENDIF.
 
-    SORT lt_cups BY proc_ref DESCENDING.
-    mv_proc_ref      = lt_cups[ 1 ]-proc_ref.
-    mv_proc_step_ref = lt_cups[ 1 ]-proc_step_ref.
+    SORT lt_factura BY proc_ref DESCENDING.
+    mv_proc_ref      = lt_factura[ 1 ]-proc_ref.
+    mv_proc_step_ref = lt_factura[ 1 ]-proc_step_ref.
 
   ENDMETHOD.
 

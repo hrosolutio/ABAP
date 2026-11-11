@@ -7,7 +7,7 @@
 | Operando de reposición (2.6) | `E_REPOSICI` (luz) / `G_REPOSICI` (gas) | `ETTIFN` con el operando de la división vigente en el periodo → `0106` |
 | Derecho al olvido | Cualquier fila de `ZCO_T_OFUSC_CLIE` | Sin filtro por `PROCESADO` |
 | Vulnerable | `FKKVKP-ZZVULNERABLE_CC` con valor; esencial si `EANL-ZZVITAL` ≠ `00` | Ya no se mira `EANL-ZZVULNERABLE` |
-| Factura ATR y CUPS | Validar que la factura ATR sea del CUPS | `/IDXGC/PRST_CHRG-EXT_UI` = CUPS en algún paso de esa factura → si no, `1004` |
+| Factura ATR y CUPS | Validar que la factura ATR sea del CUPS | `/IDXGC/PRST_INHD-ANLAGE` = instalación del contrato (la del CUPS ya validado) → si no, `1004`. `/IDXGC/PRST_CHRG-EXT_UI` va vacío en QA (4 millones de filas sin informar) |
 
 Pendiente de Eliza: FACTURACION PARCIAL, EMPLEADO / CADUCADO / NO TITULAR
 y status del PDoc.

@@ -11,9 +11,10 @@ Parámetros comunes, salvo que se indique otra cosa:
 | Cuenta contrato | 2000157509 | 2000016381 |
 
 - `IV_NUM_FACTURA_ATR`: un `CODIGOFISCALFACTURA` real de
-  `/IDXGC/PRST_INHD` **del mismo CUPS** (la RFC valida que exista y que en
-  `/IDXGC/PRST_CHRG` tenga `EXT_UI` = CUPS). En QA el CUPS de luz de prueba
-  no tiene facturas ATR: hay que buscar otro contrato que sí tenga.
+  `/IDXGC/PRST_INHD` **de la misma instalación** (la RFC valida que exista
+  y que `INHD-ANLAGE` sea la instalación del contrato). Para buscarla:
+  SE16N `/IDXGC/PRST_INHD` con `ANLAGE` = instalación y
+  `CODIGOFISCALFACTURA` informado.
 - `IV_ID_EXPEDIENTE`: uno nuevo en cada prueba. Los que acaban en
   `0000`/`0001`/`0003` no se pueden repetir (`1006`).
 - Después de cada prueba que factura, anular la factura en la EA13 antes
