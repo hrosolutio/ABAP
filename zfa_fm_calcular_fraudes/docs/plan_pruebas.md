@@ -28,7 +28,7 @@ Parámetros comunes, salvo que se indique otra cosa:
 | PRUEBA014 | Luz a 0 (`IV_FORZADO`) | `0001` – 610000008705 / FE26390000002316 |
 | PRUEBA015 | Gas a 0 (`IV_FORZADO`) | `0001` – 610000008717 / FE26390000002327 |
 | PRUEBA016 | Gas normal | `0000` – 610000008719 / FE26390000002328, 10,82 € |
-| PRUEBA020 | Luz fraude (tipo `11`) con validaciones nuevas | `0000` OK |
+| PRUEBA020 | Luz fraude (tipo `11`) con validaciones nuevas | `0000` – 610000008981 / FE26390000002524 (cálculo 550000002628), 14,62 € |
 | PRUEBA021 | Solo cálculo luz (`J424010929097`) | `0010` – sin factura; neto 12,08 + IVA `R1` 21 % 2,54 = 14,62 € (igual que PRUEBA013) |
 
 ## Pendiente (código desde el 29/10)
