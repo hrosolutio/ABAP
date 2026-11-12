@@ -1735,9 +1735,8 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     DATA: lo_pdoc   TYPE REF TO cl_isu_ide_switchdoc,
           lv_status TYPE eideswtstat.
 
-    " PROC_REF de /IDXGC/PRST_INHD = EIDESWTDOC-SWITCHNUM
-    " TODO confirmar que SELECT tiene X_WMODE (SET_STATUS exige modo
-    " modificar) y que con él bloquea el documento
+    " PROC_REF de /IDXGC/PRST_INHD = EIDESWTDOC-SWITCHNUM. En modo
+    " modificar, que es el que exige SET_STATUS
     cl_isu_ide_switchdoc=>select(
       EXPORTING
         x_switchnum     = mv_proc_ref
@@ -1775,12 +1774,14 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
         EXCEPTIONS
           OTHERS          = 1 ).
       IF sy-subrc = 0.
-        " SAVE hace COMMIT WORK: la factura ya está grabada
+        " SAVE no hace COMMIT por defecto (X_NO_COMMIT = X)
         lo_pdoc->save(
           EXCEPTIONS
             OTHERS = 1 ).
       ENDIF.
-      IF sy-subrc <> 0.
+      IF sy-subrc = 0.
+        COMMIT WORK AND WAIT.
+      ELSE.
         rv_aviso = |PDoc { mv_proc_ref } no actualizado: { mensaje_sistema( ) }|.
       ENDIF.
     ENDIF.
