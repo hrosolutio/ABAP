@@ -110,7 +110,8 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
 
       ty_t_conceptos TYPE STANDARD TABLE OF zfa_fraud_conc WITH DEFAULT KEY,
 
-      ty_t_erchz     TYPE STANDARD TABLE OF erchz WITH DEFAULT KEY.
+      ty_t_erchz     TYPE STANDARD TABLE OF erchz WITH DEFAULT KEY,
+      ty_t_mwskz     TYPE STANDARD TABLE OF mwskz WITH DEFAULT KEY.
 
     CONSTANTS:
       gc_ok                 TYPE char2 VALUE 'OK',
@@ -165,6 +166,8 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
       " TODO confirmar con Aleix el motivo (BERGRUND: 01 / 02)
       gc_abrvorg_manual     TYPE erch-abrvorg  VALUE '06',
       gc_hvorg_manual       TYPE erch-hvorg    VALUE '0300',
+      " Área de aplicación FI-CA de IS-U (co_applk_isu del R413)
+      gc_applk_isu          TYPE applk_kk      VALUE 'R',
       gc_belegart_manual    TYPE erch-belegart VALUE 'MN',
       gc_bergrund_manual    TYPE erch-bergrund VALUE '01',
       " Campos Z de la cabecera. La exit ZXBI1U01 (EXIT_SAPLEA01_001) los
@@ -202,6 +205,7 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
           mv_gpartner  TYPE erch-gpartner,
           " Marca de vulnerable en la cuenta contrato (FKKVKP-ZZVULNERABLE_CC)
           mv_vulnerable_cc TYPE fkkvkp-zzvulnerable_cc,
+          mv_asmeth    TYPE fkkvkp-asmeth,
           mv_portion   TYPE erch-portion,
           mv_ableinh   TYPE erch-ableinh,
           " Datos del contrato para las validaciones de integridad
@@ -256,8 +260,9 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
       IMPORTING iv_belzart      TYPE erchz-belzart
       RETURNING VALUE(rs_erchz) TYPE erchz.
 
-    METHODS indicador_iva
-      RETURNING VALUE(rv_mwskz) TYPE mwskz
+    METHODS indicadores_iva
+      IMPORTING it_lineas       TYPE ty_t_linea
+      RETURNING VALUE(rt_mwskz) TYPE ty_t_mwskz
       RAISING   zcx_fa_fraudes.
 
     METHODS lineas_simulacion
@@ -538,10 +543,10 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     mv_kofiz  = ms_ever-kofiz.
 
     " Interlocutor de la cuenta contrato (para la cabecera del cálculo)
-    SELECT SINGLE gpart, zzvulnerable_cc
+    SELECT SINGLE gpart, zzvulnerable_cc, asmeth
       FROM fkkvkp
       WHERE vkont = @mv_vkonto
-      INTO (@mv_gpartner, @mv_vulnerable_cc).
+      INTO (@mv_gpartner, @mv_vulnerable_cc, @mv_asmeth).
 
     " 1.4 Factura ATR de anomalía o fraude (según la división) y existente
     lv_tipo_ok = SWITCH #( mv_sparte
@@ -1687,20 +1692,143 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
   ENDMETHOD.
 
 
-  METHOD indicador_iva.
+  METHOD indicadores_iva.
 
-    " ERCHZ-MWSKZ va vacío (el indicador lo pone la facturación) y todas
-    " las líneas llevan el mismo IVA: se configura en STVARV
-    SELECT SINGLE low
-      FROM tvarvc
-      WHERE name = 'ZFA_FRAUDES_MWSKZ'
-        AND type = 'P'
-      INTO @rv_mwskz.
-    IF sy-subrc <> 0 OR rv_mwskz IS INITIAL.
-      RAISE EXCEPTION TYPE zcx_fa_fraudes
-        EXPORTING codigo = '2009'
-                  texto  = 'Falta el indicador de IVA en STVARV (ZFA_FRAUDES_MWSKZ)'.
+    " Réplica del evento R413 (ZFA_FM_ISU_SAMPLE_R413), que es quien fija
+    " el IVA al facturar. El cálculo manual va sin ZRECT_FORZADO, así que
+    " la fecha fiscal es la de contabilización: hoy.
+    " Fuera la validación V3 del R413 (cambio de IEE/IEH entre la fecha
+    " de operación y la fiscal): para nosotros son la misma.
+    DATA: lt_te011    TYPE STANDARD TABLE OF te011 WITH DEFAULT KEY,
+          lt_transt   TYPE STANDARD TABLE OF zfa_t_ek02transt WITH DEFAULT KEY,
+          ls_erchz    TYPE erchz,
+          ls_erchz_cnae TYPE erchz,
+          lv_ermwskz  TYPE erchz-ermwskz,
+          lv_mwskz    TYPE mwskz,
+          lv_mes_ant  TYPE datum,
+          lv_omie     TYPE epreih-preisbtr,
+          lv_natpers  TYPE but000-natpers,
+          lv_cnae     TYPE string,
+          " S/N como en el R413: potencia <= 10, OMIE > 45, persona física
+          lv_cond1    TYPE char1 VALUE 'S',
+          lv_cond2    TYPE char1 VALUE 'N',
+          lv_cond3    TYPE char1 VALUE 'S'.
+
+    DATA(lv_taxdate) = sy-datum.
+
+    SELECT *
+      FROM te011
+      WHERE ab  <= @lv_taxdate
+        AND bis >= @lv_taxdate
+      INTO TABLE @lt_te011.
+
+    SELECT *
+      FROM zfa_t_ek02transt
+      WHERE ab  <= @lv_taxdate
+        AND bis >= @lv_taxdate
+      INTO TABLE @lt_transt.
+
+    " Condiciones del transitorio (solo luz, igual que el R413)
+    IF lt_transt IS NOT INITIAL AND mv_sparte = gc_sparte_luz.
+
+      LOOP AT it_lineas INTO DATA(ls_linea) WHERE cantidad > 10.
+        CHECK ls_linea-belzart(5) = 'EPOTP'.
+        READ TABLE mt_erchz_original INTO ls_erchz WITH KEY belzeile = ls_linea-belzeile.
+        IF sy-subrc = 0 AND ls_erchz-buchrel = abap_true.
+          lv_cond1 = 'N'.
+          EXIT.
+        ENDIF.
+      ENDLOOP.
+
+      " OMIE del mes anterior al fin del consumo
+      lv_mes_ant = ms_entrada-fecha_hasta.
+      lv_mes_ant+6(2) = '01'.
+      lv_mes_ant = lv_mes_ant - 1.
+      SELECT SINGLE preisbtr
+        FROM epreih
+        WHERE preis    = 'E_OMIEMES'
+          AND abdatum  <= @lv_mes_ant
+          AND bisdatum >= @lv_mes_ant
+        INTO @lv_omie.
+      IF sy-subrc <> 0.
+        RAISE EXCEPTION TYPE zcx_fa_fraudes
+          EXPORTING codigo = '2009'
+                    texto  = |No hay precio E_OMIEMES a { lv_mes_ant DATE = USER }|.
+      ENDIF.
+      IF lv_omie > 45.
+        lv_cond2 = 'S'.
+      ENDIF.
+
+      " Persona física: por el CNAE si el cálculo lo trae; si no, por BP
+      SELECT SINGLE natpers
+        FROM but000
+        WHERE partner = @mv_gpartner
+        INTO @lv_natpers.
+      lv_cond3 = COND #( WHEN lv_natpers = abap_true THEN 'S' ELSE 'N' ).
+      LOOP AT it_lineas INTO ls_linea WHERE belzart = 'ECNAE' OR belzart = 'GCNAE'.
+        READ TABLE mt_erchz_original INTO ls_erchz_cnae WITH KEY belzeile = ls_linea-belzeile.
+        IF sy-subrc = 0 AND ls_erchz_cnae-ztext IS NOT INITIAL.
+          lv_cnae = condense( CONV string( ls_erchz_cnae-ztext ) ).
+          lv_cond3 = COND #( WHEN lv_cnae = '9810' OR lv_cnae = '9820' THEN 'S' ELSE 'N' ).
+        ENDIF.
+        EXIT.
+      ENDLOOP.
     ENDIF.
+
+    LOOP AT it_lineas INTO ls_linea.
+      CLEAR: ls_erchz, lv_mwskz.
+      IF ls_linea-belzeile IS NOT INITIAL.
+        READ TABLE mt_erchz_original INTO ls_erchz WITH KEY belzeile = ls_linea-belzeile.
+      ELSE.
+        ls_erchz = plantilla_linea( ls_linea-belzart ).
+      ENDIF.
+
+      " Las líneas que no se contabilizan no llevan IVA
+      IF ls_erchz-buchrel = abap_true.
+        CALL FUNCTION 'ISU_TAX_DETERMINE_CODE_SELECT'
+          EXPORTING
+            x_applk      = gc_applk_isu
+            x_bukrs      = mv_bukrs
+            x_sparte     = mv_sparte
+            x_kofiz      = mv_kofiz
+            x_hvorg      = gc_hvorg_manual
+            x_tvorg      = ls_erchz-tvorg
+            x_asmeth     = mv_asmeth
+          IMPORTING
+            y_ermwskz    = lv_ermwskz
+          EXCEPTIONS
+            not_found    = 1
+            system_error = 2
+            OTHERS       = 3.
+        IF sy-subrc <> 0.
+          RAISE EXCEPTION TYPE zcx_fa_fraudes
+            EXPORTING codigo = '2009'
+                      texto  = |Sin determinación de IVA para { ls_linea-belzart } (operación { ls_erchz-tvorg })|.
+        ENDIF.
+
+        READ TABLE lt_te011 INTO DATA(ls_te011) WITH KEY ermwskz = lv_ermwskz.
+        IF sy-subrc <> 0.
+          RAISE EXCEPTION TYPE zcx_fa_fraudes
+            EXPORTING codigo = '2009'
+                      texto  = |Sin entrada en TE011 para { lv_ermwskz } a { lv_taxdate DATE = USER }|.
+        ENDIF.
+        lv_mwskz = ls_te011-mwskz.
+
+        " IVA reducido del transitorio si se cumplen sus condiciones
+        LOOP AT lt_transt INTO DATA(ls_transt)
+          WHERE tvorg   = ls_erchz-tvorg
+            AND ermwskz = lv_ermwskz.
+          IF NOT ( ( ls_transt-condicion1 = abap_true AND lv_cond1 = 'N' ) OR
+                   ( ls_transt-condicion2 = abap_true AND lv_cond2 = 'N' ) OR
+                   ( ls_transt-condicion3 = abap_true AND lv_cond3 = 'N' ) ).
+            lv_mwskz = ls_transt-mwskz.
+          ENDIF.
+          EXIT.
+        ENDLOOP.
+      ENDIF.
+
+      APPEND lv_mwskz TO rt_mwskz.
+    ENDLOOP.
 
   ENDMETHOD.
 
@@ -1721,9 +1849,11 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
 
     FIELD-SYMBOLS <ls_base> TYPE ty_base_iva.
 
-    lv_mwskz = indicador_iva( ).
+    " Un indicador por línea, en el mismo orden
+    DATA(lt_mwskz) = indicadores_iva( it_lineas ).
 
     LOOP AT it_lineas INTO DATA(ls_linea).
+      lv_mwskz = lt_mwskz[ sy-tabix ].
 
       ls_salida = VALUE #( belzart  = ls_linea-belzart
                            tipo     = ls_linea-tipo

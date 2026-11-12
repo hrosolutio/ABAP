@@ -19,9 +19,20 @@ Los cálculos que se devuelven sin facturar (`IV_SOLO_CALCULO`) tienen que ir
 
 Prueba 21 (11/11): `ERCHZ-MWSKZ` y `ERCHZ-TWAERS` vienen vacíos en BD (el
 indicador lo pone la facturación). Ahora:
-- `MWSKZ`: parámetro STVARV `ZFA_FRAUDES_MWSKZ` (todas las líneas llevan el
-  mismo IVA). Sin él → `2009`. Descartado leerlo de las facturas:
-  `DBERDZ` no tiene índice por `BACKDOCNO`.
+- `MWSKZ`: réplica del evento **R413** (`ZFA_FM_ISU_SAMPLE_R413`, FQEVENTS),
+  que es quien fija el IVA al facturar:
+  1. Solo líneas con `BUCHREL = X`.
+  2. `ISU_TAX_DETERMINE_CODE_SELECT` (APPLK `R`, sociedad, división,
+     `KOFIZ`, `HVORG 0300`, `TVORG` de la línea, `FKKVKP-ASMETH`) → `ERMWSKZ`.
+  3. `TE011` vigente a la fecha fiscal → `MWSKZ`. Fecha fiscal = hoy
+     (contabilización), porque el cálculo manual va sin `ZRECT_FORZADO`.
+  4. Transitorio `ZFA_T_EK02TRANST` (`TVORG` + `ERMWSKZ` + fechas) si se
+     cumplen sus condiciones: potencia ≤ 10 (`EPOTP*`), `E_OMIEMES` del mes
+     anterior > 45, persona física (CNAE 9810/9820 o `BUT000-NATPERS`).
+  - No se llama al FM del evento: escribe en `ZFA_T_LOG_INDIMP` y necesita
+    tablas que rellena la facturación.
+  - Descartado: `ERCHZ-MWSKZ`/`ERMWSKZ` (vacíos), `DBERDZ` (vacía en QA),
+    STVARV fijo (el IVA cambia por factura).
 - `WAERS`: `T001-WAERS` de la sociedad del contrato.
 
 ## Respuestas de Aleix (29/10/2026)

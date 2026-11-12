@@ -265,7 +265,6 @@ número de documento cambia entre QA y producción.
 |---|---|---|
 | `ZFA_FRAUDES_PLANTILLA_EREPOS` | `510000001125` | Reposición luz (factura a 0) |
 | `ZFA_FRAUDES_PLANTILLA_GREPOS` | `510000000408` | Reposición gas (factura a 0) |
-| `ZFA_FRAUDES_MWSKZ` | (por definir) | Indicador de IVA de las líneas en solo cálculo (`IV_SOLO_CALCULO`) |
 | `ZFA_FRAUDES_PLANTILLA_PGINTR` | ? | Concepto ATR 1923 (gas) |
 | `ZFA_FRAUDES_PLANTILLA_PGIRAP` | ? | Concepto ATR 1924 (gas) |
 
