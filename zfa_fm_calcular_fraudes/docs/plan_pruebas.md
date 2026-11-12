@@ -38,12 +38,12 @@ Parámetros comunes, salvo que se indique otra cosa:
 | 20 | Luz fraude | tipo `11` | `0000`, `FACTURACION TOTAL`, `ERCH-ORIGDOC = 40`, `ZSERIE_NOD = FE` | ✓ |
 | 21 | Solo cálculo | tipo `11`, `IV_SOLO_CALCULO = X` | `0010`, `ET_LINEAS` con el detalle y una línea `IV` (21 %), `ET_FACTURAS-IMPORTE` = el total de la prueba 20 (con IVA), sin factura; nada nuevo en la EA22 | ✓ |
 | 22 | Luz anomalía | tipo `06` | `0000`, `ORIGDOC = 41` | |
-| 23 | Tipo de otra división | luz con tipo `FR` | `1004`, sin crear nada | |
-| 24 | Factura ATR inexistente | `IV_NUM_FACTURA_ATR = PRUEBA` | `1004` no existe | |
-| 24b | Factura ATR de otro CUPS | Una factura real de otro CUPS | `1004` no es del CUPS | |
+| 23 | Tipo de otra división | luz con tipo `FR` | `1004`, sin crear nada | ✓ |
+| 24 | Factura ATR inexistente | `IV_NUM_FACTURA_ATR = PRUEBA` | `1004` no existe | ✓ |
+| 24b | Factura ATR de otro CUPS | Una factura real de otro CUPS | `1004` no es del CUPS | ✓ |
 | 25 | Gas fraude | gas, tipo `FR` | `0000`, `ORIGDOC = 40` | |
 | 26 | Solo cálculo a 0 | `IV_FORZADO = X`, `IV_SOLO_CALCULO = X` | `0010`, líneas `EREPOS` + `EPROD` a 0 | |
-| 27 | Expediente repetido | repetir el de la prueba 20 | `1006` | |
+| 27 | Expediente repetido | repetir el de la prueba 20 | `1006` | ✓ |
 
 ## Descartes (con `IV_SOLO_CALCULO = X` para no grabar nada)
 
