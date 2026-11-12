@@ -7,7 +7,7 @@
 | `FACTURACION PARCIAL` | No se automatiza: solo totales | No se devuelve |
 | `DESCARTE - EMPLEADO` | `EANLH-TARIFTYP` `E_EMPLE` / `G_EMPLE` en las fechas | Descarte `0110` |
 | `DESCARTE - NO TITULAR` | Lo detecta la IA (interlocutor distinto) | Nada en SAP |
-| `DESCARTE - CADUCADO` | No sabe qué es | Pendiente de Eliza |
+| `DESCARTE - CADUCADO` | No sabe qué es; Eliza tampoco (se lo devolvió a Aleix) | Sin implementar. Al cerrar, proponer nosotros los modos y que validen |
 | Status del PDoc | Pasar a `01`. Hoy lo hace una query cambiando el status en `EIDESWTDOC` | Pendiente: cómo se llega de `PROC_REF` a `EIDESWTDOC` y con qué API (no `UPDATE` directo) |
 | Importe con IVA sin contabilizar | Cree que no se puede | Sí se puede: réplica del R413; PRUEBA021 = PRUEBA020 (14,62 €) |
 
