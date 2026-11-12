@@ -197,7 +197,11 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
       gc_modo_vulnerable    TYPE char30 VALUE 'DESCARTE - VULNERABILIDAD',
       gc_modo_reposicion    TYPE char30 VALUE 'DESCARTE - REPOSICION',
       gc_modo_tarifa_plana  TYPE char30 VALUE 'DESCARTE - ANOMALIA TP',
-      gc_modo_empleado      TYPE char30 VALUE 'DESCARTE - EMPLEADO'.
+      gc_modo_empleado      TYPE char30 VALUE 'DESCARTE - EMPLEADO',
+      " Status del PDoc (EIDESWTDOC): las facturas ATR de fraude se quedan
+      " en 02 hasta que se facturan
+      gc_pdoc_error         TYPE eideswtstat VALUE '02',
+      gc_pdoc_ok            TYPE eideswtstat VALUE '01'.
 
     DATA: ms_entrada   TYPE ty_entrada,
           mv_anlage    TYPE anlage,
@@ -262,6 +266,12 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
     METHODS plantilla_linea
       IMPORTING iv_belzart      TYPE erchz-belzart
       RETURNING VALUE(rs_erchz) TYPE erchz.
+
+    METHODS actualizar_pdoc
+      RETURNING VALUE(rv_aviso) TYPE string.
+
+    METHODS mensaje_sistema
+      RETURNING VALUE(rv_mensaje) TYPE string.
 
     METHODS indicadores_iva
       IMPORTING it_lineas       TYPE ty_t_linea
@@ -381,7 +391,7 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     " exención (0102), bloqueos (0105) y sin cálculo original
     " (0108/0109); hoy van vacíos
     rs_resultado-modo = SWITCH #( rs_resultado-codigo
-                          WHEN '0000' OR '0001' OR '0003' OR '0010' THEN gc_modo_total
+                          WHEN '0000' OR '0001' OR '0003' OR '0004' OR '0010' THEN gc_modo_total
                           WHEN '0103' THEN gc_modo_olvido
                           WHEN '0104' THEN gc_modo_vulnerable
                           WHEN '0106' THEN gc_modo_reposicion
@@ -465,6 +475,16 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     ENDIF.
     rs_resultado-facturas = VALUE #( ( ms_factura ) ).
 
+    " Factura emitida: el PDoc de la factura ATR pasa a OK. Si no se puede,
+    " la factura se queda (ya está contabilizada) y se avisa con 0004
+    DATA(lv_aviso) = actualizar_pdoc( ).
+    IF lv_aviso IS NOT INITIAL.
+      IF rs_resultado-codigo <> '0003'.
+        rs_resultado-codigo = '0004'.
+      ENDIF.
+      rs_resultado-descripcion = |{ rs_resultado-descripcion }. { lv_aviso }|.
+    ENDIF.
+
   ENDMETHOD.
 
 
@@ -487,7 +507,7 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     SELECT SINGLE codigo
       FROM zfa_fraud_log
       WHERE id_expediente = @ms_entrada-id_expediente
-        AND codigo        IN ( '0000', '0001', '0002', '0003' )
+        AND codigo        IN ( '0000', '0001', '0002', '0003', '0004' )
       INTO @lv_codigo.
     IF sy-subrc = 0.
       RAISE EXCEPTION TYPE zcx_fa_fraudes
@@ -1706,6 +1726,79 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     RAISE EXCEPTION TYPE zcx_fa_fraudes
       EXPORTING codigo = '2008'
                 texto  = |{ iv_motivo }. No se ha podido borrar el cálculo { lv_calculo }: borrarlo en EA16|.
+
+  ENDMETHOD.
+
+
+  METHOD actualizar_pdoc.
+
+    DATA: lo_pdoc   TYPE REF TO cl_isu_ide_switchdoc,
+          lv_status TYPE eideswtstat.
+
+    " PROC_REF de /IDXGC/PRST_INHD = EIDESWTDOC-SWITCHNUM
+    " TODO confirmar que SELECT tiene X_WMODE (SET_STATUS exige modo
+    " modificar) y que con él bloquea el documento
+    cl_isu_ide_switchdoc=>select(
+      EXPORTING
+        x_switchnum     = mv_proc_ref
+        x_wmode         = cl_isu_wmode=>co_change
+      RECEIVING
+        y_switchdoc     = lo_pdoc
+      EXCEPTIONS
+        not_found       = 1
+        parameter_error = 2
+        not_unique      = 3
+        general_fault   = 4
+        foreign_lock    = 5
+        not_authorized  = 6
+        OTHERS          = 7 ).
+    IF sy-subrc <> 0.
+      rv_aviso = |PDoc { mv_proc_ref } no actualizado: { mensaje_sistema( ) }|.
+      RETURN.
+    ENDIF.
+
+    lo_pdoc->get_status(
+      IMPORTING
+        y_status = lv_status
+      EXCEPTIONS
+        OTHERS   = 1 ).
+    IF sy-subrc <> 0.
+      rv_aviso = |PDoc { mv_proc_ref } no actualizado: { mensaje_sistema( ) }|.
+    ELSEIF lv_status = gc_pdoc_ok.
+      " Ya estaba bien: nada que hacer
+    ELSEIF lv_status <> gc_pdoc_error.
+      rv_aviso = |PDoc { mv_proc_ref } en status { lv_status }: no se cambia|.
+    ELSE.
+      lo_pdoc->set_status(
+        EXPORTING
+          x_status        = gc_pdoc_ok
+        EXCEPTIONS
+          OTHERS          = 1 ).
+      IF sy-subrc = 0.
+        " SAVE hace COMMIT WORK: la factura ya está grabada
+        lo_pdoc->save(
+          EXCEPTIONS
+            OTHERS = 1 ).
+      ENDIF.
+      IF sy-subrc <> 0.
+        rv_aviso = |PDoc { mv_proc_ref } no actualizado: { mensaje_sistema( ) }|.
+      ENDIF.
+    ENDIF.
+
+    lo_pdoc->close( ).
+
+  ENDMETHOD.
+
+
+  METHOD mensaje_sistema.
+
+    IF sy-msgid IS INITIAL.
+      rv_mensaje = |error { sy-subrc }|.
+      RETURN.
+    ENDIF.
+    MESSAGE ID sy-msgid TYPE 'E' NUMBER sy-msgno
+      WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4 INTO rv_mensaje.
+    rv_mensaje = |{ sy-msgid } { sy-msgno } { rv_mensaje }|.
 
   ENDMETHOD.
 

@@ -43,6 +43,7 @@ Parámetros comunes, salvo que se indique otra cosa:
 | 24b | Factura ATR de otro CUPS | Una factura real de otro CUPS | `1004` no es del CUPS | ✓ |
 | 25 | Gas fraude | gas, tipo `FR` | `0000`, `ORIGDOC = 40` | |
 | 26 | Solo cálculo a 0 | `IV_FORZADO = X`, `IV_SOLO_CALCULO = X` | `0010`, líneas `EREPOS` + `EPROD` a 0 | |
+| 28 | PDoc a `01` | Factura ATR de luz con `MOTIVOFACTURACION = 11` (PDoc en `02` en `EIDESWTDOC`), facturando | `0000` y `EIDESWTDOC-STATUS = 01`. Con las facturas de consumo (PDoc ya en `01`) no cambia nada | |
 | 27 | Expediente repetido | repetir el de la prueba 20 | `1006` | ✓ |
 
 ## Descartes (con `IV_SOLO_CALCULO = X` para no grabar nada)

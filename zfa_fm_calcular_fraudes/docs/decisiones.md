@@ -8,7 +8,7 @@
 | `DESCARTE - EMPLEADO` | `EANLH-TARIFTYP` `E_EMPLE` / `G_EMPLE` en las fechas | Descarte `0110` |
 | `DESCARTE - NO TITULAR` | Lo detecta la IA (interlocutor distinto) | Nada en SAP |
 | `DESCARTE - CADUCADO` | No sabe qué es; Eliza tampoco (se lo devolvió a Aleix) | Sin implementar. Al cerrar, proponer nosotros los modos y que validen |
-| Status del PDoc | Pasar a `01`. Hoy lo hace una query cambiando el status en `EIDESWTDOC` | Pendiente: cómo se llega de `PROC_REF` a `EIDESWTDOC` y con qué API (no `UPDATE` directo) |
+| Status del PDoc | Pasar a `01`. Hoy lo hace una query cambiando el status en `EIDESWTDOC` | `actualizar_pdoc`: `PROC_REF` = `EIDESWTDOC-SWITCHNUM`; las ATR de fraude están en `02` (No/Error). Con `CL_ISU_IDE_SWITCHDOC` (`SELECT` → `SET_STATUS` → `SAVE` → `CLOSE`) solo si está en `02` y solo al emitir factura (`0000`/`0001`/`0003`). Si falla, `0004` (o `0003` con aviso). Pendiente que Aleix confirme si también en descartes |
 | Importe con IVA sin contabilizar | Cree que no se puede | Sí se puede: réplica del R413; PRUEBA021 = PRUEBA020 (14,62 €) |
 
 ## Respuestas de Aleix (09/11/2026)
