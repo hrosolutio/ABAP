@@ -159,6 +159,8 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
       " cálculos reales). TODO confirmar con Aleix que no hay más
       gc_tariftyp_plana_luz  TYPE eanlh-tariftyp VALUE 'E_PLANA',
       gc_tariftyp_plana_gas  TYPE eanlh-tariftyp VALUE 'G_PLANA',
+      gc_tariftyp_emple_luz  TYPE eanlh-tariftyp VALUE 'E_EMPLE',
+      gc_tariftyp_emple_gas  TYPE eanlh-tariftyp VALUE 'G_EMPLE',
 
       " Cabecera de los cálculos manuales (vistos en los ERCH con
       " MANBILLREL = X de calidad): tipo de cálculo 06, operación principal
@@ -194,7 +196,8 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
       gc_modo_olvido        TYPE char30 VALUE 'DESCARTE - DERECHO AL OLVIDO',
       gc_modo_vulnerable    TYPE char30 VALUE 'DESCARTE - VULNERABILIDAD',
       gc_modo_reposicion    TYPE char30 VALUE 'DESCARTE - REPOSICION',
-      gc_modo_tarifa_plana  TYPE char30 VALUE 'DESCARTE - ANOMALIA TP'.
+      gc_modo_tarifa_plana  TYPE char30 VALUE 'DESCARTE - ANOMALIA TP',
+      gc_modo_empleado      TYPE char30 VALUE 'DESCARTE - EMPLEADO'.
 
     DATA: ms_entrada   TYPE ty_entrada,
           mv_anlage    TYPE anlage,
@@ -373,16 +376,17 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
                                      ELSE gc_ko ).
 
     " Modo de facturación según el resultado
-    " TODO con Eliza: qué es FACTURACION PARCIAL (¿la forzada a 0?),
-    " de dónde salen EMPLEADO, CADUCADO y NO TITULAR, y qué modo llevan
-    " migrado (0101), exención (0102), bloqueos (0105) y sin cálculo
-    " original (0108/0109); hoy van vacíos
+    " PARCIAL no se automatiza y NO TITULAR lo detecta la IA (Aleix 12/11).
+    " TODO con Eliza: qué es CADUCADO y qué modo llevan migrado (0101),
+    " exención (0102), bloqueos (0105) y sin cálculo original
+    " (0108/0109); hoy van vacíos
     rs_resultado-modo = SWITCH #( rs_resultado-codigo
                           WHEN '0000' OR '0001' OR '0003' OR '0010' THEN gc_modo_total
                           WHEN '0103' THEN gc_modo_olvido
                           WHEN '0104' THEN gc_modo_vulnerable
                           WHEN '0106' THEN gc_modo_reposicion
-                          WHEN '0107' THEN gc_modo_tarifa_plana ).
+                          WHEN '0107' THEN gc_modo_tarifa_plana
+                          WHEN '0110' THEN gc_modo_empleado ).
 
     " Graba el log y hace el COMMIT de todo lo anterior
     registrar_log( rs_resultado ).
@@ -752,6 +756,20 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
       RAISE EXCEPTION TYPE zcx_fa_fraudes
         EXPORTING codigo = '0107'
                   texto  = 'Descarte: cliente con Tarifa Plana en el periodo'.
+    ENDIF.
+
+    " 2.8 Empleado en el periodo: tipo de tarifa de la instalación
+    SELECT SINGLE anlage
+      FROM eanlh
+      WHERE anlage   = @mv_anlage
+        AND tariftyp IN ( @gc_tariftyp_emple_luz, @gc_tariftyp_emple_gas )
+        AND ab      <= @ms_entrada-fecha_hasta
+        AND bis     >= @ms_entrada-fecha_desde
+      INTO @lv_anlage.
+    IF sy-subrc = 0.
+      RAISE EXCEPTION TYPE zcx_fa_fraudes
+        EXPORTING codigo = '0110'
+                  texto  = 'Descarte: contrato de empleado en el periodo'.
     ENDIF.
 
   ENDMETHOD.

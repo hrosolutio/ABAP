@@ -61,6 +61,7 @@ periodo del expediente.
 | 35b | Reposición | `ETTIFN` con operando `E_REPOSICI`/`G_REPOSICI` en el periodo | `0106`, `DESCARTE - REPOSICION` |
 | 36 | Tarifa Plana | `EANLH-TARIFTYP` `E_PLANA`/`G_PLANA` en el periodo | `0107`, `DESCARTE - ANOMALIA TP` |
 | 37 | Sin cálculo original | Periodo sin cálculo del contrato | `0108` |
+| 38 | Empleado | `EANLH-TARIFTYP` `E_EMPLE`/`G_EMPLE` en el periodo | `0110`, `DESCARTE - EMPLEADO` |
 
 ## Sin probar por falta de datos o de definición
 
