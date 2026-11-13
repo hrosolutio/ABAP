@@ -32,6 +32,7 @@ Parámetros comunes, salvo que se indique otra cosa:
 | PRUEBA016 | Gas normal | `0000` – 610000008719 / FE26390000002328, 10,82 € |
 | PRUEBA020 | Luz fraude (tipo `11`) con validaciones nuevas | `0000` – 610000008981 / FE26390000002524 (cálculo 550000002628), 14,62 € |
 | PRUEBA022 | Luz anomalía (tipo `06`) | `0000` – 610000008997 / FE26390000002537 (cálculo 550000002629), 14,62 € |
+| PRUEBA025 (solo cálculo) | Gas fraude (`C388643557`) | `0010` – TV 8,71 + IEH 0,23 = 8,94 + IVA `R1` 21 % 1,88 = 10,82 € (igual que PRUEBA016) |
 | PRUEBA021 | Solo cálculo luz (`J424010929097`) | `0010` – sin factura; neto 12,08 + IVA `R1` 21 % 2,54 = 14,62 € (igual que PRUEBA013) |
 
 ## Pendiente (código desde el 29/10)
