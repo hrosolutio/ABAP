@@ -33,6 +33,7 @@ Parámetros comunes, salvo que se indique otra cosa:
 | PRUEBA020 | Luz fraude (tipo `11`) con validaciones nuevas | `0000` – 610000008981 / FE26390000002524 (cálculo 550000002628), 14,62 € |
 | PRUEBA022 | Luz anomalía (tipo `06`) | `0000` – 610000008997 / FE26390000002537 (cálculo 550000002629), 14,62 € |
 | PRUEBA025 (solo cálculo) | Gas fraude (`C388643557`) | `0010` – TV 8,71 + IEH 0,23 = 8,94 + IVA `R1` 21 % 1,88 = 10,82 € (igual que PRUEBA016) |
+| PRUEBA025 | Gas fraude facturando | `0000` – 610000008999 / FE26390000002538 (cálculo 550000002630), 10,82 € |
 | PRUEBA021 | Solo cálculo luz (`J424010929097`) | `0010` – sin factura; neto 12,08 + IVA `R1` 21 % 2,54 = 14,62 € (igual que PRUEBA013) |
 
 ## Pendiente (código desde el 29/10)
@@ -45,7 +46,7 @@ Parámetros comunes, salvo que se indique otra cosa:
 | 23 | Tipo de otra división | luz con tipo `FR` | `1004`, sin crear nada | ✓ |
 | 24 | Factura ATR inexistente | `IV_NUM_FACTURA_ATR = PRUEBA` | `1004` no existe | ✓ |
 | 24b | Factura ATR de otro CUPS | Una factura real de otro CUPS | `1004` no es del CUPS | ✓ |
-| 25 | Gas fraude | gas, tipo `FR` | `0000`, `ORIGDOC = 40` | |
+| 25 | Gas fraude | gas, tipo `FR` | `0000`, `ORIGDOC = 40` | ✓ |
 | 26 | Solo cálculo a 0 | `IV_FORZADO = X`, `IV_SOLO_CALCULO = X` | `0010`, líneas `EREPOS` + `EPROD` a 0 | |
 | 28 | PDoc a `01` | Factura ATR de luz con `MOTIVOFACTURACION = 11` (PDoc en `02` en `EIDESWTDOC`), facturando | `0000` y `EIDESWTDOC-STATUS = 01`. Con las facturas de consumo (PDoc ya en `01`) no cambia nada | |
 | 27 | Expediente repetido | repetir el de la prueba 20 | `1006` | ✓ |
