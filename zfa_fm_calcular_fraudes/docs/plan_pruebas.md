@@ -29,6 +29,7 @@ Parámetros comunes, salvo que se indique otra cosa:
 | PRUEBA015 | Gas a 0 (`IV_FORZADO`) | `0001` – 610000008717 / FE26390000002327 |
 | PRUEBA016 | Gas normal | `0000` – 610000008719 / FE26390000002328, 10,82 € |
 | PRUEBA020 | Luz fraude (tipo `11`) con validaciones nuevas | `0000` – 610000008981 / FE26390000002524 (cálculo 550000002628), 14,62 € |
+| PRUEBA022 | Luz anomalía (tipo `06`) | `0000` – 610000008997 / FE26390000002537 (cálculo 550000002629), 14,62 € |
 | PRUEBA021 | Solo cálculo luz (`J424010929097`) | `0010` – sin factura; neto 12,08 + IVA `R1` 21 % 2,54 = 14,62 € (igual que PRUEBA013) |
 
 ## Pendiente (código desde el 29/10)
@@ -37,7 +38,7 @@ Parámetros comunes, salvo que se indique otra cosa:
 |---|---|---|---|---|
 | 20 | Luz fraude | tipo `11` | `0000`, `FACTURACION TOTAL`, `ERCH-ORIGDOC = 40`, `ZSERIE_NOD = FE` | ✓ |
 | 21 | Solo cálculo | tipo `11`, `IV_SOLO_CALCULO = X` | `0010`, `ET_LINEAS` con el detalle y una línea `IV` (21 %), `ET_FACTURAS-IMPORTE` = el total de la prueba 20 (con IVA), sin factura; nada nuevo en la EA22 | ✓ |
-| 22 | Luz anomalía | tipo `06` | `0000`, `ORIGDOC = 41` | |
+| 22 | Luz anomalía | tipo `06` | `0000`, `ORIGDOC = 41` | ✓ |
 | 23 | Tipo de otra división | luz con tipo `FR` | `1004`, sin crear nada | ✓ |
 | 24 | Factura ATR inexistente | `IV_NUM_FACTURA_ATR = PRUEBA` | `1004` no existe | ✓ |
 | 24b | Factura ATR de otro CUPS | Una factura real de otro CUPS | `1004` no es del CUPS | ✓ |
