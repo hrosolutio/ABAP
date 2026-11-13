@@ -5,7 +5,9 @@ Parámetros comunes, salvo que se indique otra cosa:
 | | Luz | Gas |
 |---|---|---|
 | Contrato | 3000275907 | 3000027670 |
-| CUPS | ES0022000005703570WV0F | (el del contrato, `EUIINSTLN` + `EUITRANS`) |
+| CUPS | ES0022000005703570WV0F | ES0217010117900163LD |
+| Instalación | 6100385724 | 6100010125 |
+| Factura ATR (`IV_NUM_FACTURA_ATR`) | J424010929097 | C388643557 |
 | Periodo | 13.08.2024 – 12.09.2024 | 21.06.2024 – 22.08.2024 |
 | Consumo total | 100 | 100 |
 | Cuenta contrato | 2000157509 | 2000016381 |
