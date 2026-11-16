@@ -905,11 +905,9 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
                   texto  = |Sin dirección para la instalación { mv_anlage }: { mensaje_sistema( ) }|.
     ENDIF.
 
-    " Provincia = región; si no viene, los dos primeros dígitos del CP
-    rv_provincia = ls_direccion-region.
-    IF rv_provincia IS INITIAL.
-      rv_provincia = ls_direccion-post_code1(2).
-    ENDIF.
+    " EADRDAT no trae la región: en España los dos primeros dígitos del
+    " código postal son el código oficial de la provincia
+    rv_provincia = ls_direccion-post_code1(2).
     IF rv_provincia IS INITIAL.
       RAISE EXCEPTION TYPE zcx_fa_fraudes
         EXPORTING codigo = '2010'

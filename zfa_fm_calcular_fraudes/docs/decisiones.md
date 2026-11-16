@@ -17,8 +17,8 @@ Sin respuesta a las dudas, lo suponemos nosotros (16/11):
   hoy − N meses → `0111` (caducado); solo `fecha_desde` → `0112` (parcial).
 - **Periodicidad**: máximo de meses refacturables hasta `fecha_hasta`; si
   el periodo es más largo → `0112`.
-- **Provincia**: `ISU_ADDRESS_PROVIDE` de la instalación, `REGION` o los dos
-  primeros dígitos del código postal. Sin provincia o sin fila → `2010`.
+- **Provincia**: `ISU_ADDRESS_PROVIDE` de la instalación → dos primeros
+  dígitos de `EADRDAT-POST_CODE1` (`EADRDAT` no tiene `REGION`). Sin provincia o sin fila → `2010`.
 - El prorrateo de la parte caducada va con los parciales (fase 2).
 
 ## Respuestas de Aleix (12/11/2026)
