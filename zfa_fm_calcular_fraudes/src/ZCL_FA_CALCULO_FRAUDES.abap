@@ -198,6 +198,11 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
       gc_modo_reposicion    TYPE char30 VALUE 'DESCARTE - REPOSICION',
       gc_modo_tarifa_plana  TYPE char30 VALUE 'DESCARTE - ANOMALIA TP',
       gc_modo_empleado      TYPE char30 VALUE 'DESCARTE - EMPLEADO',
+      gc_modo_caducado      TYPE char30 VALUE 'DESCARTE - CADUCADO',
+      " Dirección de la instalación en ISU_ADDRESS_PROVIDE
+      gc_direccion_instalacion TYPE eadr_type VALUE 'I',
+      " Meses de periodicidad sin límite en ZFA_T_CADUCIDAD
+      gc_sin_limite         TYPE i VALUE 9999,
       " Status del PDoc (EIDESWTDOC): las facturas ATR de fraude se quedan
       " en 02 hasta que se facturan
       gc_pdoc_error         TYPE eideswtstat VALUE '02',
@@ -245,6 +250,13 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
 
     METHODS validar_integridad
       RAISING zcx_fa_fraudes.
+
+    METHODS validar_caducidad
+      RAISING zcx_fa_fraudes.
+
+    METHODS provincia_suministro
+      RETURNING VALUE(rv_provincia) TYPE regio
+      RAISING   zcx_fa_fraudes.
 
     METHODS lineas_importe_cero
       RETURNING VALUE(rt_lineas) TYPE ty_t_linea
@@ -355,6 +367,11 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
                 iv_tipo          TYPE char2
       RETURNING VALUE(rt_lineas) TYPE ty_t_linea.
 
+    CLASS-METHODS sumar_meses
+      IMPORTING iv_fecha        TYPE dats
+                iv_meses        TYPE i
+      RETURNING VALUE(rv_fecha) TYPE dats.
+
     CLASS-METHODS sumar_importes
       IMPORTING it_lineas         TYPE ty_t_linea
       RETURNING VALUE(rv_importe) TYPE ty_importe.
@@ -396,7 +413,8 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
                           WHEN '0104' THEN gc_modo_vulnerable
                           WHEN '0106' THEN gc_modo_reposicion
                           WHEN '0107' THEN gc_modo_tarifa_plana
-                          WHEN '0110' THEN gc_modo_empleado ).
+                          WHEN '0110' THEN gc_modo_empleado
+                          WHEN '0111' THEN gc_modo_caducado ).
 
     " Graba el log y hace el COMMIT de todo lo anterior
     registrar_log( rs_resultado ).
@@ -790,6 +808,139 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
       RAISE EXCEPTION TYPE zcx_fa_fraudes
         EXPORTING codigo = '0110'
                   texto  = 'Descarte: contrato de empleado en el periodo'.
+    ENDIF.
+
+    " 2.9 Caducidad por provincia, sector y tipo (David 16/11)
+    validar_caducidad( ).
+
+  ENDMETHOD.
+
+
+  METHOD validar_caducidad.
+
+    " Criterios supuestos por nosotros a falta de respuesta (16/11):
+    " - Antigüedad: meses hacia atrás desde hoy. Fuera todo el periodo:
+    "   caducado (0111). Fuera solo una parte: parcial (0112).
+    " - Periodicidad: máximo de meses refacturables hasta fecha_hasta. Si
+    "   el periodo es más largo: parcial (0112).
+    " Los parciales (prorrateo y parte a 0) van en la fase 2.
+    DATA: lv_antiguedad  TYPE i,
+          lv_periodicidad TYPE i.
+
+    DATA(lv_provincia) = provincia_suministro( ).
+
+    SELECT SINGLE *
+      FROM zfa_t_caducidad
+      WHERE provincia = @lv_provincia
+      INTO @DATA(ls_caducidad).
+    IF sy-subrc <> 0.
+      RAISE EXCEPTION TYPE zcx_fa_fraudes
+        EXPORTING codigo = '2010'
+                  texto  = |Provincia { lv_provincia } sin parametrizar en ZFA_T_CADUCIDAD|.
+    ENDIF.
+
+    DATA(lv_fraude) = xsdbool( ms_entrada-tipo_factura_atr = gc_tipo_atr_fraude_luz OR
+                               ms_entrada-tipo_factura_atr = gc_tipo_atr_fraude_gas ).
+    IF mv_sparte = gc_sparte_luz.
+      lv_antiguedad   = COND #( WHEN lv_fraude = abap_true THEN ls_caducidad-ant_fr_elec
+                                ELSE ls_caducidad-ant_an_elec ).
+      lv_periodicidad = COND #( WHEN lv_fraude = abap_true THEN ls_caducidad-per_fr_elec
+                                ELSE ls_caducidad-per_an_elec ).
+    ELSE.
+      lv_antiguedad   = COND #( WHEN lv_fraude = abap_true THEN ls_caducidad-ant_fr_gas
+                                ELSE ls_caducidad-ant_an_gas ).
+      lv_periodicidad = COND #( WHEN lv_fraude = abap_true THEN ls_caducidad-per_fr_gas
+                                ELSE ls_caducidad-per_an_gas ).
+    ENDIF.
+
+    IF lv_antiguedad < gc_sin_limite.
+      DATA(lv_limite) = sumar_meses( iv_fecha = sy-datum
+                                     iv_meses = 0 - lv_antiguedad ).
+      IF ms_entrada-fecha_hasta < lv_limite.
+        RAISE EXCEPTION TYPE zcx_fa_fraudes
+          EXPORTING codigo = '0111'
+                    texto  = |Descarte: periodo caducado (más de { lv_antiguedad } meses, provincia { lv_provincia })|.
+      ENDIF.
+      IF ms_entrada-fecha_desde < lv_limite.
+        RAISE EXCEPTION TYPE zcx_fa_fraudes
+          EXPORTING codigo = '0112'
+                    texto  = |Descarte: periodo caducado antes del { lv_limite DATE = USER } (parcial, provincia { lv_provincia })|.
+      ENDIF.
+    ENDIF.
+
+    IF lv_periodicidad < gc_sin_limite.
+      " Primer día que se puede facturar: N meses hasta fecha_hasta
+      lv_limite = sumar_meses( iv_fecha = ms_entrada-fecha_hasta
+                               iv_meses = 0 - lv_periodicidad ) + 1.
+      IF ms_entrada-fecha_desde < lv_limite.
+        RAISE EXCEPTION TYPE zcx_fa_fraudes
+          EXPORTING codigo = '0112'
+                    texto  = |Descarte: el periodo supera { lv_periodicidad } meses (se podría facturar desde el { lv_limite DATE = USER })|.
+      ENDIF.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD provincia_suministro.
+
+    DATA ls_direccion TYPE eadrdat.
+
+    CALL FUNCTION 'ISU_ADDRESS_PROVIDE'
+      EXPORTING
+        x_address_type             = gc_direccion_instalacion
+        x_anlage                   = mv_anlage
+      IMPORTING
+        y_eadrdat                  = ls_direccion
+      EXCEPTIONS
+        not_found                  = 1
+        parameter_error            = 2
+        object_not_given           = 3
+        address_inconsistency      = 4
+        installation_inconsistency = 5
+        OTHERS                     = 6.
+    IF sy-subrc <> 0.
+      RAISE EXCEPTION TYPE zcx_fa_fraudes
+        EXPORTING codigo = '2010'
+                  texto  = |Sin dirección para la instalación { mv_anlage }: { mensaje_sistema( ) }|.
+    ENDIF.
+
+    " Provincia = región; si no viene, los dos primeros dígitos del CP
+    rv_provincia = ls_direccion-region.
+    IF rv_provincia IS INITIAL.
+      rv_provincia = ls_direccion-post_code1(2).
+    ENDIF.
+    IF rv_provincia IS INITIAL.
+      RAISE EXCEPTION TYPE zcx_fa_fraudes
+        EXPORTING codigo = '2010'
+                  texto  = |Sin provincia en la dirección de la instalación { mv_anlage }|.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD sumar_meses.
+
+    " Mismo día N meses después (o antes); si ese mes es más corto, su
+    " último día
+    DATA: lv_meses TYPE i,
+          lv_dia   TYPE i,
+          lv_ultimo TYPE dats.
+
+    lv_meses = iv_fecha(4) * 12 + iv_fecha+4(2) - 1 + iv_meses.
+    lv_dia   = iv_fecha+6(2).
+
+    " Último día del mes destino: día 1 del siguiente menos uno
+    lv_ultimo = |{ ( lv_meses + 1 ) DIV 12 WIDTH = 4 ALIGN = RIGHT PAD = '0' }| &&
+                |{ ( lv_meses + 1 ) MOD 12 + 1 WIDTH = 2 ALIGN = RIGHT PAD = '0' }01|.
+    lv_ultimo = lv_ultimo - 1.
+
+    rv_fecha = |{ lv_meses DIV 12 WIDTH = 4 ALIGN = RIGHT PAD = '0' }| &&
+               |{ lv_meses MOD 12 + 1 WIDTH = 2 ALIGN = RIGHT PAD = '0' }01|.
+    IF lv_dia > lv_ultimo+6(2).
+      rv_fecha = lv_ultimo.
+    ELSE.
+      rv_fecha+6(2) = iv_fecha+6(2).
     ENDIF.
 
   ENDMETHOD.

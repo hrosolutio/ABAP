@@ -8,7 +8,7 @@ cómo están hoy en la RFC.
 | Casuística | Pide David | Hoy en la RFC | Fase |
 |---|---|---|---|
 | Vulnerable / esencial | Facturar a 0 | Detecta y devuelve `0104` sin facturar; la IA puede relanzar con `IV_FORZADO` → factura a 0 | 1 |
-| Caducado | Facturar a 0 (forzado) | Criterio sin definir: la IA decide y manda `IV_FORZADO` | 1 (con forzado) |
+| Caducado | Facturar a 0 (forzado) | `0111` por `ZFA_T_CADUCIDAD` (provincia, sector, tipo); la IA relanza con `IV_FORZADO`. Parcial → `0112` | 1 (total) / 2 (parcial) |
 | Empleado | Facturar a 0 | Detecta y devuelve `0110`; ídem con `IV_FORZADO` | 1 |
 | Reposiciones | Facturar a 0 | Detecta y devuelve `0106`; ídem con `IV_FORZADO` | 1 |
 | Fuera de vigencia de contrato | No se puede facturar | `1003` | 1 |

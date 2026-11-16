@@ -23,6 +23,8 @@ CLASS ltc_calculo DEFINITION FINAL
     METHODS iee_factor_derivado      FOR TESTING RAISING cx_static_check.
     METHODS descuento_proporcional   FOR TESTING RAISING cx_static_check.
     METHODS potencia_mayor_por_kw    FOR TESTING RAISING cx_static_check.
+    METHODS meses_mismo_dia          FOR TESTING RAISING cx_static_check.
+    METHODS meses_fin_de_mes         FOR TESTING RAISING cx_static_check.
 
 ENDCLASS.
 
@@ -174,6 +176,33 @@ CLASS ltc_calculo IMPLEMENTATION.
     cl_abap_unit_assert=>assert_equals( act = lt_lineas[ 1 ]-belzart  exp = 'POT02' ).
     cl_abap_unit_assert=>assert_equals( act = lt_lineas[ 1 ]-cantidad exp = '5.750' ).
     cl_abap_unit_assert=>assert_equals( act = lt_lineas[ 1 ]-importe  exp = '0.00' ).
+
+  ENDMETHOD.
+
+  METHOD meses_mismo_dia.
+
+    cl_abap_unit_assert=>assert_equals(
+      act = zcl_fa_calculo_fraudes=>sumar_meses( iv_fecha = '20261116' iv_meses = -60 )
+      exp = '20211116' ).
+    cl_abap_unit_assert=>assert_equals(
+      act = zcl_fa_calculo_fraudes=>sumar_meses( iv_fecha = '20240912' iv_meses = -12 )
+      exp = '20230912' ).
+    cl_abap_unit_assert=>assert_equals(
+      act = zcl_fa_calculo_fraudes=>sumar_meses( iv_fecha = '20241115' iv_meses = 2 )
+      exp = '20250115' ).
+
+  ENDMETHOD.
+
+
+  METHOD meses_fin_de_mes.
+
+    " Mes destino más corto: último día de ese mes
+    cl_abap_unit_assert=>assert_equals(
+      act = zcl_fa_calculo_fraudes=>sumar_meses( iv_fecha = '20260331' iv_meses = -1 )
+      exp = '20260228' ).
+    cl_abap_unit_assert=>assert_equals(
+      act = zcl_fa_calculo_fraudes=>sumar_meses( iv_fecha = '20240531' iv_meses = -3 )
+      exp = '20240229' ).
 
   ENDMETHOD.
 

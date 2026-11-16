@@ -86,7 +86,7 @@ docs/
 | `EV_RESULTADO` | Export | `CHAR2` | — | `OK` / `KO` |
 | `EV_CODIGO` | Export | `CHAR4` | — | Código numérico (tabla siguiente) |
 | `EV_DESCRIPCION` | Export | `STRING` | — | Descripción del resultado |
-| `EV_MODO_FACTURACION` | Export | `CHAR30` | — | Valores de la IA: `FACTURACION TOTAL` (0000/0001/0003/0004/0010), `DESCARTE - DERECHO AL OLVIDO` (0103), `DESCARTE - VULNERABILIDAD` (0104), `DESCARTE - REPOSICION` (0106), `DESCARTE - ANOMALIA TP` (0107), `DESCARTE - EMPLEADO` (0110); vacío en errores y en los descartes sin modo definido |
+| `EV_MODO_FACTURACION` | Export | `CHAR30` | — | Valores de la IA: `FACTURACION TOTAL` (0000/0001/0003/0004/0010), `DESCARTE - DERECHO AL OLVIDO` (0103), `DESCARTE - VULNERABILIDAD` (0104), `DESCARTE - REPOSICION` (0106), `DESCARTE - ANOMALIA TP` (0107), `DESCARTE - EMPLEADO` (0110), `DESCARTE - CADUCADO` (0111); vacío en errores y en los descartes sin modo definido |
 | `ET_FACTURAS` | Export | `ZFA_T_FRAUDES_FACTURA` | — | Factura, cálculo, consumo, importe, documento oficial y fechas |
 | `ET_LINEAS` | Export | `ZFA_TT_FRAUDES_LINEA` | — | Solo con `IV_SOLO_CALCULO`: detalle por concepto (neto) y líneas de IVA |
 
@@ -121,6 +121,8 @@ docs/
 | `0108` | OK | Descarte: no hay cálculo para el periodo |
 | `0109` | OK | Descarte: el periodo abarca varios cálculos |
 | `0110` | OK | Descarte: empleado (`EANLH-TARIFTYP` `E_EMPLE`/`G_EMPLE`) |
+| `0111` | OK | Descarte: periodo totalmente caducado (antigüedad de `ZFA_T_CADUCIDAD`) |
+| `0112` | OK | Descarte: caducidad parcial o periodo más largo que la periodicidad (parciales, fase 2) |
 | `1000` | KO | Falta un parámetro obligatorio |
 | `1001` | KO | El CUPS no existe |
 | `1002` | KO | El contrato no existe o no corresponde al CUPS |
@@ -137,6 +139,7 @@ docs/
 | `2006` | KO | `KOFIZ` del contrato no válido para la serie del documento oficial |
 | `2007` | KO | No se ha podido facturar: el cálculo manual se ha **borrado** (`ISU_S_MANUBILL_DELETE`), se puede reintentar |
 | `2009` | KO | Solo cálculo: no se ha podido calcular el IVA de un indicador |
+| `2010` | KO | Caducidad: sin dirección/provincia de la instalación o provincia sin parametrizar en `ZFA_T_CADUCIDAD` |
 | `2008` | KO | No se ha podido facturar **ni borrar el cálculo**: se devuelve su `CALCULO` para borrarlo a mano en EA16 |
 
 Los códigos son una propuesta: **confirmarlos con Aleix**, que la IA tiene
@@ -336,6 +339,21 @@ concepto del cálculo.
 | `BELNR` | | mismo que `ERCH-BELNR` |
 | `OPBEL` | | mismo que `ERDK-OPBEL` |
 | `UNAME` | | `SYUNAME` |
+
+### `ZFA_T_CADUCIDAD` (tabla, con generador de actualización SM30)
+
+Plazos de caducidad por provincia, en meses (David 16/11). `9999` = sin límite.
+
+| Campo | Tipo | Clave |
+|---|---|---|
+| `MANDT` | `MANDT` | ✓ |
+| `PROVINCIA` | `REGIO` | ✓ |
+| `DESCRIPCION` | `BEZEI20` | |
+| `PER_FR_GAS` / `PER_FR_ELEC` / `PER_AN_GAS` / `PER_AN_ELEC` | `NUMC 4` | |
+| `ANT_FR_GAS` / `ANT_FR_ELEC` / `ANT_AN_GAS` / `ANT_AN_ELEC` | `NUMC 4` | |
+
+Valores actuales: periodicidad 9999 en fraudes y 12 en anomalías;
+antigüedad 60, salvo Barcelona (08) y Gerona (17), que tienen 36.
 
 ## Instalación
 

@@ -15,6 +15,7 @@ Lista para revisar que la orden lleva todo. Marcar al incluir.
 | `ZFA_T_FRAUDES_FACTURA` | Tipo de tabla | `ET_FACTURAS` | |
 | `ZFA_S_FRAUDES_LINEA` | Estructura | | |
 | `ZFA_TT_FRAUDES_LINEA` | Tipo de tabla | `ET_LINEAS` | |
+| `ZFA_T_CADUCIDAD` | Tabla + generador SM30 | Plazos de caducidad por provincia | |
 | `ZFA_FRAUD_CONC` | Tabla de customizing | | |
 | `ZFA_FG_FRAUD_CONC` | Grupo de funciones | Generador de actualización (SM30) | |
 | `ZFA_FRAUD_LOG` | Tabla | Log por expediente | |
@@ -25,6 +26,7 @@ Lista para revisar que la orden lleva todo. Marcar al incluir.
 
 | Qué | Cómo | ✓ |
 |---|---|---|
+| Contenido de `ZFA_T_CADUCIDAD` | Las 52 provincias del Excel de David (transportar entradas) | |
 | Contenido de `ZFA_FRAUD_CONC` | Ejecutar `ZFA_R_CARGA_FRAUD_CONC` en cada sistema (sin `P_TEST`) o transportar las entradas | |
 | `ZFA_FRAUDES_PLANTILLA_EREPOS` | STVARV. Un cálculo real con línea `EREPOS` **de ese sistema** | |
 | `ZFA_FRAUDES_PLANTILLA_GREPOS` | STVARV. Ídem con `GREPOS` | |

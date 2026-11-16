@@ -68,6 +68,8 @@ periodo del expediente.
 | 35b | Reposición | `ETTIFN` con operando `E_REPOSICI`/`G_REPOSICI` en el periodo | `0106`, `DESCARTE - REPOSICION` |
 | 36 | Tarifa Plana | `EANLH-TARIFTYP` `E_PLANA`/`G_PLANA` en el periodo | `0107`, `DESCARTE - ANOMALIA TP` |
 | 37 | Sin cálculo original | Periodo sin cálculo del contrato | `0108` |
+| 39 | Caducado | Expediente con `fecha_hasta` de hace más de 60 meses (36 en Barcelona/Gerona), con cálculo en ese periodo | `0111`, `DESCARTE - CADUCADO` |
+| 40 | Caducidad parcial / periodicidad | Anomalía (`06`/`AN`) de más de 12 meses, o periodo que empieza antes del límite de antigüedad | `0112` |
 | 38 | Empleado | `EANLH-TARIFTYP` `E_EMPLE`/`G_EMPLE` en el periodo | `0110`, `DESCARTE - EMPLEADO` |
 
 ## Sin probar por falta de datos o de definición
