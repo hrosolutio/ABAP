@@ -49,7 +49,7 @@ Parámetros comunes, salvo que se indique otra cosa:
 | 24b | Factura ATR de otro CUPS | Una factura real de otro CUPS | `1004` no es del CUPS | ✓ |
 | 25 | Gas fraude | gas, tipo `FR` | `0000`, `ORIGDOC = 40` | ✓ |
 | 26 | Solo cálculo a 0 | `IV_FORZADO = X`, `IV_SOLO_CALCULO = X` | `0010`, líneas `EREPOS` + `EPROD` a 0 | ✓ |
-| 28 | PDoc a `01` | Factura ATR de luz con `MOTIVOFACTURACION = 11` (PDoc en `02` en `EIDESWTDOC`), facturando | `0000` y `EIDESWTDOC-STATUS = 01`. Con las facturas de consumo (PDoc ya en `01`) no cambia nada | |
+| 28 | PDoc a `01` | Gas: factura ATR `DOMD202403285171` (PDoc `00000000060009789418` en `02`), instalación 6100231740, 12.10.2024–13.11.2024, tipo `FR`, facturando. Reserva: `DOMD202403285546` / 6100038968 / 21.11–06.12.2024 | `0000` y `EIDESWTDOC-STATUS = 01`. Con las facturas de consumo (PDoc ya en `01`) no cambia nada | |
 | 27 | Expediente repetido | repetir el de la prueba 20 | `1006` | ✓ |
 
 ## Descartes (con `IV_SOLO_CALCULO = X` para no grabar nada)
@@ -76,3 +76,11 @@ periodo del expediente.
   ATR de gas con esos conceptos y un cálculo plantilla en STVARV.
 - Descuentos (luz y gas) y prorrateo por cambio de precio: los cálculos
   de prueba no los tienen. Solo cubiertos por ABAP Unit.
+
+## Notas sobre las facturas ATR de QA
+
+- Las 286 con `MOTIVOFACTURACION = 11` (exportadas el 16/11) son de **gas**
+  (`DOMD…`, Madrileña Red de Gas), todas con el PDoc en `02`.
+- 244 no tienen instalación en `/IDXGC/PRST_INHD` ni `POD` en
+  `EIDESWTDOC`: no están ligadas a ningún suministro, así que la RFC las
+  rechaza con `1004` (no es del CUPS). Las 42 restantes sí tienen las dos.
