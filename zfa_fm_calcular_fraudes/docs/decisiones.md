@@ -1,5 +1,21 @@
 # Decisiones funcionales recibidas
 
+## Caducidad (David Villa, 16/11/2026)
+
+Tabla parametrizable por provincia (código oficial + descripción) con, en
+**meses**, por sector (gas / electricidad) y tipo de factura (fraude /
+anomalía):
+- **Periodicidad**: hoy 9999 en fraudes y 12 en anomalías (toda España).
+- **Antigüedad**: hoy 60, salvo Barcelona y Gerona, que tienen 36.
+
+El tipo sale de `IV_TIPO_FACTURA_ATR` (fraude `11`/`FR`, anomalía `06`/`AN`);
+la provincia, de la dirección del suministro. Si caduca parte del periodo,
+se prorratea el consumo por días (caducidad parcial).
+
+Pendiente: fecha de referencia de cada plazo y qué es exactamente la
+periodicidad (ver propuesta en el chat del 16/11). La parcial va con los
+parciales (fase 2).
+
 ## Respuestas de Aleix (12/11/2026)
 
 | Pregunta | Respuesta | En el código |
