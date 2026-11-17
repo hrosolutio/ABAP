@@ -35,6 +35,9 @@ Parámetros comunes, salvo que se indique otra cosa:
 | PRUEBA025 (solo cálculo) | Gas fraude (`C388643557`) | `0010` – TV 8,71 + IEH 0,23 = 8,94 + IVA `R1` 21 % 1,88 = 10,82 € (igual que PRUEBA016) |
 | PRUEBA025 | Gas fraude facturando | `0000` – 610000008999 / FE26390000002538 (cálculo 550000002630), 10,82 € |
 | PRUEBA026 | Solo cálculo a 0 (forzado) | `0010` – `EREPOS` (100, `R1`) y `EPROD` a 0, total 0 |
+| PRUEBA039 | Caducado (`ANT_FR_ELEC` de Madrid a 12 en QA) | `0111`, `DESCARTE - CADUCADO` |
+| PRUEBA040A | Caducidad parcial (`ANT_FR_ELEC` a 27) | `0112`, caducado antes del 17.08.2024 |
+| PRUEBA040B | Periodicidad (`PER_AN_ELEC` a 0, tipo `06`) | `0112`, se podría facturar desde el 13.09.2024 |
 | PRUEBA021 | Solo cálculo luz (`J424010929097`) | `0010` – sin factura; neto 12,08 + IVA `R1` 21 % 2,54 = 14,62 € (igual que PRUEBA013) |
 
 ## Pendiente (código desde el 29/10)
@@ -68,8 +71,8 @@ periodo del expediente.
 | 35b | Reposición | `ETTIFN` con operando `E_REPOSICI`/`G_REPOSICI` en el periodo | `0106`, `DESCARTE - REPOSICION` |
 | 36 | Tarifa Plana | `EANLH-TARIFTYP` `E_PLANA`/`G_PLANA` en el periodo | `0107`, `DESCARTE - ANOMALIA TP` |
 | 37 | Sin cálculo original | Periodo sin cálculo del contrato | `0108` |
-| 39 | Caducado | Expediente con `fecha_hasta` de hace más de 60 meses (36 en Barcelona/Gerona), con cálculo en ese periodo | `0111`, `DESCARTE - CADUCADO` |
-| 40 | Caducidad parcial / periodicidad | Anomalía (`06`/`AN`) de más de 12 meses, o periodo que empieza antes del límite de antigüedad | `0112` |
+| 39 | Caducado | Expediente con `fecha_hasta` de hace más de 60 meses (36 en Barcelona/Gerona), con cálculo en ese periodo | `0111`, `DESCARTE - CADUCADO` | ✓ |
+| 40 | Caducidad parcial / periodicidad | Anomalía (`06`/`AN`) de más de 12 meses, o periodo que empieza antes del límite de antigüedad | `0112` | ✓ |
 | 38 | Empleado | `EANLH-TARIFTYP` `E_EMPLE`/`G_EMPLE` en el periodo | `0110`, `DESCARTE - EMPLEADO` |
 
 ## Sin probar por falta de datos o de definición
