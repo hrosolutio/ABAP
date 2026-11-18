@@ -38,6 +38,7 @@ Parámetros comunes, salvo que se indique otra cosa:
 | PRUEBA039 | Caducado (`ANT_FR_ELEC` de Madrid a 12 en QA) | `0111`, `DESCARTE - CADUCADO` |
 | PRUEBA040A | Caducidad parcial (`ANT_FR_ELEC` a 27) | `0112`, caducado antes del 17.08.2024 |
 | PRUEBA040B | Periodicidad (`PER_AN_ELEC` a 0, tipo `06`) | `0112`, se podría facturar desde el 13.09.2024 |
+| PRUEBA028 | PDoc a `01` (gas, ATR `DOMD202403285546`, contrato 3000051281, 08.10–13.11.2024) | `0000` – 610000009005 / FE26390000002539 (cálculo 550000002631), 10,06 €; PDoc `00000000060009789492` de `02` a `01` |
 | PRUEBA021 | Solo cálculo luz (`J424010929097`) | `0010` – sin factura; neto 12,08 + IVA `R1` 21 % 2,54 = 14,62 € (igual que PRUEBA013) |
 
 ## Pendiente (código desde el 29/10)
@@ -52,7 +53,7 @@ Parámetros comunes, salvo que se indique otra cosa:
 | 24b | Factura ATR de otro CUPS | Una factura real de otro CUPS | `1004` no es del CUPS | ✓ |
 | 25 | Gas fraude | gas, tipo `FR` | `0000`, `ORIGDOC = 40` | ✓ |
 | 26 | Solo cálculo a 0 | `IV_FORZADO = X`, `IV_SOLO_CALCULO = X` | `0010`, líneas `EREPOS` + `EPROD` a 0 | ✓ |
-| 28 | PDoc a `01` | Gas: factura ATR `DOMD202403285171` (PDoc `00000000060009789418` en `02`), instalación 6100231740, 12.10.2024–13.11.2024, tipo `FR`, facturando. Reserva: `DOMD202403285546` / 6100038968 / 21.11–06.12.2024 | `0000` y `EIDESWTDOC-STATUS = 01`. Con las facturas de consumo (PDoc ya en `01`) no cambia nada | |
+| 28 | PDoc a `01` | Gas: factura ATR `DOMD202403285171` (PDoc `00000000060009789418` en `02`), instalación 6100231740, 12.10.2024–13.11.2024, tipo `FR`, facturando. Reserva: `DOMD202403285546` / 6100038968 / 21.11–06.12.2024 | `0000` y `EIDESWTDOC-STATUS = 01`. Con las facturas de consumo (PDoc ya en `01`) no cambia nada | ✓ |
 | 27 | Expediente repetido | repetir el de la prueba 20 | `1006` | ✓ |
 
 ## Descartes (con `IV_SOLO_CALCULO = X` para no grabar nada)
