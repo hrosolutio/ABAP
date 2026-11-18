@@ -91,7 +91,6 @@ docs/
 
 ### Cambios respecto a la interfaz de partida
 
-
 - **Fuera** `IV_ID_PROCESO_ATR`: no se usaba (Eliza, 18/11/2026).
 - `IV_CONSUMO_P1..P6`: opcionales, como dice el DF, y tipados con `MENGE_D`
   (antes `MENGE`, que es una cantidad de maestro de material).
