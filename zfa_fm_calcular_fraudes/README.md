@@ -79,7 +79,6 @@ docs/
 | `IV_NUM_FACTURA_ATR` | Import | `ZLE_DE_FACTUR` | Sí | Nº de factura ATR |
 | `IV_TIPO_FACTURA_ATR` | Import | `CHAR2` | Sí | `06` u `11` |
 | `IV_CONTRATO_SAP` | Import | `VERTRAG` | Sí | Contrato |
-| `IV_ID_PROCESO_ATR` | Import | `CHAR2` | Sí | ID de proceso de la factura ATR (tipo por confirmar) |
 | `IV_FORZADO` | Import | `XFELD` | No | Forzado: facturar a 0 (sustituye a descarte y titular erróneo) |
 | `IV_SOLO_CALCULO` | Import | `XFELD` | No | Solo calcular: devuelve el detalle **sin grabar nada** (ni cálculo ni factura) |
 | `IV_ID_EXPEDIENTE` | Import | `ZLE_DE_NUMEROEXPEDIENTE` | Sí | Nº de expediente |
@@ -92,6 +91,8 @@ docs/
 
 ### Cambios respecto a la interfaz de partida
 
+
+- **Fuera** `IV_ID_PROCESO_ATR`: no se usaba (Eliza, 18/11/2026).
 - `IV_CONSUMO_P1..P6`: opcionales, como dice el DF, y tipados con `MENGE_D`
   (antes `MENGE`, que es una cantidad de maestro de material).
 - `IV_DESCARTE` e `IV_MARCA_TITULAR` → sustituidos por **`IV_FORZADO`**
@@ -403,7 +404,6 @@ activación real en el sistema es la que vale.
 - [ ] Qué hacer si el periodo abarca varios cálculos (hoy se descarta).
 - [ ] Base del IEE: antes o después de descuentos (hoy, después).
 - [ ] Cómo son los descuentos (hoy se asume que son en %).
-- [ ] Tipo real de `IV_ID_PROCESO_ATR`.
 - [ ] Si un cálculo manual de fraude ya hecho (ABRVORG 06) en el mismo
       periodo tiene que bloquear un segundo expediente (hoy da 0109 por
       varios cálculos) o hay que excluirlo de la búsqueda del original.

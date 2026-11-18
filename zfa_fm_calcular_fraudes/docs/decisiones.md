@@ -1,5 +1,9 @@
 # Decisiones funcionales recibidas
 
+## Interfaz (Eliza, 18/11/2026)
+
+Se elimina `IV_ID_PROCESO_ATR`: solo se comprobaba que viniera informado.
+
 ## Caducidad (David Villa, 16/11/2026)
 
 Tabla parametrizable por provincia (código oficial + descripción) con, en

@@ -12,6 +12,7 @@ Parámetros comunes, salvo que se indique otra cosa:
 | Consumo total | 100 | 100 |
 | Cuenta contrato | 2000157509 | 2000016381 |
 
+- `IV_ID_PROCESO_ATR` ya no existe (eliminado el 18/11).
 - `IV_NUM_FACTURA_ATR`: un `CODIGOFISCALFACTURA` real de
   `/IDXGC/PRST_INHD` **de la misma instalación** (la RFC valida que exista
   y que `INHD-ANLAGE` sea la instalación del contrato). Para buscarla:

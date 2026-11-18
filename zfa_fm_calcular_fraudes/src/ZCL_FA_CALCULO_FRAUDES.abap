@@ -35,7 +35,6 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
         num_factura_atr  TYPE zle_de_factur,
         tipo_factura_atr TYPE char2,
         contrato         TYPE vertrag,
-        id_proceso_atr   TYPE char2,
         forzado          TYPE xfeld,
         solo_calculo     TYPE xfeld,
         id_expediente    TYPE zle_de_numeroexpediente,
@@ -634,8 +633,6 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
       lv_campo = 'IV_TIPO_FACTURA_ATR'.
     ELSEIF ms_entrada-contrato IS INITIAL.
       lv_campo = 'IV_CONTRATO_SAP'.
-    ELSEIF ms_entrada-id_proceso_atr IS INITIAL.
-      lv_campo = 'IV_ID_PROCESO_ATR'.
     ELSEIF ms_entrada-id_expediente IS INITIAL.
       lv_campo = 'IV_ID_EXPEDIENTE'.
     ENDIF.
