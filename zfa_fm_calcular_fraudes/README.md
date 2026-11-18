@@ -300,8 +300,8 @@ cantidad) y lo más probable es que falle al grabar el cálculo.
 | `TIPO` | `CHAR2` | Tipo en `ZFA_FRAUD_CONC` (EN, PO, IE…) |
 | `DESDE` | `ABZEITSCH` | |
 | `HASTA` | `BISZEITSCH` | |
-| `CANTIDAD` | `DEC 15,3` (tipo predefinido) | Como `CONSUMO` |
-| `PRECIO` | `DEC 16,8` (tipo predefinido) | Precio unitario |
+| `CANTIDAD` | `DEC 15,6` (tipo predefinido) | 6 decimales (Aleix 18/11) |
+| `PRECIO` | `DEC 16,6` (tipo predefinido) | Precio unitario, 6 decimales (Aleix 18/11) |
 | `IMPORTE` | `BETRW_KK` | Referencia a `WAERS`. Neto; en las líneas `IV`, la cuota de IVA |
 | `MWSKZ` | `MWSKZ` | Indicador de IVA de la línea |
 | `WAERS` | `WAERS` | |

@@ -60,8 +60,8 @@ CLASS ltc_calculo IMPLEMENTATION.
                                ( belzart = 'EN01' ab = '20260111' bis = '20260131' precio = '0.2' ) ) ).
 
     cl_abap_unit_assert=>assert_equals( act = lines( lt_lineas ) exp = 2 ).
-    cl_abap_unit_assert=>assert_equals( act = lt_lineas[ 1 ]-cantidad exp = '322.581' ).
-    cl_abap_unit_assert=>assert_equals( act = lt_lineas[ 2 ]-cantidad exp = '677.419' ).
+    cl_abap_unit_assert=>assert_equals( act = lt_lineas[ 1 ]-cantidad exp = '322.580645' ).
+    cl_abap_unit_assert=>assert_equals( act = lt_lineas[ 2 ]-cantidad exp = '677.419355' ).
     cl_abap_unit_assert=>assert_equals( act = lt_lineas[ 1 ]-importe  exp = '32.26' ).
     cl_abap_unit_assert=>assert_equals( act = lt_lineas[ 2 ]-importe  exp = '135.48' ).
 

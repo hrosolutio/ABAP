@@ -4,6 +4,13 @@
 
 Se elimina `IV_ID_PROCESO_ATR`: solo se comprobaba que viniera informado.
 
+## Decimales (Aleix, 18/11/2026)
+
+Cantidades y precios con 6 decimales: en `ET_LINEAS` el precio salía con 3
+(0,115 en vez de 0,1149) y no cuadraba cantidad × precio con el importe.
+Internamente la cantidad pasa a 6 decimales y el precio sigue con 8; los
+importes, a 2 (moneda).
+
 ## Caducidad (David Villa, 16/11/2026)
 
 Tabla parametrizable por provincia (código oficial + descripción) con, en

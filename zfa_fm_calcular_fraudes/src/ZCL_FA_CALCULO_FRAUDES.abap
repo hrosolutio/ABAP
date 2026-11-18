@@ -56,7 +56,8 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
   PRIVATE SECTION.
 
     TYPES:
-      ty_cantidad TYPE p LENGTH 15 DECIMALS 3,
+      " 6 decimales en cantidades y precios (Aleix 18/11); importes a 2
+      ty_cantidad TYPE p LENGTH 15 DECIMALS 6,
       ty_precio   TYPE p LENGTH 16 DECIMALS 8,
       ty_importe  TYPE p LENGTH 15 DECIMALS 2,
 
