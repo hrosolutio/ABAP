@@ -39,6 +39,7 @@ Parámetros comunes, salvo que se indique otra cosa:
 | PRUEBA040A | Caducidad parcial (`ANT_FR_ELEC` a 27) | `0112`, caducado antes del 17.08.2024 |
 | PRUEBA040B | Periodicidad (`PER_AN_ELEC` a 0, tipo `06`) | `0112`, se podría facturar desde el 13.09.2024 |
 | PRUEBA028 | PDoc a `01` (gas, ATR `DOMD202403285546`, contrato 3000051281, 08.10–13.11.2024) | `0000` – 610000009005 / FE26390000002539 (cálculo 550000002631), 10,06 €; PDoc `00000000060009789492` de `02` a `01` |
+| PRUEBA041 | Tarifa Plana (gas, contrato 3000027739, 02.09–01.10.2024) | `0107`, `DESCARTE - ANOMALIA TP` |
 | PRUEBA021 | Solo cálculo luz (`J424010929097`) | `0010` – sin factura; neto 12,08 + IVA `R1` 21 % 2,54 = 14,62 € (igual que PRUEBA013) |
 
 ## Pendiente (código desde el 29/10)
@@ -70,7 +71,7 @@ periodo del expediente.
 | 34 | Bloqueo contrato | `EVER-ABRSPERR` informado | `0105` |
 | 35 | Bloqueo cuenta contrato | `DFKKLOCKS` `LOTYP 06` vigente en el periodo | `0105` |
 | 35b | Reposición | `ETTIFN` con operando `E_REPOSICI`/`G_REPOSICI` en el periodo | `0106`, `DESCARTE - REPOSICION` |
-| 36 | Tarifa Plana | `EANLH-TARIFTYP` `E_PLANA`/`G_PLANA` en el periodo | `0107`, `DESCARTE - ANOMALIA TP` |
+| 36 | Tarifa Plana | `EANLH-TARIFTYP` `E_PLANA`/`G_PLANA` en el periodo | `0107`, `DESCARTE - ANOMALIA TP` | ✓ |
 | 37 | Sin cálculo original | Periodo sin cálculo del contrato | `0108` |
 | 39 | Caducado | Expediente con `fecha_hasta` de hace más de 60 meses (36 en Barcelona/Gerona), con cálculo en ese periodo | `0111`, `DESCARTE - CADUCADO` | ✓ |
 | 40 | Caducidad parcial / periodicidad | Anomalía (`06`/`AN`) de más de 12 meses, o periodo que empieza antes del límite de antigüedad | `0112` | ✓ |
