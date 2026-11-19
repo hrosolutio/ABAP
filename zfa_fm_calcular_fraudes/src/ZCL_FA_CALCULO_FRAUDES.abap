@@ -193,6 +193,8 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
 
       " Modos de facturación que espera la IA (correo de Eliza, 30/10)
       gc_modo_total         TYPE char30 VALUE 'FACTURACION TOTAL',
+      " Solo cálculo: SAP calcula pero no factura (Eliza 19/11)
+      gc_modo_parcial       TYPE char30 VALUE 'FACTURACION PARCIAL',
       gc_modo_olvido        TYPE char30 VALUE 'DESCARTE - DERECHO AL OLVIDO',
       gc_modo_vulnerable    TYPE char30 VALUE 'DESCARTE - VULNERABILIDAD',
       gc_modo_reposicion    TYPE char30 VALUE 'DESCARTE - REPOSICION',
@@ -408,7 +410,8 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     " exención (0102), bloqueos (0105) y sin cálculo original
     " (0108/0109); hoy van vacíos
     rs_resultado-modo = SWITCH #( rs_resultado-codigo
-                          WHEN '0000' OR '0001' OR '0003' OR '0004' OR '0010' THEN gc_modo_total
+                          WHEN '0000' OR '0001' OR '0003' OR '0004' THEN gc_modo_total
+                          WHEN '0010' THEN gc_modo_parcial
                           WHEN '0103' THEN gc_modo_olvido
                           WHEN '0104' THEN gc_modo_vulnerable
                           WHEN '0106' THEN gc_modo_reposicion

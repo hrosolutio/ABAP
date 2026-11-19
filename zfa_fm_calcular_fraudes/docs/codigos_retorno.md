@@ -16,7 +16,7 @@ Para la IA. `EV_RESULTADO` = `OK` en los `0xxx` y `KO` en los `1xxx`/`2xxx`;
 
 | Código | Modo | Significado | Acción |
 |---|---|---|---|
-| `0010` | FACTURACION TOTAL | Solo cálculo (`IV_SOLO_CALCULO`): detalle e importe con IVA, nada grabado | Enviar sin `IV_SOLO_CALCULO` para facturar |
+| `0010` | FACTURACION PARCIAL | Solo cálculo (`IV_SOLO_CALCULO`): detalle e importe con IVA, nada grabado | Enviar sin `IV_SOLO_CALCULO` para facturar |
 | `0101` | — | Periodo migrado | Tratamiento manual |
 | `0102` | — | Exención de impuestos | Tratamiento manual |
 | `0103` | DESCARTE - DERECHO AL OLVIDO | Cliente con derecho al olvido | Reenviar con `IV_FORZADO` (factura a 0) |

@@ -4,6 +4,11 @@
 
 Se elimina `IV_ID_PROCESO_ATR`: solo se comprobaba que viniera informado.
 
+## Modo del solo cálculo (Eliza, 19/11/2026)
+
+`0010` (solo cálculo) → `FACTURACION PARCIAL`; los códigos con factura
+(`0000`, `0001`, `0003`, `0004`) → `FACTURACION TOTAL`.
+
 ## Decimales (Aleix, 18/11/2026)
 
 Cantidades y precios con 6 decimales: en `ET_LINEAS` el precio salía con 3
