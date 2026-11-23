@@ -57,12 +57,14 @@ FUNCTION zfi_fm_invoice_reprint.
 *
 * NO VERIFICADO / PENDIENTE (a diferencia de REAPRIN0, que hace mucho
 * más de lo que replica esta primera versión):
-* - XT_RANGES de ISU_PRINT_EXPANDED: en REAPRIN0 lo construye la FORM
-*   SET_PRINT_PARAMETERS, cuyo código fuente no se ha visto todavía.
-*   Aquí se aproxima reutilizando el mismo rango de OPBEL usado para
-*   la selección (mismo dato, no verificado que sea correcto para
-*   ISU_PRINT_EXPANDED). REVISAR contra el código de SET_PRINT_PARAMETERS
-*   o probando en SE37 si genera el duplicado del documento correcto.
+* - XT_RANGES de ISU_PRINT_EXPANDED: tipo corregido a EFG_RANGES
+*   (verificado en SE37, distinto de ISU_RANGES usado en la selección -
+*   el tipo incorrecto causó un dump real CALL_FUNCTION_CONFLICT_LENG
+*   en la primera prueba en QA). El TIPO ya está bien, pero el
+*   CONTENIDO sigue siendo una aproximación: en REAPRIN0 lo construye
+*   la FORM SET_PRINT_PARAMETERS, cuyo código fuente no se ha visto
+*   todavía. Aquí se aproxima con un rango de OPBEL, sin confirmar que
+*   sea el contenido correcto para ISU_PRINT_EXPANDED.
 * - dpp_check (bloqueo de interlocutor comercial), reversal_check
 *   (documento ya anulado/reimpreso), enqueue_ca/enqueue_bupa
 *   (bloqueos de cuenta/interlocutor) y print_updates (actualización en
@@ -81,6 +83,8 @@ FUNCTION zfi_fm_invoice_reprint.
 
   DATA: lt_opbel     TYPE STANDARD TABLE OF isu_ranges,
         ls_opbel     TYPE isu_ranges,
+        lt_efg_ranges TYPE STANDARD TABLE OF efg_ranges,
+        ls_efg_ranges TYPE efg_ranges,
         lt_eiterdk   TYPE STANDARD TABLE OF eiterdk,
         ls_eiterdk   TYPE eiterdk,
         ls_printparams  TYPE eprintparams,
@@ -172,7 +176,18 @@ FUNCTION zfi_fm_invoice_reprint.
 
 *----------------------------------------------------------------------*
 * 4. Reimpresión / envío del duplicado
+*
+*    XT_RANGES usa el tipo EFG_RANGES (estructura SIGN/OPTION/LOW/HIGH,
+*    LOW y HIGH tipo TVARV_VAL), distinto de ISU_RANGES usado en la
+*    selección del paso 2 - verificado en SE37, no es el mismo tipo,
+*    así que se construye una tabla de rango aparte para esta llamada.
 *----------------------------------------------------------------------*
+  CLEAR ls_efg_ranges.
+  ls_efg_ranges-sign   = 'I'.
+  ls_efg_ranges-option = 'EQ'.
+  ls_efg_ranges-low    = i_opbel.
+  APPEND ls_efg_ranges TO lt_efg_ranges.
+
   CALL FUNCTION 'ISU_PRINT_EXPANDED'
     EXPORTING
       x_printparams    = ls_printparams
@@ -180,7 +195,7 @@ FUNCTION zfi_fm_invoice_reprint.
       x_archive_index  = ls_archive_index
       x_recipient      = ls_recipient
     TABLES
-      xt_ranges        = lt_opbel
+      xt_ranges        = lt_efg_ranges
     EXCEPTIONS
       failed           = 1
       OTHERS           = 2.

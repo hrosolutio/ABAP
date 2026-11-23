@@ -81,15 +81,23 @@ docs/
 
 ## Pendiente / a definir con el cliente
 
-- **Probar de principio a fin en SE37** — nada de esta cadena se ha
-  ejecutado todavía contra el sistema real, solo se ha leído el código
-  fuente de `REAPRIN0`.
+- **Primera prueba real en QA (23/11/2026)**: dump `CALL_FUNCTION_CONFLICT_LENG`
+  al llamar `ISU_S_EITERDK_SELECT_ALL` — la tabla de rango usada para
+  `XT_OPBEL` estaba mal tipada (se usó un `RANGE OF opbel_kk` casero en
+  vez del tipo real, `ISU_RANGES`). Corregido, y de paso corregido
+  también `XT_RANGES` de `ISU_PRINT_EXPANDED` (tipo real `EFG_RANGES`,
+  distinto de `ISU_RANGES` — se construye ahora una tabla de rango
+  separada para esa llamada). **Pendiente: volver a probar en QA con
+  estos tipos corregidos**, no confirmado todavía que el dump esté
+  resuelto del todo.
 - Confirmar que `X_NO_DIALOG` + `X_SUPPRESS_BCI_DIALOG` + `X_NO_ARCHIVE`
   evitan de verdad cualquier popup al llamar `EFG_GET_PRINT_PARAMETERS`.
-- **`XT_RANGES` de `ISU_PRINT_EXPANDED`**: en `REAPRIN0` lo construye la
-  FORM `SET_PRINT_PARAMETERS`, cuyo código no se ha visto todavía. Aquí
-  se ha aproximado reutilizando el mismo rango de `OPBEL` de la
-  selección — sin verificar que sea el contenido correcto.
+- **Contenido de `XT_RANGES` de `ISU_PRINT_EXPANDED`**: el tipo ya está
+  corregido (`EFG_RANGES`), pero el contenido sigue siendo una
+  aproximación — en `REAPRIN0` lo construye la FORM
+  `SET_PRINT_PARAMETERS`, cuyo código no se ha visto todavía. Aquí se
+  ha aproximado con un rango de `OPBEL`, sin confirmar que sea el
+  contenido correcto.
 - **No replicadas en esta primera versión** (código fuente no visto):
   `dpp_check` (interlocutor comercial bloqueado), `reversal_check`
   (documento ya anulado/reimpreso), bloqueos de cuenta/interlocutor
