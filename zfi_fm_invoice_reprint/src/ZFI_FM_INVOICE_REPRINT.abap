@@ -79,8 +79,8 @@ FUNCTION zfi_fm_invoice_reprint.
 *   directamente, no hace falta como filtro adicional. No verificado.
 *----------------------------------------------------------------------*
 
-  DATA: lt_opbel     TYPE RANGE OF opbel_kk,
-        ls_opbel     LIKE LINE OF lt_opbel,
+  DATA: lt_opbel     TYPE STANDARD TABLE OF isu_ranges,
+        ls_opbel     TYPE isu_ranges,
         lt_eiterdk   TYPE STANDARD TABLE OF eiterdk,
         ls_eiterdk   TYPE eiterdk,
         ls_printparams  TYPE eprintparams,
