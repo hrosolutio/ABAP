@@ -85,6 +85,7 @@ FUNCTION zfi_fm_invoice_reprint.
         ls_opbel     TYPE isu_ranges,
         lt_efg_ranges TYPE STANDARD TABLE OF efg_ranges,
         ls_efg_ranges TYPE efg_ranges,
+        lt_addressdata TYPE STANDARD TABLE OF isuaccaddrdata,
         lt_eiterdk   TYPE STANDARD TABLE OF eiterdk,
         ls_eiterdk   TYPE eiterdk,
         ls_printparams  TYPE eprintparams,
@@ -149,6 +150,35 @@ FUNCTION zfi_fm_invoice_reprint.
   ENDIF.
 
 *----------------------------------------------------------------------*
+* 2b. Control de dirección/envío de la cuenta contrato. Olvidado en la
+*     primera versión (identificado en la investigación inicial de
+*     REAPRIN0 como parte de la cadena real, pero no se llegó a
+*     implementar) - causaba CALL_FUNCTION_PARM_MISSING en
+*     ISU_PRINT_EXPANDED (XT_ADDRESSDATA) al faltar este paso.
+*----------------------------------------------------------------------*
+  CALL FUNCTION 'ISU_GET_ACC_ADRESS_DATA'
+    EXPORTING
+      x_doc_type     = '1'
+      x_vkont        = ls_eiterdk-vkont
+    TABLES
+      yt_addressdata = lt_addressdata
+    EXCEPTIONS
+      not_found      = 1
+      OTHERS         = 4.
+
+  IF sy-subrc = 1.
+    e_result             = 'NOK'.
+    es_error-code        = '102'.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+      INTO es_error-description
+      WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    RETURN.
+  ENDIF.
+* sy-subrc = 4 (OTHERS) se ignora y se continúa, igual que en REAPRIN0
+* (ahí solo deja un mensaje informativo, mac_msg_others, y no corta el
+* proceso) - no se replica ese mensaje informativo aquí.
+
+*----------------------------------------------------------------------*
 * 3. Parámetros de impresión, sin diálogo (ver nota "EFG_GET_PRINT_
 *    PARAMETERS" más arriba)
 *----------------------------------------------------------------------*
@@ -196,6 +226,7 @@ FUNCTION zfi_fm_invoice_reprint.
       x_recipient      = ls_recipient
     TABLES
       xt_ranges        = lt_efg_ranges
+      xt_addressdata   = lt_addressdata
     EXCEPTIONS
       failed           = 1
       OTHERS           = 2.

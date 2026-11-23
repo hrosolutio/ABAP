@@ -81,15 +81,24 @@ docs/
 
 ## Pendiente / a definir con el cliente
 
-- **Primera prueba real en QA (23/11/2026)**: dump `CALL_FUNCTION_CONFLICT_LENG`
-  al llamar `ISU_S_EITERDK_SELECT_ALL` — la tabla de rango usada para
-  `XT_OPBEL` estaba mal tipada (se usó un `RANGE OF opbel_kk` casero en
-  vez del tipo real, `ISU_RANGES`). Corregido, y de paso corregido
-  también `XT_RANGES` de `ISU_PRINT_EXPANDED` (tipo real `EFG_RANGES`,
-  distinto de `ISU_RANGES` — se construye ahora una tabla de rango
-  separada para esa llamada). **Pendiente: volver a probar en QA con
-  estos tipos corregidos**, no confirmado todavía que el dump esté
-  resuelto del todo.
+- **Pruebas reales en QA (23/11/2026)**, dos dumps encontrados y corregidos:
+  1. `CALL_FUNCTION_CONFLICT_LENG` en `ISU_S_EITERDK_SELECT_ALL` — `XT_OPBEL`
+     mal tipado (`RANGE OF opbel_kk` casero en vez de `ISU_RANGES`, el
+     tipo real). Corregido, y de paso corregido también `XT_RANGES` de
+     `ISU_PRINT_EXPANDED` (tipo real `EFG_RANGES`, distinto de
+     `ISU_RANGES`).
+  2. `CALL_FUNCTION_PARM_MISSING` en `ISU_PRINT_EXPANDED` (`XT_ADDRESSDATA`
+     no informado) — la llamada a `ISU_GET_ACC_ADRESS_DATA` (identificada
+     en la investigación inicial como parte de la cadena real) se quedó
+     sin implementar en la primera versión. Añadida ahora.
+  **Pendiente: volver a probar en QA**, no confirmado todavía que no
+  queden más dumps.
+- **Códigos de error**: `ES_ERROR-CODE` es `NUM3`, no admite texto — las
+  primeras versiones usaban códigos de texto (`PARAM_MISSING`,
+  `DOC_NOT_FOUND`...), corregido a `'102'` (código de error genérico
+  hacia Mulesoft, igual que los otros dos RFC del repo). **Pendiente**:
+  el código numérico para el caso `OK` (línea ~260, todavía usa
+  `'OK'` como texto) — sin confirmar con el usuario.
 - Confirmar que `X_NO_DIALOG` + `X_SUPPRESS_BCI_DIALOG` + `X_NO_ARCHIVE`
   evitan de verdad cualquier popup al llamar `EFG_GET_PRINT_PARAMETERS`.
 - **Contenido de `XT_RANGES` de `ISU_PRINT_EXPANDED`**: el tipo ya está
