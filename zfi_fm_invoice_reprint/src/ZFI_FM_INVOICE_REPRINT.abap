@@ -136,9 +136,7 @@ FUNCTION zfi_fm_invoice_reprint.
     e_result             = 'NOK'.
     es_error-code        = |{ sy-subrc }|.
     IF sy-msgid IS NOT INITIAL.
-      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
-        INTO es_error-description
-        WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+      es_error-description = |Error SAP { sy-msgid } { sy-msgno } (tipo { sy-msgty })|.
     ELSE.
       es_error-description = |Error técnico en ISU_S_EITERDK_SELECT_ALL (sy-subrc { sy-subrc })|.
     ENDIF.
@@ -174,9 +172,7 @@ FUNCTION zfi_fm_invoice_reprint.
     e_result             = 'NOK'.
     es_error-code        = '102'.
     IF sy-msgid IS NOT INITIAL.
-      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
-        INTO es_error-description
-        WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+      es_error-description = |Error SAP { sy-msgid } { sy-msgno } (tipo { sy-msgty })|.
     ELSE.
       es_error-description = |No se encontraron datos de dirección para la cuenta { ls_eiterdk-vkont }|.
     ENDIF.
@@ -213,9 +209,7 @@ FUNCTION zfi_fm_invoice_reprint.
     e_result             = 'NOK'.
     es_error-code        = |{ sy-subrc }|.
     IF sy-msgid IS NOT INITIAL.
-      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
-        INTO es_error-description
-        WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+      es_error-description = |Error SAP { sy-msgid } { sy-msgno } (tipo { sy-msgty })|.
     ELSE.
       es_error-description = |Error técnico en EFG_GET_PRINT_PARAMETERS (sy-subrc { sy-subrc })|.
     ENDIF.
@@ -253,9 +247,7 @@ FUNCTION zfi_fm_invoice_reprint.
     e_result             = 'NOK'.
     es_error-code        = |{ sy-subrc }|.
     IF sy-msgid IS NOT INITIAL.
-      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
-        INTO es_error-description
-        WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+      es_error-description = |Error SAP { sy-msgid } { sy-msgno } (tipo { sy-msgty })|.
     ELSE.
       es_error-description = |Error técnico en ISU_PRINT_EXPANDED (sy-subrc { sy-subrc })|.
     ENDIF.
@@ -277,9 +269,7 @@ FUNCTION zfi_fm_invoice_reprint.
     e_result             = 'NOK'.
     es_error-code        = |{ sy-subrc }|.
     IF sy-msgid IS NOT INITIAL.
-      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
-        INTO es_error-description
-        WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+      es_error-description = |Error SAP { sy-msgid } { sy-msgno } (tipo { sy-msgty })|.
     ELSE.
       es_error-description = |Error técnico en EFG_PRINT_CLOSE (sy-subrc { sy-subrc })|.
     ENDIF.
@@ -298,9 +288,7 @@ FUNCTION zfi_fm_invoice_reprint.
   e_result      = 'OK'.
   es_error-code = 'OK'.
   IF sy-msgid IS NOT INITIAL.
-    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
-      INTO es_error-description
-      WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    es_error-description = |Error SAP { sy-msgid } { sy-msgno } (tipo { sy-msgty })|.
   ELSE.
     es_error-description = |Duplicado del documento { i_opbel } generado correctamente|.
   ENDIF.

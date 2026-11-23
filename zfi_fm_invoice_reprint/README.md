@@ -93,6 +93,16 @@ docs/
      sin implementar en la primera versión. Añadida ahora.
   **Pendiente: volver a probar en QA**, no confirmado todavía que no
   queden más dumps.
+- **"Error interno: No se puede repetir el mensaje" al fallar
+  `ISU_PRINT_EXPANDED`** (QA, 23/11/2026): el propio mecanismo de
+  `MESSAGE ID sy-msgid ... INTO ... WITH sy-msgv1...` (que "repite" un
+  mensaje de SAP) fallaba al intentar usarlo, tapando el error real de
+  `ISU_PRINT_EXPANDED` sin que llegáramos a verlo. Sustituido en los 6
+  puntos del código que lo usaban por una construcción directa del
+  texto a partir de `sy-msgid`/`sy-msgno`/`sy-msgty` (sin usar
+  `MESSAGE` para reproducirlo), que no depende de ese mecanismo. Con
+  esto se debería ver ya el `sy-msgid`/`sy-msgno` real del fallo de
+  `ISU_PRINT_EXPANDED`, pendiente de confirmar en la próxima prueba.
 - **Popup "Seleccionar parámetro impresión" al llamar
   `EFG_GET_PRINT_PARAMETERS`** (probado en QA, 23/11/2026): los flags
   `X_NO_DIALOG`/`X_SUPPRESS_BCI_DIALOG`/`X_NO_ARCHIVE` no bastan si no
