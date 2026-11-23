@@ -93,6 +93,17 @@ docs/
      sin implementar en la primera versión. Añadida ahora.
   **Pendiente: volver a probar en QA**, no confirmado todavía que no
   queden más dumps.
+- **Popup "Seleccionar parámetro impresión" al llamar
+  `EFG_GET_PRINT_PARAMETERS`** (probado en QA, 23/11/2026): los flags
+  `X_NO_DIALOG`/`X_SUPPRESS_BCI_DIALOG`/`X_NO_ARCHIVE` no bastan si no
+  hay un dispositivo de salida (`TDDEST`) determinable automáticamente
+  — sin propuesta, la función abre el popup igualmente para pedirlo.
+  Corregido pasando `X_PRINTPARAMS-TDDEST = 'LP01'` como propuesta
+  (constante `gc_dispositivo_salida`). **Este valor es solo para
+  pruebas** — pendiente de decisión de negocio real: el servicio
+  debería despachar por el canal configurado del cliente (email/portal,
+  según `SENDCONTROL` de `ISU_GET_ACC_ADRESS_DATA`), no imprimir en un
+  dispositivo físico fijo. No llevar `LP01` a producción sin confirmar.
 - **Códigos de error**: `ES_ERROR-CODE` es `NUM3`, no admite texto — las
   primeras versiones usaban códigos de texto (`PARAM_MISSING`,
   `DOC_NOT_FOUND`...), corregido a `'102'` (código de error genérico

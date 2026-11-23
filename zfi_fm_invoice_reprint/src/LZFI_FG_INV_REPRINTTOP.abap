@@ -21,6 +21,21 @@ CONSTANTS:
 * parámetro X_NO_DIALOG existe con ese propósito exacto - "Kennzeichen:
 * Kein Dialog"). X_SUPPRESS_BCI_DIALOG y X_NO_ARCHIVE añadidos por el
 * mismo motivo (suprimir el popup de dirección de email/fax y no
-* ofrecer archivado). PENDIENTE DE PROBAR que, en conjunto, basta para
-* que la llamada no abra ningún diálogo con un caso real.
+* ofrecer archivado).
+*
+* PROBADO EN QA (23/11/2026): estos flags NO bastan por sí solos si no
+* hay un dispositivo de salida (TDDEST) determinable - sin "propuesta"
+* de dispositivo, EFG_GET_PRINT_PARAMETERS sigue abriendo el popup
+* "Seleccionar parámetro impresión" pidiéndolo, aunque X_NO_DIALOG='X'.
   gc_true TYPE c VALUE 'X'.
+
+* Dispositivo de salida usado como propuesta (X_PRINTPARAMS-TDDEST) al
+* llamar EFG_GET_PRINT_PARAMETERS, para que no haga falta preguntarlo
+* por pantalla. VALOR PROVISIONAL SOLO PARA PRUEBAS, visto disponible
+* en el sistema QA - PENDIENTE DE DECISIÓN DE NEGOCIO: el servicio
+* debería despachar por el canal real del cliente (email/portal, según
+* SENDCONTROL de ISU_GET_ACC_ADRESS_DATA), no necesariamente imprimir
+* en un dispositivo físico fijo. No usar este valor en producción sin
+* confirmarlo.
+CONSTANTS gc_dispositivo_salida TYPE rspopname VALUE 'LP01'.
+

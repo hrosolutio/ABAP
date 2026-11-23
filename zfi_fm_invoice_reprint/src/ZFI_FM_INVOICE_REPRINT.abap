@@ -180,10 +180,16 @@ FUNCTION zfi_fm_invoice_reprint.
 
 *----------------------------------------------------------------------*
 * 3. Parámetros de impresión, sin diálogo (ver nota "EFG_GET_PRINT_
-*    PARAMETERS" más arriba)
+*    PARAMETERS" más arriba). Se propone un dispositivo de salida
+*    (X_PRINTPARAMS-TDDEST) porque, sin él, la función abre igualmente
+*    el popup de selección aunque X_NO_DIALOG = 'X' (probado en QA).
 *----------------------------------------------------------------------*
+  CLEAR ls_printparams.
+  ls_printparams-tddest = gc_dispositivo_salida.
+
   CALL FUNCTION 'EFG_GET_PRINT_PARAMETERS'
     EXPORTING
+      x_printparams          = ls_printparams
       x_no_dialog            = gc_true
       x_suppress_bci_dialog  = gc_true
       x_no_archive           = gc_true
