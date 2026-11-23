@@ -99,7 +99,7 @@ FUNCTION zfi_fm_invoice_reprint.
 *----------------------------------------------------------------------*
   IF i_opbel IS INITIAL.
     e_result             = 'NOK'.
-    es_error-code        = 'PARAM_MISSING'.
+    es_error-code        = '102'.
     es_error-description = 'I_OPBEL es obligatorio'.
     RETURN.
   ENDIF.
@@ -128,7 +128,7 @@ FUNCTION zfi_fm_invoice_reprint.
 
   IF sy-subrc = 1.
     e_result             = 'NOK'.
-    es_error-code        = 'DOC_NOT_FOUND'.
+    es_error-code        = '102'.
     es_error-description = |No existe el documento de impresión { i_opbel }|.
     RETURN.
   ELSEIF sy-subrc <> 0.
@@ -143,7 +143,7 @@ FUNCTION zfi_fm_invoice_reprint.
   READ TABLE lt_eiterdk INTO ls_eiterdk INDEX 1.
   IF sy-subrc <> 0.
     e_result             = 'NOK'.
-    es_error-code        = 'DOC_NOT_FOUND'.
+    es_error-code        = '102'.
     es_error-description = |No existe el documento de impresión { i_opbel }|.
     RETURN.
   ENDIF.
