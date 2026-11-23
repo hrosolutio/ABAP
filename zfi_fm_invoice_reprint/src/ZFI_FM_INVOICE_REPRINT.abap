@@ -135,9 +135,13 @@ FUNCTION zfi_fm_invoice_reprint.
   ELSEIF sy-subrc <> 0.
     e_result             = 'NOK'.
     es_error-code        = |{ sy-subrc }|.
-    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
-      INTO es_error-description
-      WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    IF sy-msgid IS NOT INITIAL.
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+        INTO es_error-description
+        WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    ELSE.
+      es_error-description = |Error técnico en ISU_S_EITERDK_SELECT_ALL (sy-subrc { sy-subrc })|.
+    ENDIF.
     RETURN.
   ENDIF.
 
@@ -169,9 +173,13 @@ FUNCTION zfi_fm_invoice_reprint.
   IF sy-subrc = 1.
     e_result             = 'NOK'.
     es_error-code        = '102'.
-    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
-      INTO es_error-description
-      WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    IF sy-msgid IS NOT INITIAL.
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+        INTO es_error-description
+        WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    ELSE.
+      es_error-description = |No se encontraron datos de dirección para la cuenta { ls_eiterdk-vkont }|.
+    ENDIF.
     RETURN.
   ENDIF.
 * sy-subrc = 4 (OTHERS) se ignora y se continúa, igual que en REAPRIN0
@@ -204,9 +212,13 @@ FUNCTION zfi_fm_invoice_reprint.
   IF sy-subrc <> 0.
     e_result             = 'NOK'.
     es_error-code        = |{ sy-subrc }|.
-    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
-      INTO es_error-description
-      WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    IF sy-msgid IS NOT INITIAL.
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+        INTO es_error-description
+        WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    ELSE.
+      es_error-description = |Error técnico en EFG_GET_PRINT_PARAMETERS (sy-subrc { sy-subrc })|.
+    ENDIF.
     RETURN.
   ENDIF.
 
@@ -240,9 +252,13 @@ FUNCTION zfi_fm_invoice_reprint.
   IF sy-subrc <> 0.
     e_result             = 'NOK'.
     es_error-code        = |{ sy-subrc }|.
-    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
-      INTO es_error-description
-      WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    IF sy-msgid IS NOT INITIAL.
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+        INTO es_error-description
+        WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    ELSE.
+      es_error-description = |Error técnico en ISU_PRINT_EXPANDED (sy-subrc { sy-subrc })|.
+    ENDIF.
     RETURN.
   ENDIF.
 
@@ -260,9 +276,13 @@ FUNCTION zfi_fm_invoice_reprint.
   IF sy-subrc <> 0.
     e_result             = 'NOK'.
     es_error-code        = |{ sy-subrc }|.
-    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
-      INTO es_error-description
-      WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    IF sy-msgid IS NOT INITIAL.
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+        INTO es_error-description
+        WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    ELSE.
+      es_error-description = |Error técnico en EFG_PRINT_CLOSE (sy-subrc { sy-subrc })|.
+    ENDIF.
     RETURN.
   ENDIF.
 
