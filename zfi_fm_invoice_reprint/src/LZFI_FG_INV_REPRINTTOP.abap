@@ -7,10 +7,10 @@ FUNCTION-POOL zfi_fg_inv_reprint.
 
 * ES_ERROR usa la estructura DDIC estándar ZFI_DE_XX_WS_ERROR (CODE,
 * DESCRIPTION), reutilizada de los desarrollos ZFI_FM_PAYLOT_REVERSE /
-* ZFI_FM_PAYMENT_LOT_CLARIFY2. A diferencia de esos dos, aquí se
-* informa también en el caso OK (ver FM), por requisito de Diego:
-* "hay que devolver el mensaje de SAP y el código de retorno, tanto
-* en el OK como en el error".
+* ZFI_FM_PAYMENT_LOT_CLARIFY2. Igual que en esos dos, solo se informa
+* en el caso NOK (decisión explícita del usuario: en el OK se deja
+* vacío, aunque Diego habló en general de "mensaje y código tanto en
+* OK como en error" para los servicios de Ola 2).
 
 * Localizado leyendo el programa REAPRIN0 (transacción EA60) SIN
 * depurar (a diferencia de FP08/FPCPL, que sí hizo falta depurar para
@@ -29,13 +29,15 @@ CONSTANTS:
 * "Seleccionar parámetro impresión" pidiéndolo, aunque X_NO_DIALOG='X'.
   gc_true TYPE c VALUE 'X'.
 
-* Dispositivo de salida usado como propuesta (X_PRINTPARAMS-TDDEST) al
-* llamar EFG_GET_PRINT_PARAMETERS, para que no haga falta preguntarlo
-* por pantalla. VALOR PROVISIONAL SOLO PARA PRUEBAS, visto disponible
-* en el sistema QA - PENDIENTE DE DECISIÓN DE NEGOCIO: el servicio
-* debería despachar por el canal real del cliente (email/portal, según
-* SENDCONTROL de ISU_GET_ACC_ADRESS_DATA), no necesariamente imprimir
-* en un dispositivo físico fijo. No usar este valor en producción sin
-* confirmarlo.
-CONSTANTS gc_dispositivo_salida TYPE rspopname VALUE 'LP01'.
+* El dispositivo de salida (X_PRINTPARAMS-TDDEST) ya NO es una
+* constante fija (antes 'LP01', valor de QA que no tiene por qué
+* existir en otros sistemas) - se lee en tiempo de ejecución con
+* GET PARAMETER ID 'PRI' (parámetro estándar SAP de "impresora por
+* defecto del usuario", configurado en SU01 para el usuario técnico
+* de MuleSoft en cada sistema, sin tocar código). Ver el FM.
+*
+* PENDIENTE DE DECISIÓN DE NEGOCIO: el servicio debería despachar por
+* el canal real del cliente (email/portal, según SENDCONTROL de
+* ISU_GET_ACC_ADRESS_DATA), no necesariamente imprimir en un
+* dispositivo físico fijo - esto sigue sin resolver.
 

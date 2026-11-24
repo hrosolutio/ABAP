@@ -92,7 +92,8 @@ FUNCTION zfi_fm_invoice_reprint.
         ls_printparams  TYPE eprintparams,
         ls_archive_index TYPE toa_dara,
         ls_archive_params TYPE arc_params,
-        ls_recipient TYPE swotobjid.
+        ls_recipient TYPE swotobjid,
+        lv_tddest    TYPE rspopname.
 
   CLEAR: e_result, es_error.
 
@@ -188,9 +189,21 @@ FUNCTION zfi_fm_invoice_reprint.
 *    PARAMETERS" más arriba). Se propone un dispositivo de salida
 *    (X_PRINTPARAMS-TDDEST) porque, sin él, la función abre igualmente
 *    el popup de selección aunque X_NO_DIALOG = 'X' (probado en QA).
+*    El dispositivo se lee del parámetro de usuario estándar 'PRI'
+*    ("impresora por defecto"), configurado en SU01 para el usuario
+*    técnico de MuleSoft en cada sistema - no es un valor fijo en
+*    código, para no depender de qué exista en cada entorno.
 *----------------------------------------------------------------------*
+  GET PARAMETER ID 'PRI' FIELD lv_tddest.
+  IF lv_tddest IS INITIAL.
+    e_result             = 'NOK'.
+    es_error-code        = '102'.
+    es_error-description = 'Parámetro de usuario PRI (impresora por defecto) no configurado en SU01'.
+    RETURN.
+  ENDIF.
+
   CLEAR ls_printparams.
-  ls_printparams-tddest = gc_dispositivo_salida.
+  ls_printparams-tddest = lv_tddest.
 
   CALL FUNCTION 'EFG_GET_PRINT_PARAMETERS'
     EXPORTING

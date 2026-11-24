@@ -56,9 +56,12 @@ docs/
    `'X'` para evitar cualquier popup interactivo (el mismo módulo,
    llamado desde pantalla en `REAPRIN0`, abre el popup de selección de
    impresora si no se le indica lo contrario), y proponiendo un
-   dispositivo de salida (`X_PRINTPARAMS-TDDEST`, constante
-   `gc_dispositivo_salida`, **valor solo de prueba**) porque sin él la
+   dispositivo de salida (`X_PRINTPARAMS-TDDEST`) porque sin él la
    función pide el dispositivo igualmente aunque `X_NO_DIALOG = 'X'`.
+   El dispositivo se lee con `GET PARAMETER ID 'PRI'` (parámetro
+   estándar de usuario "impresora por defecto", configurado en SU01
+   para el usuario técnico en cada sistema) — si no está configurado,
+   el servicio devuelve `NOK` en vez de fallar a ciegas.
 4. Determina el formulario a usar: `FORMKEY` de `EITERDK-FORMKEY`
    (directo) y `FORMCLASS` llamando a `EFG_DB_EFRM_SELECT` con ese
    `FORMKEY` (lógica localizada en la FORM `SET_PRINT_PARAMETERS` de
@@ -122,12 +125,16 @@ docs/
   `X_NO_DIALOG`/`X_SUPPRESS_BCI_DIALOG`/`X_NO_ARCHIVE` no bastan si no
   hay un dispositivo de salida (`TDDEST`) determinable automáticamente
   — sin propuesta, la función abre el popup igualmente para pedirlo.
-  Corregido pasando `X_PRINTPARAMS-TDDEST = 'LP01'` como propuesta
-  (constante `gc_dispositivo_salida`). **Este valor es solo para
-  pruebas** — pendiente de decisión de negocio real: el servicio
+  Corregido proponiendo un `X_PRINTPARAMS-TDDEST` leído con
+  `GET PARAMETER ID 'PRI'` (impresora por defecto del usuario técnico,
+  configurada en SU01 por sistema — se probó primero con un valor fijo
+  `'LP01'` de QA, pero se descartó por no ser portable entre entornos).
+  **Sigue pendiente la decisión de negocio real**: el servicio
   debería despachar por el canal configurado del cliente (email/portal,
   según `SENDCONTROL` de `ISU_GET_ACC_ADRESS_DATA`), no imprimir en un
-  dispositivo físico fijo. No llevar `LP01` a producción sin confirmar.
+  dispositivo físico fijo. Mientras tanto, requiere que el parámetro
+  `PRI` esté configurado en SU01 para el usuario técnico en cada
+  sistema (DEV/QA/PROD) antes de poder ejecutarse.
 - **Códigos de error**: `ES_ERROR-CODE` es `NUM3`, no admite texto — las
   primeras versiones usaban códigos de texto (`PARAM_MISSING`,
   `DOC_NOT_FOUND`...), corregido a `'102'` (código de error genérico
