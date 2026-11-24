@@ -213,16 +213,20 @@ FUNCTION zfi_fm_invoice_reprint.
 
 *----------------------------------------------------------------------*
 * 3. Parámetros de impresión, sin diálogo (ver nota "EFG_GET_PRINT_
-*    PARAMETERS" más arriba). CAMBIO DE DISEÑO (24/11/2026): ya no se
-*    propone ningún dispositivo de salida - con TDGETOTF='X' se le
-*    pide a la cadena que NO despache a ningún sitio, solo que
-*    devuelva el documento (OTF) como dato. Hipótesis sin probar
-*    todavía: que esto evite también el popup de selección de
-*    impresora (si no se va a despachar, no debería hacer falta
-*    dispositivo). Si el popup sigue saliendo, habrá que revisar esto.
+*    PARAMETERS" más arriba). Con TDGETOTF='X' se le pide a la cadena
+*    que NO despache a ningún sitio, solo que devuelva el documento
+*    (OTF) como dato.
+*
+*    PROBADO EN QA (24/11/2026): TDGETOTF NO evita el popup de
+*    selección de dispositivo de salida - sigue siendo obligatorio.
+*    Como el documento nunca llega a despacharse de verdad (TDGETOTF
+*    lo intercepta antes), se usa 'LOCL' (constante
+*    gc_tddest_dummy, ver LZFI_FG_INV_REPRINTTOP) como valor de
+*    usar y tirar, solo para que el campo no esté vacío.
 *----------------------------------------------------------------------*
   CLEAR ls_printparams.
   ls_printparams-tdgetotf = gc_true.
+  ls_printparams-tddest   = gc_tddest_dummy.
 
   CALL FUNCTION 'EFG_GET_PRINT_PARAMETERS'
     EXPORTING

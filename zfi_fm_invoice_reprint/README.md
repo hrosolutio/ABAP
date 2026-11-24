@@ -93,13 +93,20 @@ docs/
 - **CAMBIO DE DISEÑO (24/11/2026)**: tras varias vueltas intentando
   determinar un dispositivo de salida (constante fija, `GET PARAMETER
   ID 'PRI'`, tabla Z — los tres descartados), se cayó en la cuenta de
-  que no hacía falta ninguno: MuleSoft no tiene impresora al otro
-  lado, necesita el **PDF como dato**. Rediseñado para llamar
-  directamente a `EFG_PRINT_EXPANDED` con `TDGETOTF = 'X'` (devuelve
-  el OTF sin despachar a ningún sitio) y convertirlo a PDF con
-  `CONVERT_OTF` + `SCMS_BINARY_TO_XSTRING`. **Pendiente de probar en
-  QA** — ni esta cadena nueva, ni la hipótesis de que `TDGETOTF`
-  evite también el popup de selección de impresora.
+  que MuleSoft no tiene impresora al otro lado, necesita el **PDF como
+  dato**. Rediseñado para llamar directamente a `EFG_PRINT_EXPANDED`
+  con `TDGETOTF = 'X'` (devuelve el OTF sin despachar a ningún sitio)
+  y convertirlo a PDF con `CONVERT_OTF` + `SCMS_BINARY_TO_XSTRING`.
+  **Probado en QA: `TDGETOTF` NO evita el popup de dispositivo de
+  salida** — sigue siendo obligatorio igualmente. Como el documento
+  nunca llega a despacharse de verdad (`TDGETOTF` lo intercepta
+  antes), se usa `'LOCL'` (constante `gc_tddest_dummy`) como valor de
+  usar y tirar — es un dispositivo estándar presente en cualquier
+  sistema SAP (a diferencia de `'LP01'`, específico de QA), y nunca se
+  imprime ahí de verdad. **Pendiente de confirmar en QA que con esto
+  ya no sale el popup**, y de resolver el dump `CALL_FUNCTION_CONFLICT_TYPE`
+  encontrado al probar la cadena nueva (conflicto de tipo en alguna
+  llamada, en diagnóstico).
 - **Pruebas reales en QA (23/11/2026)**, dos dumps encontrados y corregidos:
   1. `CALL_FUNCTION_CONFLICT_LENG` en `ISU_S_EITERDK_SELECT_ALL` — `XT_OPBEL`
      mal tipado (`RANGE OF opbel_kk` casero en vez de `ISU_RANGES`, el
