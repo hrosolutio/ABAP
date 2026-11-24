@@ -120,7 +120,8 @@ FUNCTION zfi_fm_invoice_reprint.
         lt_efg_ranges_empty TYPE STANDARD TABLE OF efg_ranges,
         lt_otf_data  TYPE STANDARD TABLE OF itcoo,
         lt_pdf_lines TYPE STANDARD TABLE OF tline,
-        lv_pdf_size  TYPE i.
+        lv_pdf_size  TYPE i,
+        ls_pdf_result TYPE efg_strn_pdf_result.
 
   CLEAR: e_result, es_error.
 
@@ -332,6 +333,7 @@ FUNCTION zfi_fm_invoice_reprint.
         x_recipient         = ls_recipient
       IMPORTING
         y_printparams       = ls_printparams
+        y_pdf_result        = ls_pdf_result
       TABLES
         xt_ranges           = lt_efg_ranges
         xt_ranges1          = lt_efg_ranges_empty
@@ -364,17 +366,32 @@ FUNCTION zfi_fm_invoice_reprint.
     ENDIF.
   ENDLOOP.
 
-  IF lt_otf_data IS INITIAL.
-    e_result             = 'NOK'.
-    es_error-code        = '102'.
-    es_error-description = 'EFG_PRINT_EXPANDED no devolvió datos OTF del documento'.
+*----------------------------------------------------------------------*
+* 5. Obtención del PDF. Dos caminos posibles, según si el formulario es
+*    PDF-based (Adobe Forms) o SAPscript/SmartForms clásico - no se
+*    sabe de antemano cuál es, así que se comprueban los dos:
+*    - Si Y_PDF_RESULT-STR_RESULT_FORM-PDF viene relleno (formulario
+*      PDF-based): se usa directamente, ya es el PDF en bruto
+*      (verificado en SE11: FPFORMOUTPUT-PDF es FPCONTENT, un
+*      RAWSTRING - compatible con XSTRING sin conversión).
+*    - Si no, y YT_OTF_DATA sí viene relleno (formulario clásico): se
+*      convierte con los módulos estándar CONVERT_OTF +
+*      SCMS_BINARY_TO_XSTRING (muy conocidos, no verificados en SE37
+*      contra este sistema en concreto).
+*----------------------------------------------------------------------*
+  IF ls_pdf_result-str_result_form-pdf IS NOT INITIAL.
+    e_pdf = ls_pdf_result-str_result_form-pdf.
+    e_result = 'OK'.
     RETURN.
   ENDIF.
 
-*----------------------------------------------------------------------*
-* 5. Conversión del OTF a PDF (módulos estándar, muy conocidos, no
-*    verificados en SE37 contra este sistema en concreto).
-*----------------------------------------------------------------------*
+  IF lt_otf_data IS INITIAL.
+    e_result             = 'NOK'.
+    es_error-code        = '102'.
+    es_error-description = 'EFG_PRINT_EXPANDED no devolvió ni PDF ni OTF del documento'.
+    RETURN.
+  ENDIF.
+
   CALL FUNCTION 'CONVERT_OTF'
     EXPORTING
       format                = 'PDF'

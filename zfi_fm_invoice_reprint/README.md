@@ -58,7 +58,11 @@ docs/
    usando `X_NO_DIALOG`, `X_SUPPRESS_BCI_DIALOG` y `X_NO_ARCHIVE` a
    `'X'` para evitar cualquier popup interactivo, y **`TDGETOTF = 'X'`**
    para que la cadena no despache a ningún sitio (ni imprima, ni
-   visualice, ni envíe) y solo devuelva el documento como dato (OTF).
+   visualice, ni envíe) y solo devuelva el documento como dato.
+   **Probado en QA: `TDGETOTF` no evita el popup de dispositivo de
+   salida** (sigue siendo obligatorio) — se usa `'LOCL'` (constante
+   `gc_tddest_dummy`) como valor de relleno, ya que el documento nunca
+   llega a despacharse de verdad.
 5. Determina el formulario a usar: `FORMKEY` de `EITERDK-FORMKEY`
    (directo) y `FORMCLASS` llamando a `EFG_DB_EFRM_SELECT` con ese
    `FORMKEY` (lógica localizada en la FORM `SET_PRINT_PARAMETERS` de
@@ -67,10 +71,16 @@ docs/
 6. Llama a **`EFG_PRINT_EXPANDED`** (no a `ISU_PRINT_EXPANDED`, que no
    devuelve el documento generado — ver cabecera del `.abap`), una vez
    por cada destinatario de los datos de dirección, recogiendo
-   `YT_OTF_DATA`.
-7. Convierte el OTF a PDF con los módulos estándar `CONVERT_OTF` +
-   `SCMS_BINARY_TO_XSTRING`, devolviendo el resultado en `E_PDF`.
-8. Devuelve `E_RESULT = 'OK'`, sin rellenar `ES_ERROR`.
+   `Y_PDF_RESULT` y `YT_OTF_DATA`.
+7. Obtiene el PDF por uno de dos caminos, según si el formulario es
+   PDF-based (Adobe Forms) o SAPscript/SmartForms clásico (no se sabe
+   de antemano cuál es):
+   - Si `Y_PDF_RESULT-STR_RESULT_FORM-PDF` viene relleno: se usa
+     directamente (ya es el PDF en bruto).
+   - Si no, y `YT_OTF_DATA` sí viene relleno: se convierte con los
+     módulos estándar `CONVERT_OTF` + `SCMS_BINARY_TO_XSTRING`.
+8. Devuelve `E_RESULT = 'OK'` y el PDF en `E_PDF`, sin rellenar
+   `ES_ERROR`.
 
 ## Instalación en SAP (SE80 / SE37)
 
@@ -95,18 +105,30 @@ docs/
   ID 'PRI'`, tabla Z — los tres descartados), se cayó en la cuenta de
   que MuleSoft no tiene impresora al otro lado, necesita el **PDF como
   dato**. Rediseñado para llamar directamente a `EFG_PRINT_EXPANDED`
-  con `TDGETOTF = 'X'` (devuelve el OTF sin despachar a ningún sitio)
-  y convertirlo a PDF con `CONVERT_OTF` + `SCMS_BINARY_TO_XSTRING`.
-  **Probado en QA: `TDGETOTF` NO evita el popup de dispositivo de
-  salida** — sigue siendo obligatorio igualmente. Como el documento
-  nunca llega a despacharse de verdad (`TDGETOTF` lo intercepta
-  antes), se usa `'LOCL'` (constante `gc_tddest_dummy`) como valor de
-  usar y tirar — es un dispositivo estándar presente en cualquier
-  sistema SAP (a diferencia de `'LP01'`, específico de QA), y nunca se
-  imprime ahí de verdad. **Pendiente de confirmar en QA que con esto
-  ya no sale el popup**, y de resolver el dump `CALL_FUNCTION_CONFLICT_TYPE`
-  encontrado al probar la cadena nueva (conflicto de tipo en alguna
-  llamada, en diagnóstico).
+  con `TDGETOTF = 'X'`. **Probado en QA: `TDGETOTF` NO evita el popup
+  de dispositivo de salida** — sigue siendo obligatorio igualmente,
+  resuelto con `'LOCL'` (constante `gc_tddest_dummy`) como valor de
+  usar y tirar (dispositivo estándar presente en cualquier sistema
+  SAP, a diferencia de `'LP01'`, específico de QA).
+- **Dump `CALL_FUNCTION_CONFLICT_TYPE`** al llamar `EFG_PRINT_EXPANDED`:
+  `X_HEADER` se había tipado como `ISUACCADDRDATA` solo por ver
+  `l_header = xt_addressdata` en `REAPRIN0` (un `MOVE` clásico entre
+  tipos distintos, válido en tiempo de ejecución por compatibilidad de
+  memoria, pero no implica que compartan tipo). Verificado en SE37:
+  `X_HEADER` es en realidad `RFGEN-HEADER`. Corregido, manteniendo el
+  mismo `MOVE`.
+- **`YT_OTF_DATA` vacía tras la llamada** (probado en QA, sin dump ni
+  popup — la llamada en sí funciona): resultó ser porque el formulario
+  de esta factura podría ser PDF-based (Adobe Forms), no SAPscript/
+  SmartForms clásico — en ese caso el documento viene por
+  `Y_PDF_RESULT-STR_RESULT_FORM-PDF` (verificado en SE11: tipo
+  `FPCONTENT`/`RAWSTRING`, compatible con `XSTRING` sin conversión),
+  no por `YT_OTF_DATA`. Añadido el camino alternativo: si `Y_PDF_RESULT`
+  viene relleno se usa directamente, si no se sigue con
+  `YT_OTF_DATA` → `CONVERT_OTF`. **Pendiente de confirmar en QA cuál
+  de los dos caminos es el que realmente aplica a esta factura, y que
+  el PDF resultante sea correcto** (no se ha podido abrir/verificar el
+  contenido del PDF todavía).
 - **Pruebas reales en QA (23/11/2026)**, dos dumps encontrados y corregidos:
   1. `CALL_FUNCTION_CONFLICT_LENG` en `ISU_S_EITERDK_SELECT_ALL` — `XT_OPBEL`
      mal tipado (`RANGE OF opbel_kk` casero en vez de `ISU_RANGES`, el
