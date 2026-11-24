@@ -52,15 +52,20 @@ docs/
    usando `X_NO_DIALOG`, `X_SUPPRESS_BCI_DIALOG` y `X_NO_ARCHIVE` a
    `'X'` para evitar cualquier popup interactivo (el mismo módulo,
    llamado desde pantalla en `REAPRIN0`, abre el popup de selección de
-   impresora si no se le indica lo contrario). Verificado en SE37 que
-   el parámetro `X_NO_DIALOG` existe con ese propósito; **no
-   verificado** que con estos tres flags baste para no abrir ningún
-   diálogo en la práctica.
-4. Llama a `ISU_PRINT_EXPANDED` (módulo de función normal, verificado
+   impresora si no se le indica lo contrario), y proponiendo un
+   dispositivo de salida (`X_PRINTPARAMS-TDDEST`, constante
+   `gc_dispositivo_salida`, **valor solo de prueba**) porque sin él la
+   función pide el dispositivo igualmente aunque `X_NO_DIALOG = 'X'`.
+4. Determina el formulario a usar: `FORMKEY` de `EITERDK-FORMKEY`
+   (directo) y `FORMCLASS` llamando a `EFG_DB_EFRM_SELECT` con ese
+   `FORMKEY` (lógica localizada en la FORM `SET_PRINT_PARAMETERS` de
+   `REAPRIN0`). Sin esto, `ISU_PRINT_EXPANDED` falla internamente
+   (mensaje `EZ 823`).
+5. Llama a `ISU_PRINT_EXPANDED` (módulo de función normal, verificado
    en SE37) con los parámetros de impresión generados, para generar de
    verdad el duplicado.
-5. Cierra el spool con `EFG_PRINT_CLOSE` y hace `COMMIT WORK AND WAIT`.
-6. Devuelve `E_RESULT = 'OK'` y en `ES_ERROR` un mensaje de
+6. Cierra el spool con `EFG_PRINT_CLOSE` y hace `COMMIT WORK AND WAIT`.
+7. Devuelve `E_RESULT = 'OK'` y en `ES_ERROR` un mensaje de
    confirmación (el de SAP si alguno de los FM anteriores lo dejó
    informado en `sy-msgid`/`sy-msgno`, si no un texto fijo).
 
@@ -94,15 +99,23 @@ docs/
   **Pendiente: volver a probar en QA**, no confirmado todavía que no
   queden más dumps.
 - **"Error interno: No se puede repetir el mensaje" al fallar
-  `ISU_PRINT_EXPANDED`** (QA, 23/11/2026): el propio mecanismo de
+  `ISU_PRINT_EXPANDED`** (QA, 23-24/11/2026): resultó ser un mensaje
+  genérico (clase `55`, nº `405`) sin más información — hubo que
+  depurar paso a paso dentro de `ISU_PRINT_EXPANDED` → `EFG_PRINT_EXPANDED`
+  → `EFG_PRINT` para encontrar el error real: mensaje `EZ 823`,
+  **"Parámetros X_PRINTPARAMS-FORMCLASS y X_PRINTPARAMS-FORMKEY son
+  iniciales al llamar MF EFG_PRINT"** — no estábamos informando el
+  formulario a usar. Corregido localizando la lógica real en la FORM
+  `SET_PRINT_PARAMETERS` de `REAPRIN0` (su código, antes sin ver):
+  `FORMKEY` sale de `EITERDK-FORMKEY` directamente, y `FORMCLASS` se
+  obtiene llamando a `EFG_DB_EFRM_SELECT` con ese `FORMKEY`. Añadido
+  también `LANGU` de `EITERDK-LANGU`, visto en la misma FORM.
+  **Pendiente: volver a probar en QA.**
+  De paso, sustituido en los 6 puntos del código que usaban
   `MESSAGE ID sy-msgid ... INTO ... WITH sy-msgv1...` (que "repite" un
-  mensaje de SAP) fallaba al intentar usarlo, tapando el error real de
-  `ISU_PRINT_EXPANDED` sin que llegáramos a verlo. Sustituido en los 6
-  puntos del código que lo usaban por una construcción directa del
-  texto a partir de `sy-msgid`/`sy-msgno`/`sy-msgty` (sin usar
-  `MESSAGE` para reproducirlo), que no depende de ese mecanismo. Con
-  esto se debería ver ya el `sy-msgid`/`sy-msgno` real del fallo de
-  `ISU_PRINT_EXPANDED`, pendiente de confirmar en la próxima prueba.
+  mensaje de SAP, y fallaba él mismo al intentar usarlo) por una
+  construcción directa del texto a partir de `sy-msgid`/`sy-msgno`/
+  `sy-msgty`, que no depende de ese mecanismo.
 - **Popup "Seleccionar parámetro impresión" al llamar
   `EFG_GET_PRINT_PARAMETERS`** (probado en QA, 23/11/2026): los flags
   `X_NO_DIALOG`/`X_SUPPRESS_BCI_DIALOG`/`X_NO_ARCHIVE` no bastan si no

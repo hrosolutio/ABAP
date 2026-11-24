@@ -86,6 +86,7 @@ FUNCTION zfi_fm_invoice_reprint.
         lt_efg_ranges TYPE STANDARD TABLE OF efg_ranges,
         ls_efg_ranges TYPE efg_ranges,
         lt_addressdata TYPE STANDARD TABLE OF isuaccaddrdata,
+        ls_efrm      TYPE efrm,
         lt_eiterdk   TYPE STANDARD TABLE OF eiterdk,
         ls_eiterdk   TYPE eiterdk,
         ls_printparams  TYPE eprintparams,
@@ -215,6 +216,43 @@ FUNCTION zfi_fm_invoice_reprint.
     ENDIF.
     RETURN.
   ENDIF.
+
+*----------------------------------------------------------------------*
+* 3b. Formulario a usar. EFG_GET_PRINT_PARAMETERS no lo resuelve (es
+*     específico del documento, no un dato genérico de impresión) -
+*     causaba el mensaje EZ 823 "Parámetros X_PRINTPARAMS-FORMCLASS y
+*     X_PRINTPARAMS-FORMKEY son iniciales al llamar MF EFG_PRINT" al
+*     fallar más adentro, en EFG_PRINT (vía ISU_PRINT_EXPANDED ->
+*     EFG_PRINT_EXPANDED -> EFG_PRINT). Localizado leyendo la FORM
+*     SET_PRINT_PARAMETERS de REAPRIN0 (antes sin ver su código):
+*     FORMKEY sale directo de EITERDK-FORMKEY, y FORMCLASS se obtiene
+*     llamando a EFG_DB_EFRM_SELECT con ese FORMKEY.
+*----------------------------------------------------------------------*
+  ls_printparams-formkey = ls_eiterdk-formkey.
+  ls_printparams-langu   = ls_eiterdk-langu.
+
+  CALL FUNCTION 'EFG_DB_EFRM_SELECT'
+    EXPORTING
+      x_formkey     = ls_eiterdk-formkey
+    IMPORTING
+      y_efrm        = ls_efrm
+    EXCEPTIONS
+      not_found     = 1
+      not_qualified = 4
+      OTHERS        = 5.
+
+  IF sy-subrc <> 0.
+    e_result             = 'NOK'.
+    es_error-code        = |{ sy-subrc }|.
+    IF sy-msgid IS NOT INITIAL.
+      es_error-description = |Error SAP { sy-msgid } { sy-msgno } (tipo { sy-msgty })|.
+    ELSE.
+      es_error-description = |No se determinó formulario, FORMKEY { ls_eiterdk-formkey }|.
+    ENDIF.
+    RETURN.
+  ENDIF.
+
+  ls_printparams-formclass = ls_efrm-formclass.
 
 *----------------------------------------------------------------------*
 * 4. Reimpresión / envío del duplicado
