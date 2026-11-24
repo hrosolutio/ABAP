@@ -125,16 +125,21 @@ docs/
   `X_NO_DIALOG`/`X_SUPPRESS_BCI_DIALOG`/`X_NO_ARCHIVE` no bastan si no
   hay un dispositivo de salida (`TDDEST`) determinable automáticamente
   — sin propuesta, la función abre el popup igualmente para pedirlo.
-  Corregido proponiendo un `X_PRINTPARAMS-TDDEST` leído con
-  `GET PARAMETER ID 'PRI'` (impresora por defecto del usuario técnico,
-  configurada en SU01 por sistema — se probó primero con un valor fijo
-  `'LP01'` de QA, pero se descartó por no ser portable entre entornos).
-  **Sigue pendiente la decisión de negocio real**: el servicio
-  debería despachar por el canal configurado del cliente (email/portal,
-  según `SENDCONTROL` de `ISU_GET_ACC_ADRESS_DATA`), no imprimir en un
-  dispositivo físico fijo. Mientras tanto, requiere que el parámetro
-  `PRI` esté configurado en SU01 para el usuario técnico en cada
-  sistema (DEV/QA/PROD) antes de poder ejecutarse.
+  **Sin resolver todavía (24/11/2026) — tres intentos descartados:**
+  - Constante fija (`'LP01'`, valor de QA): descartada, no portable
+    entre entornos.
+  - `GET PARAMETER ID 'PRI'` (impresora por defecto de usuario,
+    configurada en SU01): **probado en QA, no funciona** — venía vacío
+    aunque el parámetro estuviera configurado.
+  - Tabla de customizing Z propia: descartada (decisión del usuario).
+
+  Pendiente de encontrar un dispositivo por defecto a nivel de
+  servidor de spool (SPAD) que se pueda leer sin ambigüedad, o de
+  resolver la pregunta de fondo: el servicio debería despachar por el
+  canal configurado del cliente (email/portal, según `SENDCONTROL` de
+  `ISU_GET_ACC_ADRESS_DATA`), no imprimir en un dispositivo físico
+  fijo. Mientras tanto, el código devuelve `NOK` de forma controlada
+  en este punto (no hay ningún mecanismo activo todavía).
 - **Códigos de error**: `ES_ERROR-CODE` es `NUM3`, no admite texto — las
   primeras versiones usaban códigos de texto (`PARAM_MISSING`,
   `DOC_NOT_FOUND`...), corregido a `'102'` (código de error genérico

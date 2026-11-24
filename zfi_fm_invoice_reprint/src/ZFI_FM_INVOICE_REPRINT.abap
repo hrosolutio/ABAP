@@ -189,16 +189,17 @@ FUNCTION zfi_fm_invoice_reprint.
 *    PARAMETERS" más arriba). Se propone un dispositivo de salida
 *    (X_PRINTPARAMS-TDDEST) porque, sin él, la función abre igualmente
 *    el popup de selección aunque X_NO_DIALOG = 'X' (probado en QA).
-*    El dispositivo se lee del parámetro de usuario estándar 'PRI'
-*    ("impresora por defecto"), configurado en SU01 para el usuario
-*    técnico de MuleSoft en cada sistema - no es un valor fijo en
-*    código, para no depender de qué exista en cada entorno.
+*
+*    PROBADO EN QA (24/11/2026): GET PARAMETER ID 'PRI' NO funciona
+*    aquí (venía vacío aun con el parámetro configurado en SU01) -
+*    descartado. Tabla de customizing Z también descartada (decisión
+*    del usuario). PENDIENTE: decidir el mecanismo real - ver nota
+*    en LZFI_FG_INV_REPRINTTOP.
 *----------------------------------------------------------------------*
-  GET PARAMETER ID 'PRI' FIELD lv_tddest.
   IF lv_tddest IS INITIAL.
     e_result             = 'NOK'.
     es_error-code        = '102'.
-    es_error-description = 'Parámetro de usuario PRI (impresora por defecto) no configurado en SU01'.
+    es_error-description = 'Dispositivo de salida sin determinar (mecanismo pendiente de decidir)'.
     RETURN.
   ENDIF.
 

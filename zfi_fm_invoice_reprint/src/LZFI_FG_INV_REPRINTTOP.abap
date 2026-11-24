@@ -29,12 +29,14 @@ CONSTANTS:
 * "Seleccionar parámetro impresión" pidiéndolo, aunque X_NO_DIALOG='X'.
   gc_true TYPE c VALUE 'X'.
 
-* El dispositivo de salida (X_PRINTPARAMS-TDDEST) ya NO es una
-* constante fija (antes 'LP01', valor de QA que no tiene por qué
-* existir en otros sistemas) - se lee en tiempo de ejecución con
-* GET PARAMETER ID 'PRI' (parámetro estándar SAP de "impresora por
-* defecto del usuario", configurado en SU01 para el usuario técnico
-* de MuleSoft en cada sistema, sin tocar código). Ver el FM.
+* El dispositivo de salida (X_PRINTPARAMS-TDDEST) sigue sin resolver
+* de forma fiable (24/11/2026):
+* - Constante fija ('LP01', valor de QA): descartada, no portable.
+* - GET PARAMETER ID 'PRI' (impresora por defecto de usuario, SU01):
+*   probado en QA, NO funciona (viene vacío aunque esté configurado).
+* - Tabla de customizing Z propia: descartada (decisión del usuario).
+* PENDIENTE: buscar si hay un dispositivo por defecto a nivel de
+* servidor de spool (SPAD) que se pueda leer sin ambigüedad.
 *
 * PENDIENTE DE DECISIÓN DE NEGOCIO: el servicio debería despachar por
 * el canal real del cliente (email/portal, según SENDCONTROL de
