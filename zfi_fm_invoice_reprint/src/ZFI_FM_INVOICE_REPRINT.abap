@@ -116,7 +116,7 @@ FUNCTION zfi_fm_invoice_reprint.
         ls_archive_params TYPE arc_params,
         ls_recipient TYPE swotobjid,
         ls_addressdata TYPE isuaccaddrdata,
-        ls_header    TYPE isuaccaddrdata,
+        ls_header    TYPE rfgen-header,
         lt_efg_ranges_empty TYPE STANDARD TABLE OF efg_ranges,
         lt_otf_data  TYPE STANDARD TABLE OF itcoo,
         lt_pdf_lines TYPE STANDARD TABLE OF tline,
@@ -302,6 +302,14 @@ FUNCTION zfi_fm_invoice_reprint.
 *    selección del paso 2 - verificado en SE37. XT_RANGES1-9 y
 *    XT_RECIPIENT se dejan vacíos (ver nota de cabecera, no
 *    verificado).
+*
+*    X_HEADER es RFGEN-HEADER (verificado en SE37, dump real
+*    CALL_FUNCTION_CONFLICT_TYPE al asumir antes que era ISUACCADDRDATA
+*    solo por ver "l_header = xt_addressdata" en REAPRIN0 - ese era un
+*    MOVE clásico entre tipos distintos por compatibilidad de memoria,
+*    no implica que compartan tipo). Se replica el mismo MOVE (mismo
+*    volcado de bytes que REAPRIN0), ahora con el tipo correcto
+*    declarado para que la interfaz tipada de la función lo acepte.
 *----------------------------------------------------------------------*
   CLEAR ls_efg_ranges.
   ls_efg_ranges-sign   = 'I'.
