@@ -6,7 +6,10 @@ FUNCTION zfi_fm_invoice_reprint.
 *"  EXPORTING
 *"     VALUE(E_RESULT) TYPE  CHAR3
 *"     VALUE(ES_ERROR) TYPE  ZFI_DE_XX_WS_ERROR
+*"     VALUE(E_PDF) TYPE  XSTRING
 *"----------------------------------------------------------------------
+* NOTA: E_PDF es un parámetro NUEVO (24/11/2026) - hay que añadirlo a
+* mano en la pestaña Export de SE37, este comentario no lo crea solo.
 * Reimpresión / envío de duplicado de factura en SAP (equivalente a
 * EA60, con la opción de reimprimir).
 *
@@ -43,28 +46,47 @@ FUNCTION zfi_fm_invoice_reprint.
 *                                 tres flags no salta ningún diálogo
 *                                 con un caso real (solo verificado que
 *                                 el parámetro existe, no que basta).
-*   ISU_PRINT_EXPANDED        -> motor real de impresión/envío.
-*                                 Verificado en SE37: módulo de función
-*                                 normal. De sus 4 parámetros de
-*                                 import, solo X_PRINTPARAMS es
-*                                 obligatorio; X_ARCHIVE_PARAMS,
-*                                 X_ARCHIVE_INDEX y X_RECIPIENT son
-*                                 opcionales - se pasan igualmente aquí
-*                                 porque salen ya calculados de
-*                                 EFG_GET_PRINT_PARAMETERS sin coste
-*                                 extra.
-*   EFG_PRINT_CLOSE           -> cierra el spool generado.
+*   EFG_PRINT_EXPANDED        -> motor real de impresión/envío. NO
+*                                 llamamos a ISU_PRINT_EXPANDED (que es
+*                                 quien la llama normalmente) porque
+*                                 ISU_PRINT_EXPANDED no devuelve el
+*                                 documento generado (verificado en
+*                                 SE37: su Export/Tablas solo repiten
+*                                 los parámetros de entrada) - está
+*                                 pensado para despachar a un
+*                                 dispositivo/canal, no para devolver
+*                                 datos. CAMBIO DE DISEÑO (24/11/2026):
+*                                 MuleSoft no tiene impresora al otro
+*                                 lado, necesita el PDF como dato, así
+*                                 que llamamos directamente a
+*                                 EFG_PRINT_EXPANDED (un nivel más
+*                                 abajo en la cadena, confirmado por
+*                                 depuración en QA), que sí expone
+*                                 YT_OTF_DATA. Con X_PRINTPARAMS-
+*                                 TDGETOTF = 'X' se le pide que no
+*                                 imprima/envíe/visualice, solo que
+*                                 devuelva el OTF - lo que además evita
+*                                 el problema del dispositivo de salida
+*                                 (no hace falta ninguno si no se va a
+*                                 despachar). El OTF se convierte a PDF
+*                                 con el conversor estándar CONVERT_OTF
+*                                 + SCMS_BINARY_TO_XSTRING.
 *
 * NO VERIFICADO / PENDIENTE (a diferencia de REAPRIN0, que hace mucho
 * más de lo que replica esta primera versión):
-* - XT_RANGES de ISU_PRINT_EXPANDED: tipo corregido a EFG_RANGES
-*   (verificado en SE37, distinto de ISU_RANGES usado en la selección -
-*   el tipo incorrecto causó un dump real CALL_FUNCTION_CONFLICT_LENG
-*   en la primera prueba en QA). El TIPO ya está bien, pero el
-*   CONTENIDO sigue siendo una aproximación: en REAPRIN0 lo construye
-*   la FORM SET_PRINT_PARAMETERS, cuyo código fuente no se ha visto
-*   todavía. Aquí se aproxima con un rango de OPBEL, sin confirmar que
-*   sea el contenido correcto para ISU_PRINT_EXPANDED.
+* - Que X_PRINTPARAMS-TDGETOTF='X' realmente evite pedir un
+*   dispositivo de salida (hipótesis razonada, no probada todavía).
+* - Nombres exactos de parámetros de CONVERT_OTF y
+*   SCMS_BINARY_TO_XSTRING: son módulos muy estándar y conocidos, pero
+*   no se han verificado en SE37 contra este sistema en concreto.
+* - XT_RANGES de EFG_PRINT_EXPANDED: tipo EFG_RANGES (verificado en
+*   SE37). El CONTENIDO sigue siendo una aproximación: en REAPRIN0 lo
+*   construye la FORM SET_PRINT_PARAMETERS, cuyo código fuente no se
+*   ha visto todavía. Aquí se aproxima con un rango de OPBEL, sin
+*   confirmar que sea el contenido correcto.
+* - XT_RANGES1-9 y XT_RECIPIENT de EFG_PRINT_EXPANDED se dejan vacíos,
+*   replicando lo que hace ISU_PRINT_EXPANDED internamente (no los
+*   rellena tampoco) - asumido opcional, no confirmado.
 * - dpp_check (bloqueo de interlocutor comercial), reversal_check
 *   (documento ya anulado/reimpreso), enqueue_ca/enqueue_bupa
 *   (bloqueos de cuenta/interlocutor) y print_updates (actualización en
@@ -93,7 +115,12 @@ FUNCTION zfi_fm_invoice_reprint.
         ls_archive_index TYPE toa_dara,
         ls_archive_params TYPE arc_params,
         ls_recipient TYPE swotobjid,
-        lv_tddest    TYPE rspopname.
+        ls_addressdata TYPE isuaccaddrdata,
+        ls_header    TYPE isuaccaddrdata,
+        lt_efg_ranges_empty TYPE STANDARD TABLE OF efg_ranges,
+        lt_otf_data  TYPE STANDARD TABLE OF itcoo,
+        lt_pdf_lines TYPE STANDARD TABLE OF tline,
+        lv_pdf_size  TYPE i.
 
   CLEAR: e_result, es_error.
 
@@ -186,25 +213,16 @@ FUNCTION zfi_fm_invoice_reprint.
 
 *----------------------------------------------------------------------*
 * 3. Parámetros de impresión, sin diálogo (ver nota "EFG_GET_PRINT_
-*    PARAMETERS" más arriba). Se propone un dispositivo de salida
-*    (X_PRINTPARAMS-TDDEST) porque, sin él, la función abre igualmente
-*    el popup de selección aunque X_NO_DIALOG = 'X' (probado en QA).
-*
-*    PROBADO EN QA (24/11/2026): GET PARAMETER ID 'PRI' NO funciona
-*    aquí (venía vacío aun con el parámetro configurado en SU01) -
-*    descartado. Tabla de customizing Z también descartada (decisión
-*    del usuario). PENDIENTE: decidir el mecanismo real - ver nota
-*    en LZFI_FG_INV_REPRINTTOP.
+*    PARAMETERS" más arriba). CAMBIO DE DISEÑO (24/11/2026): ya no se
+*    propone ningún dispositivo de salida - con TDGETOTF='X' se le
+*    pide a la cadena que NO despache a ningún sitio, solo que
+*    devuelva el documento (OTF) como dato. Hipótesis sin probar
+*    todavía: que esto evite también el popup de selección de
+*    impresora (si no se va a despachar, no debería hacer falta
+*    dispositivo). Si el popup sigue saliendo, habrá que revisar esto.
 *----------------------------------------------------------------------*
-  IF lv_tddest IS INITIAL.
-    e_result             = 'NOK'.
-    es_error-code        = '102'.
-    es_error-description = 'Dispositivo de salida sin determinar (mecanismo pendiente de decidir)'.
-    RETURN.
-  ENDIF.
-
   CLEAR ls_printparams.
-  ls_printparams-tddest = lv_tddest.
+  ls_printparams-tdgetotf = gc_true.
 
   CALL FUNCTION 'EFG_GET_PRINT_PARAMETERS'
     EXPORTING
@@ -269,12 +287,17 @@ FUNCTION zfi_fm_invoice_reprint.
   ls_printparams-formclass = ls_efrm-formclass.
 
 *----------------------------------------------------------------------*
-* 4. Reimpresión / envío del duplicado
+* 4. Generación del documento (OTF), llamando directamente a
+*    EFG_PRINT_EXPANDED (no a ISU_PRINT_EXPANDED, ver nota de cabecera)
+*    - un documento por cada dirección/destinatario de LT_ADDRESSDATA,
+*    replicando el bucle que hace ISU_PRINT_EXPANDED internamente.
+*    Normalmente una sola fila (un destinatario principal).
 *
 *    XT_RANGES usa el tipo EFG_RANGES (estructura SIGN/OPTION/LOW/HIGH,
 *    LOW y HIGH tipo TVARV_VAL), distinto de ISU_RANGES usado en la
-*    selección del paso 2 - verificado en SE37, no es el mismo tipo,
-*    así que se construye una tabla de rango aparte para esta llamada.
+*    selección del paso 2 - verificado en SE37. XT_RANGES1-9 y
+*    XT_RECIPIENT se dejan vacíos (ver nota de cabecera, no
+*    verificado).
 *----------------------------------------------------------------------*
   CLEAR ls_efg_ranges.
   ls_efg_ranges-sign   = 'I'.
@@ -282,57 +305,109 @@ FUNCTION zfi_fm_invoice_reprint.
   ls_efg_ranges-low    = i_opbel.
   APPEND ls_efg_ranges TO lt_efg_ranges.
 
-  CALL FUNCTION 'ISU_PRINT_EXPANDED'
+  LOOP AT lt_addressdata INTO ls_addressdata.
+    ls_header = ls_addressdata.
+
+    CALL FUNCTION 'EFG_PRINT_EXPANDED'
+      EXPORTING
+        x_header            = ls_header
+        x_sendcontrol       = ls_addressdata-sendcontrol
+        x_rec_addr          = ls_addressdata-addrnumber
+        x_rec_persnumber    = ls_addressdata-persnumber
+        x_printparams       = ls_printparams
+        x_archive_params    = ls_archive_params
+        x_archive_index     = ls_archive_index
+        x_recipient         = ls_recipient
+      IMPORTING
+        y_printparams       = ls_printparams
+      TABLES
+        xt_ranges           = lt_efg_ranges
+        xt_ranges1          = lt_efg_ranges_empty
+        xt_ranges2          = lt_efg_ranges_empty
+        xt_ranges3          = lt_efg_ranges_empty
+        xt_ranges4          = lt_efg_ranges_empty
+        xt_ranges5          = lt_efg_ranges_empty
+        xt_ranges6          = lt_efg_ranges_empty
+        xt_ranges7          = lt_efg_ranges_empty
+        xt_ranges8          = lt_efg_ranges_empty
+        xt_ranges9          = lt_efg_ranges_empty
+        yt_otf_data         = lt_otf_data
+      EXCEPTIONS
+        not_qualified       = 1
+        print_failed        = 3
+        cancelled           = 4
+        rec_addr_not_found  = 5
+        send_addr_not_found = 6
+        OTHERS              = 7.
+
+    IF sy-subrc <> 0.
+      e_result             = 'NOK'.
+      es_error-code        = |{ sy-subrc }|.
+      IF sy-msgid IS NOT INITIAL.
+        es_error-description = |Error SAP { sy-msgid } { sy-msgno } (tipo { sy-msgty })|.
+      ELSE.
+        es_error-description = |Error técnico en EFG_PRINT_EXPANDED (sy-subrc { sy-subrc })|.
+      ENDIF.
+      RETURN.
+    ENDIF.
+  ENDLOOP.
+
+  IF lt_otf_data IS INITIAL.
+    e_result             = 'NOK'.
+    es_error-code        = '102'.
+    es_error-description = 'EFG_PRINT_EXPANDED no devolvió datos OTF del documento'.
+    RETURN.
+  ENDIF.
+
+*----------------------------------------------------------------------*
+* 5. Conversión del OTF a PDF (módulos estándar, muy conocidos, no
+*    verificados en SE37 contra este sistema en concreto).
+*----------------------------------------------------------------------*
+  CALL FUNCTION 'CONVERT_OTF'
     EXPORTING
-      x_printparams    = ls_printparams
-      x_archive_params = ls_archive_params
-      x_archive_index  = ls_archive_index
-      x_recipient      = ls_recipient
+      format                = 'PDF'
+    IMPORTING
+      bin_filesize          = lv_pdf_size
     TABLES
-      xt_ranges        = lt_efg_ranges
-      xt_addressdata   = lt_addressdata
+      otf                   = lt_otf_data
+      lines                 = lt_pdf_lines
     EXCEPTIONS
-      failed           = 1
-      OTHERS           = 2.
+      err_max_linewidth     = 1
+      err_format            = 2
+      err_conv_not_possible = 3
+      err_bad_otf           = 4
+      OTHERS                = 5.
 
   IF sy-subrc <> 0.
     e_result             = 'NOK'.
     es_error-code        = |{ sy-subrc }|.
-    IF sy-msgid IS NOT INITIAL.
-      es_error-description = |Error SAP { sy-msgid } { sy-msgno } (tipo { sy-msgty })|.
-    ELSE.
-      es_error-description = |Error técnico en ISU_PRINT_EXPANDED (sy-subrc { sy-subrc })|.
-    ENDIF.
+    es_error-description = |Error técnico en CONVERT_OTF (sy-subrc { sy-subrc })|.
     RETURN.
   ENDIF.
 
-*----------------------------------------------------------------------*
-* 5. Cerrar el spool generado
-*----------------------------------------------------------------------*
-  CALL FUNCTION 'EFG_PRINT_CLOSE'
+  CALL FUNCTION 'SCMS_BINARY_TO_XSTRING'
     EXPORTING
-      x_flg_output         = gc_true
-      x_flg_finalize       = gc_true
-      x_flg_clear_spoolids = gc_true
+      input_length = lv_pdf_size
+    IMPORTING
+      buffer       = e_pdf
+    TABLES
+      binary_tab   = lt_pdf_lines
     EXCEPTIONS
-      OTHERS               = 1.
+      failed       = 1
+      OTHERS       = 2.
 
   IF sy-subrc <> 0.
     e_result             = 'NOK'.
     es_error-code        = |{ sy-subrc }|.
-    IF sy-msgid IS NOT INITIAL.
-      es_error-description = |Error SAP { sy-msgid } { sy-msgno } (tipo { sy-msgty })|.
-    ELSE.
-      es_error-description = |Error técnico en EFG_PRINT_CLOSE (sy-subrc { sy-subrc })|.
-    ENDIF.
+    es_error-description = |Error técnico en SCMS_BINARY_TO_XSTRING (sy-subrc { sy-subrc })|.
     RETURN.
   ENDIF.
-
-  COMMIT WORK AND WAIT.
 
 *----------------------------------------------------------------------*
 * 6. Resultado OK. Decisión del usuario: en el caso OK no se rellena
 *    ES_ERROR (queda vacío, ya limpiado al principio de la función).
+*    Sin COMMIT WORK: con el cambio de diseño (generar PDF, no
+*    despachar) esta llamada no contabiliza/actualiza nada en BD.
 *----------------------------------------------------------------------*
   e_result = 'OK'.
 

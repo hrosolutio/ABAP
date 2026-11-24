@@ -43,6 +43,7 @@ docs/
 | `I_OPBEL` | Import | `OPBEL_KK` | Sí | Documento de factura a reimprimir/duplicar |
 | `E_RESULT` | Export | `CHAR3` | — | `OK` / `NOK` |
 | `ES_ERROR` | Export | `ZFI_DE_XX_WS_ERROR` (`CODE`, `DESCRIPTION`) | — | Mensaje de SAP y código, informado **solo en el caso NOK** (igual que en los otros dos desarrollos; decisión explícita del usuario de no rellenarlo en el OK) |
+| `E_PDF` | Export | `XSTRING` | — | El documento (factura) en PDF, como binario. **Parámetro nuevo (24/11/2026)** — hay que añadirlo a mano en la pestaña Export de SE37, no existía en versiones anteriores |
 
 ## Lógica implementada
 
@@ -51,27 +52,25 @@ docs/
    (módulo de función normal, verificado en SE37), filtrando por
    `I_OPBEL`. Asume `X_INVOICED = 'X'` (solo documentos reales, no
    simulaciones) — no verificado con un caso real.
-3. Genera los parámetros de impresión con `EFG_GET_PRINT_PARAMETERS`,
+3. Obtiene los datos de dirección/envío de la cuenta contrato con
+   `ISU_GET_ACC_ADRESS_DATA`.
+4. Genera los parámetros de impresión con `EFG_GET_PRINT_PARAMETERS`,
    usando `X_NO_DIALOG`, `X_SUPPRESS_BCI_DIALOG` y `X_NO_ARCHIVE` a
-   `'X'` para evitar cualquier popup interactivo (el mismo módulo,
-   llamado desde pantalla en `REAPRIN0`, abre el popup de selección de
-   impresora si no se le indica lo contrario), y proponiendo un
-   dispositivo de salida (`X_PRINTPARAMS-TDDEST`) porque sin él la
-   función pide el dispositivo igualmente aunque `X_NO_DIALOG = 'X'`.
-   El dispositivo se lee con `GET PARAMETER ID 'PRI'` (parámetro
-   estándar de usuario "impresora por defecto", configurado en SU01
-   para el usuario técnico en cada sistema) — si no está configurado,
-   el servicio devuelve `NOK` en vez de fallar a ciegas.
-4. Determina el formulario a usar: `FORMKEY` de `EITERDK-FORMKEY`
+   `'X'` para evitar cualquier popup interactivo, y **`TDGETOTF = 'X'`**
+   para que la cadena no despache a ningún sitio (ni imprima, ni
+   visualice, ni envíe) y solo devuelva el documento como dato (OTF).
+5. Determina el formulario a usar: `FORMKEY` de `EITERDK-FORMKEY`
    (directo) y `FORMCLASS` llamando a `EFG_DB_EFRM_SELECT` con ese
    `FORMKEY` (lógica localizada en la FORM `SET_PRINT_PARAMETERS` de
-   `REAPRIN0`). Sin esto, `ISU_PRINT_EXPANDED` falla internamente
+   `REAPRIN0`). Sin esto, el motor de impresión falla internamente
    (mensaje `EZ 823`).
-5. Llama a `ISU_PRINT_EXPANDED` (módulo de función normal, verificado
-   en SE37) con los parámetros de impresión generados, para generar de
-   verdad el duplicado.
-6. Cierra el spool con `EFG_PRINT_CLOSE` y hace `COMMIT WORK AND WAIT`.
-7. Devuelve `E_RESULT = 'OK'`, sin rellenar `ES_ERROR`.
+6. Llama a **`EFG_PRINT_EXPANDED`** (no a `ISU_PRINT_EXPANDED`, que no
+   devuelve el documento generado — ver cabecera del `.abap`), una vez
+   por cada destinatario de los datos de dirección, recogiendo
+   `YT_OTF_DATA`.
+7. Convierte el OTF a PDF con los módulos estándar `CONVERT_OTF` +
+   `SCMS_BINARY_TO_XSTRING`, devolviendo el resultado en `E_PDF`.
+8. Devuelve `E_RESULT = 'OK'`, sin rellenar `ES_ERROR`.
 
 ## Instalación en SAP (SE80 / SE37)
 
@@ -84,28 +83,34 @@ docs/
    - Atributos: marcar **"Módulo de función remoto"** (RFC).
    - Pestaña *Import*: `I_OPBEL` (obligatorio), tipo `OPBEL_KK`.
    - Pestaña *Export*: `E_RESULT`, `ES_ERROR` (tipo DDIC
-     `ZFI_DE_XX_WS_ERROR`, reutilizado de los otros desarrollos).
+     `ZFI_DE_XX_WS_ERROR`, reutilizado de los otros desarrollos), y
+     **`E_PDF`** tipo `XSTRING`.
    - Pestaña *Código fuente*: pegar `src/ZFI_FM_INVOICE_REPRINT.abap`.
 4. Activar y probar contra un documento de factura real ya emitido.
 
 ## Pendiente / a definir con el cliente
 
+- **CAMBIO DE DISEÑO (24/11/2026)**: tras varias vueltas intentando
+  determinar un dispositivo de salida (constante fija, `GET PARAMETER
+  ID 'PRI'`, tabla Z — los tres descartados), se cayó en la cuenta de
+  que no hacía falta ninguno: MuleSoft no tiene impresora al otro
+  lado, necesita el **PDF como dato**. Rediseñado para llamar
+  directamente a `EFG_PRINT_EXPANDED` con `TDGETOTF = 'X'` (devuelve
+  el OTF sin despachar a ningún sitio) y convertirlo a PDF con
+  `CONVERT_OTF` + `SCMS_BINARY_TO_XSTRING`. **Pendiente de probar en
+  QA** — ni esta cadena nueva, ni la hipótesis de que `TDGETOTF`
+  evite también el popup de selección de impresora.
 - **Pruebas reales en QA (23/11/2026)**, dos dumps encontrados y corregidos:
   1. `CALL_FUNCTION_CONFLICT_LENG` en `ISU_S_EITERDK_SELECT_ALL` — `XT_OPBEL`
      mal tipado (`RANGE OF opbel_kk` casero en vez de `ISU_RANGES`, el
-     tipo real). Corregido, y de paso corregido también `XT_RANGES` de
-     `ISU_PRINT_EXPANDED` (tipo real `EFG_RANGES`, distinto de
-     `ISU_RANGES`).
-  2. `CALL_FUNCTION_PARM_MISSING` en `ISU_PRINT_EXPANDED` (`XT_ADDRESSDATA`
-     no informado) — la llamada a `ISU_GET_ACC_ADRESS_DATA` (identificada
-     en la investigación inicial como parte de la cadena real) se quedó
-     sin implementar en la primera versión. Añadida ahora.
-  **Pendiente: volver a probar en QA**, no confirmado todavía que no
-  queden más dumps.
-- **"Error interno: No se puede repetir el mensaje" al fallar
-  `ISU_PRINT_EXPANDED`** (QA, 23-24/11/2026): resultó ser un mensaje
-  genérico (clase `55`, nº `405`) sin más información — hubo que
-  depurar paso a paso dentro de `ISU_PRINT_EXPANDED` → `EFG_PRINT_EXPANDED`
+     tipo real). Corregido.
+  2. `CALL_FUNCTION_PARM_MISSING` (`XT_ADDRESSDATA` no informado) — la
+     llamada a `ISU_GET_ACC_ADRESS_DATA` (identificada en la
+     investigación inicial como parte de la cadena real) se quedó sin
+     implementar en la primera versión. Añadida ahora.
+- **"Error interno: No se puede repetir el mensaje"**: resultó ser un
+  mensaje genérico (clase `55`, nº `405`) sin más información — hubo
+  que depurar paso a paso dentro de `ISU_PRINT_EXPANDED` → `EFG_PRINT_EXPANDED`
   → `EFG_PRINT` para encontrar el error real: mensaje `EZ 823`,
   **"Parámetros X_PRINTPARAMS-FORMCLASS y X_PRINTPARAMS-FORMKEY son
   iniciales al llamar MF EFG_PRINT"** — no estábamos informando el
@@ -114,51 +119,36 @@ docs/
   `FORMKEY` sale de `EITERDK-FORMKEY` directamente, y `FORMCLASS` se
   obtiene llamando a `EFG_DB_EFRM_SELECT` con ese `FORMKEY`. Añadido
   también `LANGU` de `EITERDK-LANGU`, visto en la misma FORM.
-  **Pendiente: volver a probar en QA.**
-  De paso, sustituido en los 6 puntos del código que usaban
+  De paso, sustituido en todos los puntos del código que usaban
   `MESSAGE ID sy-msgid ... INTO ... WITH sy-msgv1...` (que "repite" un
   mensaje de SAP, y fallaba él mismo al intentar usarlo) por una
   construcción directa del texto a partir de `sy-msgid`/`sy-msgno`/
   `sy-msgty`, que no depende de ese mecanismo.
-- **Popup "Seleccionar parámetro impresión" al llamar
-  `EFG_GET_PRINT_PARAMETERS`** (probado en QA, 23/11/2026): los flags
-  `X_NO_DIALOG`/`X_SUPPRESS_BCI_DIALOG`/`X_NO_ARCHIVE` no bastan si no
-  hay un dispositivo de salida (`TDDEST`) determinable automáticamente
-  — sin propuesta, la función abre el popup igualmente para pedirlo.
-  **Sin resolver todavía (24/11/2026) — tres intentos descartados:**
-  - Constante fija (`'LP01'`, valor de QA): descartada, no portable
-    entre entornos.
-  - `GET PARAMETER ID 'PRI'` (impresora por defecto de usuario,
-    configurada en SU01): **probado en QA, no funciona** — venía vacío
-    aunque el parámetro estuviera configurado.
-  - Tabla de customizing Z propia: descartada (decisión del usuario).
-
-  Pendiente de encontrar un dispositivo por defecto a nivel de
-  servidor de spool (SPAD) que se pueda leer sin ambigüedad, o de
-  resolver la pregunta de fondo: el servicio debería despachar por el
-  canal configurado del cliente (email/portal, según `SENDCONTROL` de
-  `ISU_GET_ACC_ADRESS_DATA`), no imprimir en un dispositivo físico
-  fijo. Mientras tanto, el código devuelve `NOK` de forma controlada
-  en este punto (no hay ningún mecanismo activo todavía).
 - **Códigos de error**: `ES_ERROR-CODE` es `NUM3`, no admite texto — las
   primeras versiones usaban códigos de texto (`PARAM_MISSING`,
   `DOC_NOT_FOUND`...), corregido a `'102'` (código de error genérico
   hacia Mulesoft, igual que los otros dos RFC del repo). El caso `OK`
   no rellena `ES_ERROR` (decisión del usuario), así que no aplica aquí.
-- Confirmar que `X_NO_DIALOG` + `X_SUPPRESS_BCI_DIALOG` + `X_NO_ARCHIVE`
-  evitan de verdad cualquier popup al llamar `EFG_GET_PRINT_PARAMETERS`.
-- **Contenido de `XT_RANGES` de `ISU_PRINT_EXPANDED`**: el tipo ya está
+- **Nombres exactos de `CONVERT_OTF` y `SCMS_BINARY_TO_XSTRING`**: son
+  módulos muy estándar y conocidos, pero no se han verificado en SE37
+  contra este sistema en concreto.
+- **Contenido de `XT_RANGES` de `EFG_PRINT_EXPANDED`**: el tipo está
   corregido (`EFG_RANGES`), pero el contenido sigue siendo una
   aproximación — en `REAPRIN0` lo construye la FORM
-  `SET_PRINT_PARAMETERS`, cuyo código no se ha visto todavía. Aquí se
-  ha aproximado con un rango de `OPBEL`, sin confirmar que sea el
-  contenido correcto.
+  `SET_PRINT_PARAMETERS`, cuyo código no se ha visto todavía (solo la
+  parte de `FORMKEY`/`FORMCLASS`). Aquí se ha aproximado con un rango
+  de `OPBEL`, sin confirmar que sea el contenido correcto.
+- **`XT_RANGES1-9` y `XT_RECIPIENT` de `EFG_PRINT_EXPANDED`** se dejan
+  vacíos, replicando lo que hace `ISU_PRINT_EXPANDED` internamente
+  (tampoco los rellena) — asumido opcional, no confirmado.
 - **No replicadas en esta primera versión** (código fuente no visto):
   `dpp_check` (interlocutor comercial bloqueado), `reversal_check`
   (documento ya anulado/reimpreso), bloqueos de cuenta/interlocutor
   (`enqueue_ca`/`enqueue_bupa`), y la actualización en BD tras imprimir
   (`print_updates`). Riesgo: se podría generar un duplicado sin alguna
-  validación de negocio que sí aplica la transacción estándar.
+  validación de negocio que sí aplica la transacción estándar. Con el
+  cambio de diseño (ya no se contabiliza nada), este riesgo es menor
+  que antes, pero sigue sin confirmarse.
 - Confirmar si `XT_ERGRD` debe llevar algún filtro (en la pantalla EA60
   es obligatorio; aquí se ha dejado vacío, asumiendo que no hace falta
   al identificar el documento directamente por `OPBEL`).

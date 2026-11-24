@@ -22,24 +22,20 @@ CONSTANTS:
 * Kein Dialog"). X_SUPPRESS_BCI_DIALOG y X_NO_ARCHIVE añadidos por el
 * mismo motivo (suprimir el popup de dirección de email/fax y no
 * ofrecer archivado).
-*
-* PROBADO EN QA (23/11/2026): estos flags NO bastan por sí solos si no
-* hay un dispositivo de salida (TDDEST) determinable - sin "propuesta"
-* de dispositivo, EFG_GET_PRINT_PARAMETERS sigue abriendo el popup
-* "Seleccionar parámetro impresión" pidiéndolo, aunque X_NO_DIALOG='X'.
   gc_true TYPE c VALUE 'X'.
 
-* El dispositivo de salida (X_PRINTPARAMS-TDDEST) sigue sin resolver
-* de forma fiable (24/11/2026):
-* - Constante fija ('LP01', valor de QA): descartada, no portable.
-* - GET PARAMETER ID 'PRI' (impresora por defecto de usuario, SU01):
-*   probado en QA, NO funciona (viene vacío aunque esté configurado).
-* - Tabla de customizing Z propia: descartada (decisión del usuario).
-* PENDIENTE: buscar si hay un dispositivo por defecto a nivel de
-* servidor de spool (SPAD) que se pueda leer sin ambigüedad.
+* CAMBIO DE DISEÑO (24/11/2026): el dispositivo de salida
+* (X_PRINTPARAMS-TDDEST) dejó de ser necesario. MuleSoft no tiene
+* impresora al otro lado - lo que necesita es el PDF como dato, no que
+* se despache a ningún sitio. Se usa X_PRINTPARAMS-TDGETOTF = 'X'
+* ("devuélveme el OTF, sin imprimir/visualizar/enviar"), llamando
+* directamente a EFG_PRINT_EXPANDED (no a ISU_PRINT_EXPANDED, que no
+* devuelve el documento) y convirtiendo el OTF a PDF con CONVERT_OTF +
+* SCMS_BINARY_TO_XSTRING. Ver el FM para el detalle completo.
 *
-* PENDIENTE DE DECISIÓN DE NEGOCIO: el servicio debería despachar por
-* el canal real del cliente (email/portal, según SENDCONTROL de
-* ISU_GET_ACC_ADRESS_DATA), no necesariamente imprimir en un
-* dispositivo físico fijo - esto sigue sin resolver.
-
+* Historial descartado antes de llegar a esta solución (dispositivo de
+* salida fijo para poder despachar): constante fija ('LP01' de QA, no
+* portable), GET PARAMETER ID 'PRI' (probado en QA, no funciona), tabla
+* de customizing Z propia (descartada por decisión del usuario). Todo
+* esto queda obsoleto con el cambio de diseño - ya no hace falta
+* ningún dispositivo.
