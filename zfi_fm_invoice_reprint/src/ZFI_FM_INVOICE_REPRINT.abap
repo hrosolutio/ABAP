@@ -324,9 +324,9 @@ FUNCTION zfi_fm_invoice_reprint.
 *    deja, se usa un texto fijo de confirmación.
 *----------------------------------------------------------------------*
   e_result      = 'OK'.
-  es_error-code = 'OK'.
+  es_error-code = 'OK'. " TODO: código numérico NUM3 pendiente de confirmar con el usuario
   IF sy-msgid IS NOT INITIAL.
-    es_error-description = |Error SAP { sy-msgid } { sy-msgno } (tipo { sy-msgty })|.
+    es_error-description = |Mensaje SAP { sy-msgid } { sy-msgno } (tipo { sy-msgty })|.
   ELSE.
     es_error-description = |Duplicado del documento { i_opbel } generado correctamente|.
   ENDIF.
