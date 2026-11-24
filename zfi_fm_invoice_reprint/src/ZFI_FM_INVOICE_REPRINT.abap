@@ -317,18 +317,9 @@ FUNCTION zfi_fm_invoice_reprint.
   COMMIT WORK AND WAIT.
 
 *----------------------------------------------------------------------*
-* 6. Resultado OK. Por requisito de Diego, se informa mensaje y código
-*    también en el caso OK, no solo en el de error. PENDIENTE DE
-*    VERIFICAR si alguno de los FM anteriores deja sy-msgid/sy-msgno
-*    informados en el caso de éxito (no comprobado todavía); si no los
-*    deja, se usa un texto fijo de confirmación.
+* 6. Resultado OK. Decisión del usuario: en el caso OK no se rellena
+*    ES_ERROR (queda vacío, ya limpiado al principio de la función).
 *----------------------------------------------------------------------*
-  e_result      = 'OK'.
-  es_error-code = 'OK'. " TODO: código numérico NUM3 pendiente de confirmar con el usuario
-  IF sy-msgid IS NOT INITIAL.
-    es_error-description = |Mensaje SAP { sy-msgid } { sy-msgno } (tipo { sy-msgty })|.
-  ELSE.
-    es_error-description = |Duplicado del documento { i_opbel } generado correctamente|.
-  ENDIF.
+  e_result = 'OK'.
 
 ENDFUNCTION.

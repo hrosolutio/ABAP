@@ -4,7 +4,10 @@ Implementación del servicio RFC para `SAP_ATC_007` (Enviar duplicado de
 factura), sin Diseño Funcional — según indicó Diego, para los servicios
 de Ola 2 no hay DF: es exponer la transacción estándar tal cual, con la
 entrada de la pantalla, devolviendo mensaje de SAP y código de retorno
-tanto en OK como en NOK.
+en caso de error. **Decisión del usuario**: en el caso OK no se rellena
+`ES_ERROR` (queda vacío) — aunque Diego habló en general de "mensaje y
+código tanto en OK como en error" para los servicios de Ola 2, para
+este desarrollo en concreto se ha decidido no informarlo en el OK.
 
 Replica el comportamiento de la transacción estándar **EA60** (con la
 opción de reimprimir) para generar, desde un sistema externo (vía
@@ -39,7 +42,7 @@ docs/
 |---|---|---|---|---|
 | `I_OPBEL` | Import | `OPBEL_KK` | Sí | Documento de factura a reimprimir/duplicar |
 | `E_RESULT` | Export | `CHAR3` | — | `OK` / `NOK` |
-| `ES_ERROR` | Export | `ZFI_DE_XX_WS_ERROR` (`CODE`, `DESCRIPTION`) | — | Mensaje de SAP y código, informado **tanto en OK como en NOK** (requisito de Diego, distinto del patrón de los otros dos desarrollos, que solo informan `ES_ERROR` en el caso de error) |
+| `ES_ERROR` | Export | `ZFI_DE_XX_WS_ERROR` (`CODE`, `DESCRIPTION`) | — | Mensaje de SAP y código, informado **solo en el caso NOK** (igual que en los otros dos desarrollos; decisión explícita del usuario de no rellenarlo en el OK) |
 
 ## Lógica implementada
 
@@ -65,9 +68,7 @@ docs/
    en SE37) con los parámetros de impresión generados, para generar de
    verdad el duplicado.
 6. Cierra el spool con `EFG_PRINT_CLOSE` y hace `COMMIT WORK AND WAIT`.
-7. Devuelve `E_RESULT = 'OK'` y en `ES_ERROR` un mensaje de
-   confirmación (el de SAP si alguno de los FM anteriores lo dejó
-   informado en `sy-msgid`/`sy-msgno`, si no un texto fijo).
+7. Devuelve `E_RESULT = 'OK'`, sin rellenar `ES_ERROR`.
 
 ## Instalación en SAP (SE80 / SE37)
 
@@ -130,9 +131,8 @@ docs/
 - **Códigos de error**: `ES_ERROR-CODE` es `NUM3`, no admite texto — las
   primeras versiones usaban códigos de texto (`PARAM_MISSING`,
   `DOC_NOT_FOUND`...), corregido a `'102'` (código de error genérico
-  hacia Mulesoft, igual que los otros dos RFC del repo). **Pendiente**:
-  el código numérico para el caso `OK` (línea ~260, todavía usa
-  `'OK'` como texto) — sin confirmar con el usuario.
+  hacia Mulesoft, igual que los otros dos RFC del repo). El caso `OK`
+  no rellena `ES_ERROR` (decisión del usuario), así que no aplica aquí.
 - Confirmar que `X_NO_DIALOG` + `X_SUPPRESS_BCI_DIALOG` + `X_NO_ARCHIVE`
   evitan de verdad cualquier popup al llamar `EFG_GET_PRINT_PARAMETERS`.
 - **Contenido de `XT_RANGES` de `ISU_PRINT_EXPANDED`**: el tipo ya está
