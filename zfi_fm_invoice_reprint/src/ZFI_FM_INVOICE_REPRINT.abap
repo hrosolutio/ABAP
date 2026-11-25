@@ -225,10 +225,19 @@ FUNCTION zfi_fm_invoice_reprint.
 *    lo intercepta antes), se usa 'LOCL' (constante
 *    gc_tddest_dummy, ver LZFI_FG_INV_REPRINTTOP) como valor de
 *    usar y tirar, solo para que el campo no esté vacío.
+*
+*    LAST_DOC = 'Y' (ese valor exacto, visto en REAPRIN0, no 'X'):
+*    señala que este es el último/único documento de la "tanda" -
+*    REAPRIN0 lo pone solo en el último documento de un lote, y su
+*    propio comentario dice que es EFG_PRINT_CLOSE quien, al verlo,
+*    cierra/finaliza de verdad el formulario (sin esto, el formulario
+*    se procesa pero nunca se cierra, y no llega a volcar el OTF -
+*    hipótesis para probar, no confirmada todavía).
 *----------------------------------------------------------------------*
   CLEAR ls_printparams.
   ls_printparams-tdgetotf = gc_true.
   ls_printparams-tddest   = gc_tddest_dummy.
+  ls_printparams-last_doc = 'Y'.
 
   CALL FUNCTION 'EFG_GET_PRINT_PARAMETERS'
     EXPORTING
@@ -367,6 +376,36 @@ FUNCTION zfi_fm_invoice_reprint.
       RETURN.
     ENDIF.
   ENDLOOP.
+
+*----------------------------------------------------------------------*
+* 4b. Cerrar/finalizar el formulario - vuelta a añadir (se había
+*     quitado al rediseñar para no despachar, pensando que solo
+*     cerraba el spool). Con LAST_DOC = 'Y', REAPRIN0 indica que es
+*     esta función quien de verdad cierra el formulario. Hipótesis sin
+*     confirmar todavía.
+*
+*     X_FLG_OUTPUT = space (no gc_true): no queremos que despache/
+*     imprima de verdad, solo que finalice y deje los datos listos -
+*     no verificado que este sea el valor correcto para eso.
+*----------------------------------------------------------------------*
+  CALL FUNCTION 'EFG_PRINT_CLOSE'
+    EXPORTING
+      x_flg_output         = space
+      x_flg_finalize       = gc_true
+      x_flg_clear_spoolids = gc_true
+    EXCEPTIONS
+      OTHERS               = 1.
+
+  IF sy-subrc <> 0.
+    e_result             = 'NOK'.
+    es_error-code        = |{ sy-subrc }|.
+    IF sy-msgid IS NOT INITIAL.
+      es_error-description = |Error SAP { sy-msgid } { sy-msgno } (tipo { sy-msgty })|.
+    ELSE.
+      es_error-description = |Error técnico en EFG_PRINT_CLOSE (sy-subrc { sy-subrc })|.
+    ENDIF.
+    RETURN.
+  ENDIF.
 
 *----------------------------------------------------------------------*
 * 5. Obtención del PDF. Dos caminos posibles, según si el formulario es

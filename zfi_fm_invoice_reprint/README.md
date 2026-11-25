@@ -118,17 +118,26 @@ docs/
   `X_HEADER` es en realidad `RFGEN-HEADER`. Corregido, manteniendo el
   mismo `MOVE`.
 - **`YT_OTF_DATA` vacía tras la llamada** (probado en QA, sin dump ni
-  popup — la llamada en sí funciona): resultó ser porque el formulario
-  de esta factura podría ser PDF-based (Adobe Forms), no SAPscript/
-  SmartForms clásico — en ese caso el documento viene por
-  `Y_PDF_RESULT-STR_RESULT_FORM-PDF` (verificado en SE11: tipo
-  `FPCONTENT`/`RAWSTRING`, compatible con `XSTRING` sin conversión),
-  no por `YT_OTF_DATA`. Añadido el camino alternativo: si `Y_PDF_RESULT`
-  viene relleno se usa directamente, si no se sigue con
-  `YT_OTF_DATA` → `CONVERT_OTF`. **Pendiente de confirmar en QA cuál
-  de los dos caminos es el que realmente aplica a esta factura, y que
-  el PDF resultante sea correcto** (no se ha podido abrir/verificar el
-  contenido del PDF todavía).
+  popup — la llamada en sí funciona): resultó ser que esta factura usa
+  un SmartForm real, `ZFA_SF_FACT_ISU` (confirmado en la tabla `EFRM`:
+  `FORMTYPE = SF`, `SMARTFORM = ZFA_SF_FACT_ISU` — el `FORMKEY`,
+  `ZFA_AF_FACTURA_ISU`, no es un nombre de formulario, llevó a dos
+  suposiciones erróneas antes de comprobarlo en `EFRM`). Depurado paso
+  a paso: `SSF_FUNCTION_MODULE_NAME` resuelve bien el módulo generado
+  real (`/1BCDWB/SF00000005`), y `EFG_PRINT` lo invoca (vía un segundo
+  nivel de función generada, `/1PWB/...`) sin error — pero
+  `YT_OTF_DATA` sigue vacía incluso en ese nivel. Hipótesis en curso
+  (sin confirmar): falta `LS_PRINTPARAMS-LAST_DOC = 'Y'` (visto en
+  `REAPRIN0`, con ese valor exacto) y la llamada a `EFG_PRINT_CLOSE`
+  (quitada al rediseñar, pensando que solo cerraba el spool) — según
+  el propio comentario de `REAPRIN0`, es `EFG_PRINT_CLOSE` quien de
+  verdad cierra/finaliza el formulario cuando `LAST_DOC = 'Y'`. Añadidos
+  los dos. **Pendiente de confirmar en QA si esto resuelve el volcado
+  del OTF.**
+  De paso, se mantiene el camino alternativo por si el formulario fuera
+  PDF-based en vez de SmartForm: si `Y_PDF_RESULT-STR_RESULT_FORM-PDF`
+  viene relleno se usa directamente, si no se sigue con `YT_OTF_DATA`
+  → `CONVERT_OTF`.
 - **Pruebas reales en QA (23/11/2026)**, dos dumps encontrados y corregidos:
   1. `CALL_FUNCTION_CONFLICT_LENG` en `ISU_S_EITERDK_SELECT_ALL` — `XT_OPBEL`
      mal tipado (`RANGE OF opbel_kk` casero en vez de `ISU_RANGES`, el
