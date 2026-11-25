@@ -121,7 +121,8 @@ FUNCTION zfi_fm_invoice_reprint.
         lt_otf_data  TYPE STANDARD TABLE OF itcoo,
         lt_pdf_lines TYPE STANDARD TABLE OF tline,
         lv_pdf_size  TYPE i,
-        ls_pdf_result TYPE efg_strn_pdf_result.
+        ls_pdf_result TYPE efg_strn_pdf_result,
+        ls_sf_result TYPE ssfcrescl.
 
   CLEAR: e_result, es_error.
 
@@ -334,6 +335,7 @@ FUNCTION zfi_fm_invoice_reprint.
       IMPORTING
         y_printparams       = ls_printparams
         y_pdf_result        = ls_pdf_result
+        y_sf_result         = ls_sf_result
       TABLES
         xt_ranges           = lt_efg_ranges
         xt_ranges1          = lt_efg_ranges_empty
