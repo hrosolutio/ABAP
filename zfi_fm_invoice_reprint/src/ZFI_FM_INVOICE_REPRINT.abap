@@ -72,13 +72,31 @@ FUNCTION zfi_fm_invoice_reprint.
 *                                 con el conversor estándar CONVERT_OTF
 *                                 + SCMS_BINARY_TO_XSTRING.
 *
+* CAMBIO DE DISEÑO (25/11/2026): el planteamiento de TDGETOTF de arriba
+* se descartó tras depurar en QA toda la cadena real (EFG_PRINT ->
+* función generada /1PWB/... -> SmartForm real /1BCDWB/SF00000005):
+* GETOTF sí llega correctamente hasta el motor SmartForms y el
+* formulario SÍ se genera (1 página), pero el resultado nunca se
+* vuelca porque la tabla EFRM tiene OCL_CONTROL='X' (cierre diferido
+* del formulario, para imprimir muchas facturas seguidas sin reabrir
+* sesión) combinado con que EFG_GET_PRINT_PARAMETERS y
+* EFG_PRINT_EXPANDED fuerzan siempre el dispositivo a PRINTER (ignoran
+* cualquier otro valor) - esto hace que EFG_PRINT fuerce
+* NO_CLOSE_FORM='X' en la llamada real, así que el CLOSE_FORM (quien
+* vuelca el OTF) nunca se ejecuta. Y EFG_PRINT_CLOSE (pensado para
+* ese cierre diferido) tampoco sirve para recuperarlo: su código
+* fuente confirma que el resultado del cierre son variables locales
+* sin ningún parámetro de export que las devuelva. Solución final:
+* dejar que imprima de verdad a un spool (aunque sea a un dispositivo
+* sin impresora física real, 'LOCL') y leer ESE spool con el conversor
+* estándar CONVERT_ABAPSPOOLJOB_2_PDF - ver detalle en los pasos 3 y 5
+* del código.
+*
 * NO VERIFICADO / PENDIENTE (a diferencia de REAPRIN0, que hace mucho
 * más de lo que replica esta primera versión):
-* - Que X_PRINTPARAMS-TDGETOTF='X' realmente evite pedir un
-*   dispositivo de salida (hipótesis razonada, no probada todavía).
-* - Nombres exactos de parámetros de CONVERT_OTF y
-*   SCMS_BINARY_TO_XSTRING: son módulos muy estándar y conocidos, pero
-*   no se han verificado en SE37 contra este sistema en concreto.
+* - CONVERT_ABAPSPOOLJOB_2_PDF: interfaz verificada en SE37 (ver
+*   comentario del paso 5), pero su comportamiento real no se ha
+*   probado todavía contra este sistema en concreto.
 * - XT_RANGES de EFG_PRINT_EXPANDED: tipo EFG_RANGES (verificado en
 *   SE37). El CONTENIDO sigue siendo una aproximación: en REAPRIN0 lo
 *   construye la FORM SET_PRINT_PARAMETERS, cuyo código fuente no se
@@ -118,11 +136,10 @@ FUNCTION zfi_fm_invoice_reprint.
         ls_addressdata TYPE isuaccaddrdata,
         ls_header    TYPE rfgen-header,
         lt_efg_ranges_empty TYPE STANDARD TABLE OF efg_ranges,
-        lt_otf_data  TYPE STANDARD TABLE OF itcoo,
         lt_pdf_lines TYPE STANDARD TABLE OF tline,
         lv_pdf_size  TYPE i,
-        ls_pdf_result TYPE efg_strn_pdf_result,
-        ls_sf_result TYPE ssfcrescl.
+        lt_spoolid   TYPE tsfspoolid,
+        lv_spoolid   TYPE tsp01-rqident.
 
   CLEAR: e_result, es_error.
 
@@ -215,28 +232,27 @@ FUNCTION zfi_fm_invoice_reprint.
 
 *----------------------------------------------------------------------*
 * 3. Parámetros de impresión, sin diálogo (ver nota "EFG_GET_PRINT_
-*    PARAMETERS" más arriba). Con TDGETOTF='X' se le pide a la cadena
-*    que NO despache a ningún sitio, solo que devuelva el documento
-*    (OTF) como dato.
+*    PARAMETERS" más arriba).
 *
-*    PROBADO EN QA (24/11/2026): TDGETOTF NO evita el popup de
-*    selección de dispositivo de salida - sigue siendo obligatorio.
-*    Como el documento nunca llega a despacharse de verdad (TDGETOTF
-*    lo intercepta antes), se usa 'LOCL' (constante
-*    gc_tddest_dummy, ver LZFI_FG_INV_REPRINTTOP) como valor de
-*    usar y tirar, solo para que el campo no esté vacío.
+*    Ya NO se usa TDGETOTF (ver "CAMBIO DE DISEÑO 25/11/2026" en la
+*    cabecera): dejamos que imprima de verdad a un spool. 'LOCL'
+*    (constante gc_tddest_dummy, ver LZFI_FG_INV_REPRINTTOP) es un
+*    dispositivo de usar y tirar, sin impresora física real detrás -
+*    el spool se guarda en BD igualmente aunque el despacho físico no
+*    llegue a ningún sitio.
+*
+*    TDNEWID='X' para asegurar que se genera un número de spool nuevo
+*    y propio de esta llamada, no que se reutilice uno anterior.
 *
 *    LAST_DOC = 'Y' (ese valor exacto, visto en REAPRIN0, no 'X'):
 *    señala que este es el último/único documento de la "tanda" -
-*    REAPRIN0 lo pone solo en el último documento de un lote, y su
-*    propio comentario dice que es EFG_PRINT_CLOSE quien, al verlo,
-*    cierra/finaliza de verdad el formulario (sin esto, el formulario
-*    se procesa pero nunca se cierra, y no llega a volcar el OTF -
-*    hipótesis para probar, no confirmada todavía).
+*    sigue haciendo falta para que EFG_PRINT_CLOSE cierre/finalice de
+*    verdad el spool (aunque, como se descubrió depurando, esa función
+*    no sirve para recuperar el PDF en sí - solo para esto).
 *----------------------------------------------------------------------*
   CLEAR ls_printparams.
-  ls_printparams-tdgetotf = gc_true.
   ls_printparams-tddest   = gc_tddest_dummy.
+  ls_printparams-tdnewid  = gc_true.
   ls_printparams-last_doc = 'Y'.
 
   CALL FUNCTION 'EFG_GET_PRINT_PARAMETERS'
@@ -302,11 +318,14 @@ FUNCTION zfi_fm_invoice_reprint.
   ls_printparams-formclass = ls_efrm-formclass.
 
 *----------------------------------------------------------------------*
-* 4. Generación del documento (OTF), llamando directamente a
+* 4. Impresión del documento, llamando directamente a
 *    EFG_PRINT_EXPANDED (no a ISU_PRINT_EXPANDED, ver nota de cabecera)
 *    - un documento por cada dirección/destinatario de LT_ADDRESSDATA,
 *    replicando el bucle que hace ISU_PRINT_EXPANDED internamente.
-*    Normalmente una sola fila (un destinatario principal).
+*    Normalmente una sola fila (un destinatario principal). Ya no se
+*    recoge Y_PDF_RESULT/Y_SF_RESULT/YT_OTF_DATA aquí (ver "CAMBIO DE
+*    DISEÑO 25/11/2026" en la cabecera) - el documento se recupera
+*    después, en el paso 5, a partir del spool generado.
 *
 *    XT_RANGES usa el tipo EFG_RANGES (estructura SIGN/OPTION/LOW/HIGH,
 *    LOW y HIGH tipo TVARV_VAL), distinto de ISU_RANGES usado en la
@@ -343,8 +362,6 @@ FUNCTION zfi_fm_invoice_reprint.
         x_recipient         = ls_recipient
       IMPORTING
         y_printparams       = ls_printparams
-        y_pdf_result        = ls_pdf_result
-        y_sf_result         = ls_sf_result
       TABLES
         xt_ranges           = lt_efg_ranges
         xt_ranges1          = lt_efg_ranges_empty
@@ -356,7 +373,6 @@ FUNCTION zfi_fm_invoice_reprint.
         xt_ranges7          = lt_efg_ranges_empty
         xt_ranges8          = lt_efg_ranges_empty
         xt_ranges9          = lt_efg_ranges_empty
-        yt_otf_data         = lt_otf_data
       EXCEPTIONS
         not_qualified       = 1
         print_failed        = 3
@@ -378,21 +394,30 @@ FUNCTION zfi_fm_invoice_reprint.
   ENDLOOP.
 
 *----------------------------------------------------------------------*
-* 4b. Cerrar/finalizar el formulario - vuelta a añadir (se había
-*     quitado al rediseñar para no despachar, pensando que solo
-*     cerraba el spool). Con LAST_DOC = 'Y', REAPRIN0 indica que es
-*     esta función quien de verdad cierra el formulario. Hipótesis sin
-*     confirmar todavía.
+* 4b. Cerrar/finalizar el formulario y el spool. Necesario (ver "CAMBIO
+*     DE DISEÑO 25/11/2026" en la cabecera): el formulario tiene
+*     OCL_CONTROL='X' en EFRM, que difiere el cierre real del spool -
+*     sin esta llamada, el spool podría quedar sin finalizar.
 *
-*     X_FLG_OUTPUT = space (no gc_true): no queremos que despache/
-*     imprima de verdad, solo que finalice y deje los datos listos -
-*     no verificado que este sea el valor correcto para eso.
+*     A diferencia del intento anterior (que ignoraba todo lo que
+*     devolvía esta función, pensando que no exponía nada útil), ahora
+*     SÍ recogemos Y_TAB_SPOOLID: confirmado en su código fuente que
+*     EFG_PRINT_CLOSE nunca devuelve el documento en sí (sus
+*     variables de resultado son locales, sin parámetro de export),
+*     pero sí la lista de números de spool generados - que es lo que
+*     necesitamos para el paso 5.
+*
+*     X_FLG_OUTPUT = space (no gc_true): no queremos que espere a que
+*     termine un despacho físico real, solo que finalice/cierre el
+*     spool - no verificado que este sea el valor correcto para eso.
 *----------------------------------------------------------------------*
   CALL FUNCTION 'EFG_PRINT_CLOSE'
     EXPORTING
       x_flg_output         = space
       x_flg_finalize       = gc_true
       x_flg_clear_spoolids = gc_true
+    IMPORTING
+      y_tab_spoolid        = lt_spoolid
     EXCEPTIONS
       OTHERS               = 1.
 
@@ -407,69 +432,82 @@ FUNCTION zfi_fm_invoice_reprint.
     RETURN.
   ENDIF.
 
-*----------------------------------------------------------------------*
-* 5. Obtención del PDF. Dos caminos posibles, según si el formulario es
-*    PDF-based (Adobe Forms) o SAPscript/SmartForms clásico - no se
-*    sabe de antemano cuál es, así que se comprueban los dos:
-*    - Si Y_PDF_RESULT-STR_RESULT_FORM-PDF viene relleno (formulario
-*      PDF-based): se usa directamente, ya es el PDF en bruto
-*      (verificado en SE11: FPFORMOUTPUT-PDF es FPCONTENT, un
-*      RAWSTRING - compatible con XSTRING sin conversión).
-*    - Si no, y YT_OTF_DATA sí viene relleno (formulario clásico): se
-*      convierte con los módulos estándar CONVERT_OTF +
-*      SCMS_BINARY_TO_XSTRING (muy conocidos, no verificados en SE37
-*      contra este sistema en concreto).
-*----------------------------------------------------------------------*
-  IF ls_pdf_result-str_result_form-pdf IS NOT INITIAL.
-    e_pdf = ls_pdf_result-str_result_form-pdf.
-    e_result = 'OK'.
-    RETURN.
-  ENDIF.
-
-  IF lt_otf_data IS INITIAL.
+  READ TABLE lt_spoolid INTO lv_spoolid INDEX 1.
+  IF sy-subrc <> 0.
     e_result             = 'NOK'.
     es_error-code        = '102'.
-    es_error-description = 'EFG_PRINT_EXPANDED no devolvió ni PDF ni OTF del documento'.
+    es_error-description = 'EFG_PRINT_CLOSE no generó ningún spool para el documento'.
     RETURN.
   ENDIF.
 
-  CALL FUNCTION 'CONVERT_OTF'
+*----------------------------------------------------------------------*
+* 5. Obtención del PDF a partir del spool ya cerrado (ver "CAMBIO DE
+*    DISEÑO 25/11/2026" en la cabecera). CONVERT_ABAPSPOOLJOB_2_PDF es
+*    el conversor estándar de spool a PDF - no depende de nada de la
+*    cadena EFG_PRINT/SmartForm en sí, solo lee el spool ya cerrado.
+*    BIN_FILE devuelve directamente un XSTRING (verificado en SE37);
+*    si viniera vacío, se recurre a la tabla PDF (líneas binarias,
+*    TLINE) con el mismo conversor SCMS_BINARY_TO_XSTRING ya usado en
+*    el camino OTF anterior (ahora descartado).
+*----------------------------------------------------------------------*
+  CALL FUNCTION 'CONVERT_ABAPSPOOLJOB_2_PDF'
     EXPORTING
-      format                = 'PDF'
+      src_spoolid              = lv_spoolid
+      no_dialog                = gc_true
     IMPORTING
-      bin_filesize          = lv_pdf_size
+      pdf_bytecount             = lv_pdf_size
+      bin_file                  = e_pdf
     TABLES
-      otf                   = lt_otf_data
-      lines                 = lt_pdf_lines
+      pdf                       = lt_pdf_lines
     EXCEPTIONS
-      err_max_linewidth     = 1
-      err_format            = 2
-      err_conv_not_possible = 3
-      err_bad_otf           = 4
-      OTHERS                = 5.
+      err_no_abap_spooljob      = 1
+      err_no_spooljob           = 2
+      err_no_permission         = 3
+      err_conv_not_possible     = 4
+      err_bad_destdevice        = 5
+      user_cancelled            = 6
+      err_spoolerror            = 7
+      err_temseerror            = 8
+      err_btcjob_open_failed    = 9
+      err_btcjob_submit_failed  = 10
+      err_btcjob_close_failed   = 11
+      OTHERS                    = 99.
 
   IF sy-subrc <> 0.
     e_result             = 'NOK'.
     es_error-code        = |{ sy-subrc }|.
-    es_error-description = |Error técnico en CONVERT_OTF (sy-subrc { sy-subrc })|.
+    IF sy-msgid IS NOT INITIAL.
+      es_error-description = |Error SAP { sy-msgid } { sy-msgno } (tipo { sy-msgty })|.
+    ELSE.
+      es_error-description = |Error técnico en CONVERT_ABAPSPOOLJOB_2_PDF (sy-subrc { sy-subrc })|.
+    ENDIF.
     RETURN.
   ENDIF.
 
-  CALL FUNCTION 'SCMS_BINARY_TO_XSTRING'
-    EXPORTING
-      input_length = lv_pdf_size
-    IMPORTING
-      buffer       = e_pdf
-    TABLES
-      binary_tab   = lt_pdf_lines
-    EXCEPTIONS
-      failed       = 1
-      OTHERS       = 2.
+  IF e_pdf IS INITIAL AND lt_pdf_lines IS NOT INITIAL.
+    CALL FUNCTION 'SCMS_BINARY_TO_XSTRING'
+      EXPORTING
+        input_length = lv_pdf_size
+      IMPORTING
+        buffer       = e_pdf
+      TABLES
+        binary_tab   = lt_pdf_lines
+      EXCEPTIONS
+        failed       = 1
+        OTHERS       = 2.
 
-  IF sy-subrc <> 0.
+    IF sy-subrc <> 0.
+      e_result             = 'NOK'.
+      es_error-code        = |{ sy-subrc }|.
+      es_error-description = |Error técnico en SCMS_BINARY_TO_XSTRING (sy-subrc { sy-subrc })|.
+      RETURN.
+    ENDIF.
+  ENDIF.
+
+  IF e_pdf IS INITIAL.
     e_result             = 'NOK'.
-    es_error-code        = |{ sy-subrc }|.
-    es_error-description = |Error técnico en SCMS_BINARY_TO_XSTRING (sy-subrc { sy-subrc })|.
+    es_error-code        = '102'.
+    es_error-description = 'No se pudo obtener el contenido del PDF del spool'.
     RETURN.
   ENDIF.
 
