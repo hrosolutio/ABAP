@@ -2235,6 +2235,9 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
       ls_log-doc_oficial = ls_factura-doc_oficial.
       ls_log-importe     = ls_factura-importe.
       ls_log-waers       = ls_factura-waers.
+      ls_log-fact_consumo = ls_factura-consumo.
+      ls_log-fact_desde   = ls_factura-fecha_desde.
+      ls_log-fact_hasta   = ls_factura-fecha_hasta.
     ENDIF.
 
     LOOP AT is_resultado-lineas INTO DATA(ls_salida).

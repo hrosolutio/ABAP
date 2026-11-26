@@ -334,7 +334,7 @@ concepto del cálculo.
 | `VERTRAG` | | `VERTRAG` |
 | `RESULTADO` | | `CHAR2` |
 | `CODIGO` | | `CHAR4` |
-| `DESCRIPCION` | | `CHAR255` |
+| `DESCRIPCION` | | `SSTRING` 1333 (tipo predefinido) |
 | `MODO` | | `CHAR30` |
 | `BELNR` | | mismo que `ERCH-BELNR` |
 | `OPBEL` | | mismo que `ERDK-OPBEL` |
@@ -351,6 +351,9 @@ concepto del cálculo.
 | `DOC_OFICIAL` | | mismo que `ZFA_S_FRAUDES_FACTURA-DOC_OFICIAL` |
 | `IMPORTE` | | `BETRW_KK`, referencia a `WAERS` |
 | `WAERS` | | `WAERS` |
+| `FACT_CONSUMO` | | `DEC 15,3` (tipo predefinido), `ET_FACTURAS-CONSUMO` |
+| `FACT_DESDE` | | `DATUM`, `ET_FACTURAS-FECHA_DESDE` |
+| `FACT_HASTA` | | `DATUM`, `ET_FACTURAS-FECHA_HASTA` |
 
 Desde el 26/11 guarda todas las entradas y salidas de cada ejecución
 (Aleix). Las líneas de `ET_LINEAS` van en:
