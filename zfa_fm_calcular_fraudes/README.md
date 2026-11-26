@@ -324,48 +324,44 @@ concepto del cálculo.
 | `BELZART_REL` | | mismo que `DBERCHZ1-BELZART` | En los `IE`: su concepto de mínimo comunitario (misma región) |
 
 **Tabla `ZFA_FRAUD_LOG`** (log por ejecución y control de duplicados).
-Los campos se llaman como los parámetros de la RFC; los tres que pasan de
-16 caracteres van acortados (`IV_NUM_FACT_ATR`, `IV_TIPO_FACT_ATR`,
-`EV_MODO_FACT`) y los de `ET_FACTURAS` llevan el prefijo `ET_`.
+Los campos se llaman como los parámetros de la RFC; los de `ET_FACTURAS`
+van con prefijo `EV_`.
 
 | Campo | Clave | Tipo |
 |---|---|---|
 | `MANDT` | X | `MANDT` |
-| `IV_ID_EXPEDIENTE` | X | `ZLE_DE_NUMEROEXPEDIENTE` |
+| `IV_EXPEDIENTE` | X | `ZLE_DE_NUMEROEXPEDIENTE` |
 | `TSTAMP` | X | `TIMESTAMPL` |
 | `IV_CUPS` | | `EXT_UI` |
-| `IV_FECHA_DESDE` | | `DATUM` |
-| `IV_FECHA_HASTA` | | `DATUM` |
-| `IV_CONSUMO_P1` … `IV_CONSUMO_P6` | | `DEC 15,3` |
-| `IV_CONSUMO_TOTAL` | | `DEC 15,3` |
-| `IV_NUM_FACT_ATR` | | `ZLE_DE_FACTUR` |
-| `IV_TIPO_FACT_ATR` | | `CHAR2` |
+| `IV_FECHA_DESDE`, `IV_FECHA_HASTA` | | `DATS` |
+| `IV_CONSUMO_P1` … `IV_CONSUMO_P6`, `IV_CONSUMO_TOTAL` | | `MENGE_D`, referencia `UNIDAD` |
+| `IV_NUM_FACTURA_ATR` | | `ZLE_DE_FACTUR` |
+| `IV_TIPO_FACTURA_ATR` | | `CHAR2` |
 | `IV_CONTRATO_SAP` | | `VERTRAG` |
-| `IV_FORZADO` | | `XFELD` |
-| `IV_SOLO_CALCULO` | | `XFELD` |
+| `IV_FORZADO`, `IV_SOLO_CALCULO` | | `XFELD` |
 | `EV_RESULTADO` | | `CHAR2` |
 | `EV_CODIGO` | | `CHAR4` |
-| `EV_DESCRIPCION` | | `SSTRING` 1333 |
-| `EV_MODO_FACT` | | `CHAR30` |
-| `ET_FACTURA` | | mismo que `ERDK-OPBEL` |
-| `ET_CALCULO` | | mismo que `ERCH-BELNR` |
-| `ET_DOC_OFICIAL` | | mismo que `ZFA_S_FRAUDES_FACTURA-DOC_OFICIAL` |
-| `ET_CONSUMO` | | `DEC 15,3` |
-| `ET_IMPORTE` | | `BETRW_KK`, referencia a `ET_WAERS` |
-| `ET_WAERS` | | `WAERS` |
-| `ET_FECHA_DESDE` | | `DATUM` |
-| `ET_FECHA_HASTA` | | `DATUM` |
-| `PROC_REF` | | mismo que `/IDXGC/PRST_INHD-PROC_REF` (PDoc) |
+| `EV_DESCRIPCION` | | tipo predefinido `SSTRING` 1333 |
+| `EV_MODO_FACTURACION` | | `CHAR30` |
+| `EV_FACTURA` | | `E_PRINTDOC` |
+| `EV_CALCULO` | | `E_BELNR` |
+| `EV_DOC_OFICIAL` | | `XBLNR_KK` |
+| `EV_CONSUMO` | | `MENGE_D`, referencia `UNIDAD` |
+| `EV_IMPORTE` | | `BETRW_KK`, referencia `EV_WAERS` |
+| `EV_WAERS` | | `WAERS` |
+| `EV_FECHA_DESDE`, `EV_FECHA_HASTA` | | `DATUM` |
+| `PROC_REF` | | `/IDXGC/DE_PROC_REF` (PDoc) |
 | `UNAME` | | `SYUNAME` |
+| `UNIDAD` | | `MEINS` (`KWH`) |
 
 **Tabla `ZFA_FRAUD_LOG_L`** (líneas de `ET_LINEAS`):
 
 | Campo | Clave | Tipo |
 |---|---|---|
 | `MANDT` | X | `MANDT` |
-| `IV_ID_EXPEDIENTE` | X | `ZLE_DE_NUMEROEXPEDIENTE` |
+| `IV_EXPEDIENTE` | X | `ZLE_DE_NUMEROEXPEDIENTE` |
 | `TSTAMP` | X | `TIMESTAMPL` |
-| `POSICION` | X | `NUMC 4` |
+| `POSICION` | X | `NUMC4` |
 | `.INCLUDE` | | `ZFA_S_FRAUDES_LINEA` |
 
 ## Instalación

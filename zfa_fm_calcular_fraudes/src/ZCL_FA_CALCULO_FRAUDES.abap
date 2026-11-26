@@ -195,6 +195,8 @@ CLASS zcl_fa_calculo_fraudes DEFINITION
       gc_modo_total         TYPE char30 VALUE 'FACTURACION TOTAL',
       " Solo cálculo: SAP calcula pero no factura (Eliza 19/11)
       gc_modo_parcial       TYPE char30 VALUE 'FACTURACION PARCIAL',
+      " Unidad de los consumos en ZFA_FRAUD_LOG (código interno de T006)
+      gc_unidad_kwh         TYPE meins VALUE 'KWH',
       gc_modo_olvido        TYPE char30 VALUE 'DESCARTE - DERECHO AL OLVIDO',
       gc_modo_vulnerable    TYPE char30 VALUE 'DESCARTE - VULNERABILIDAD',
       gc_modo_reposicion    TYPE char30 VALUE 'DESCARTE - REPOSICION',
@@ -526,8 +528,8 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     " El mismo expediente no se factura dos veces
     SELECT SINGLE ev_codigo
       FROM zfa_fraud_log
-      WHERE iv_id_expediente = @ms_entrada-id_expediente
-        AND ev_codigo        IN ( '0000', '0001', '0002', '0003', '0004' )
+      WHERE iv_expediente = @ms_entrada-id_expediente
+        AND ev_codigo    IN ( '0000', '0001', '0002', '0003', '0004' )
       INTO @lv_codigo.
     IF sy-subrc = 0.
       RAISE EXCEPTION TYPE zcx_fa_fraudes
@@ -2195,8 +2197,8 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
   METHOD registrar_log.
 
     " Una fila por ejecución con todas las entradas y salidas (Aleix
-    " 26/11). Los campos se llaman como los parámetros de la RFC (acortados
-    " a 16 caracteres); las líneas de ET_LINEAS, en ZFA_FRAUD_LOG_L
+    " 26/11). Los campos se llaman como los parámetros de la RFC (los de
+    " ET_FACTURAS con EV_); las líneas de ET_LINEAS, en ZFA_FRAUD_LOG_L
     DATA: ls_log    TYPE zfa_fraud_log,
           lt_lineas TYPE STANDARD TABLE OF zfa_fraud_log_l WITH DEFAULT KEY,
           ls_linea  TYPE zfa_fraud_log_l.
@@ -2204,51 +2206,53 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     GET TIME STAMP FIELD ls_log-tstamp.
 
     " Entrada
-    ls_log-iv_id_expediente = ms_entrada-id_expediente.
-    ls_log-iv_cups          = ms_entrada-cups.
-    ls_log-iv_fecha_desde   = ms_entrada-fecha_desde.
-    ls_log-iv_fecha_hasta   = ms_entrada-fecha_hasta.
-    ls_log-iv_consumo_p1    = ms_entrada-consumo_p1.
-    ls_log-iv_consumo_p2    = ms_entrada-consumo_p2.
-    ls_log-iv_consumo_p3    = ms_entrada-consumo_p3.
-    ls_log-iv_consumo_p4    = ms_entrada-consumo_p4.
-    ls_log-iv_consumo_p5    = ms_entrada-consumo_p5.
-    ls_log-iv_consumo_p6    = ms_entrada-consumo_p6.
-    ls_log-iv_consumo_total = ms_entrada-consumo_total.
-    ls_log-iv_num_fact_atr  = ms_entrada-num_factura_atr.
-    ls_log-iv_tipo_fact_atr = ms_entrada-tipo_factura_atr.
-    ls_log-iv_contrato_sap  = ms_entrada-contrato.
-    ls_log-iv_forzado       = ms_entrada-forzado.
-    ls_log-iv_solo_calculo  = ms_entrada-solo_calculo.
+    ls_log-iv_expediente       = ms_entrada-id_expediente.
+    ls_log-iv_cups             = ms_entrada-cups.
+    ls_log-iv_fecha_desde      = ms_entrada-fecha_desde.
+    ls_log-iv_fecha_hasta      = ms_entrada-fecha_hasta.
+    ls_log-iv_consumo_p1       = ms_entrada-consumo_p1.
+    ls_log-iv_consumo_p2       = ms_entrada-consumo_p2.
+    ls_log-iv_consumo_p3       = ms_entrada-consumo_p3.
+    ls_log-iv_consumo_p4       = ms_entrada-consumo_p4.
+    ls_log-iv_consumo_p5       = ms_entrada-consumo_p5.
+    ls_log-iv_consumo_p6       = ms_entrada-consumo_p6.
+    ls_log-iv_consumo_total    = ms_entrada-consumo_total.
+    ls_log-iv_num_factura_atr  = ms_entrada-num_factura_atr.
+    ls_log-iv_tipo_factura_atr = ms_entrada-tipo_factura_atr.
+    ls_log-iv_contrato_sap     = ms_entrada-contrato.
+    ls_log-iv_forzado          = ms_entrada-forzado.
+    ls_log-iv_solo_calculo     = ms_entrada-solo_calculo.
 
     " Salida
-    ls_log-ev_resultado     = is_resultado-resultado.
-    ls_log-ev_codigo        = is_resultado-codigo.
-    ls_log-ev_descripcion   = is_resultado-descripcion.
-    ls_log-ev_modo_fact     = is_resultado-modo.
+    ls_log-ev_resultado        = is_resultado-resultado.
+    ls_log-ev_codigo           = is_resultado-codigo.
+    ls_log-ev_descripcion      = is_resultado-descripcion.
+    ls_log-ev_modo_facturacion = is_resultado-modo.
 
     READ TABLE is_resultado-facturas INTO DATA(ls_factura) INDEX 1.
     IF sy-subrc = 0.
-      ls_log-et_factura     = ls_factura-factura.
-      ls_log-et_calculo     = ls_factura-calculo.
-      ls_log-et_doc_oficial = ls_factura-doc_oficial.
-      ls_log-et_consumo     = ls_factura-consumo.
-      ls_log-et_importe     = ls_factura-importe.
-      ls_log-et_waers       = ls_factura-waers.
-      ls_log-et_fecha_desde = ls_factura-fecha_desde.
-      ls_log-et_fecha_hasta = ls_factura-fecha_hasta.
+      ls_log-ev_factura          = ls_factura-factura.
+      ls_log-ev_calculo          = ls_factura-calculo.
+      ls_log-ev_doc_oficial      = ls_factura-doc_oficial.
+      ls_log-ev_consumo          = ls_factura-consumo.
+      ls_log-ev_importe          = ls_factura-importe.
+      ls_log-ev_waers            = ls_factura-waers.
+      ls_log-ev_fecha_desde      = ls_factura-fecha_desde.
+      ls_log-ev_fecha_hasta      = ls_factura-fecha_hasta.
     ENDIF.
 
     " Otros datos de la ejecución
-    ls_log-proc_ref = mv_proc_ref.
-    ls_log-uname    = sy-uname.
+    ls_log-proc_ref            = mv_proc_ref.
+    ls_log-uname               = sy-uname.
+    " Unidad de los consumos (luz y gas llegan en kWh)
+    ls_log-unidad              = gc_unidad_kwh.
 
     LOOP AT is_resultado-lineas INTO DATA(ls_salida).
       CLEAR ls_linea.
       MOVE-CORRESPONDING ls_salida TO ls_linea.
-      ls_linea-iv_id_expediente = ls_log-iv_id_expediente.
-      ls_linea-tstamp           = ls_log-tstamp.
-      ls_linea-posicion         = sy-tabix.
+      ls_linea-iv_expediente = ls_log-iv_expediente.
+      ls_linea-tstamp        = ls_log-tstamp.
+      ls_linea-posicion      = sy-tabix.
       APPEND ls_linea TO lt_lineas.
     ENDLOOP.
 
