@@ -405,10 +405,9 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
                                      ELSE gc_ko ).
 
     " Modo de facturación según el resultado
-    " PARCIAL no se automatiza y NO TITULAR lo detecta la IA (Aleix 12/11).
-    " TODO con Eliza: qué es CADUCADO y qué modo llevan migrado (0101),
-    " exención (0102), bloqueos (0105) y sin cálculo original
-    " (0108/0109); hoy van vacíos
+    " NO TITULAR lo detecta la IA (Aleix 12/11). Los descartes que no
+    " están en la lista de la IA (0101, 0102, 0105, 0108, 0109, 0112) van
+    " sin modo
     rs_resultado-modo = SWITCH #( rs_resultado-codigo
                           WHEN '0000' OR '0001' OR '0003' OR '0004' THEN gc_modo_total
                           WHEN '0010' THEN gc_modo_parcial
@@ -2195,25 +2194,62 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
 
   METHOD registrar_log.
 
-    DATA ls_log TYPE zfa_fraud_log.
+    " Una fila por ejecución con todas las entradas y salidas (Aleix
+    " 26/11); las líneas de ET_LINEAS, en ZFA_FRAUD_LOG_L
+    DATA: ls_log    TYPE zfa_fraud_log,
+          lt_lineas TYPE STANDARD TABLE OF zfa_fraud_log_l WITH DEFAULT KEY,
+          ls_linea  TYPE zfa_fraud_log_l.
 
     GET TIME STAMP FIELD ls_log-tstamp.
-    ls_log-id_expediente = ms_entrada-id_expediente.
-    ls_log-cups          = ms_entrada-cups.
-    ls_log-vertrag       = ms_entrada-contrato.
-    ls_log-resultado     = is_resultado-resultado.
-    ls_log-codigo        = is_resultado-codigo.
-    ls_log-descripcion   = is_resultado-descripcion.
-    ls_log-modo          = is_resultado-modo.
-    ls_log-uname         = sy-uname.
+    ls_log-id_expediente    = ms_entrada-id_expediente.
+    ls_log-uname            = sy-uname.
+
+    " Entrada
+    ls_log-cups             = ms_entrada-cups.
+    ls_log-vertrag          = ms_entrada-contrato.
+    ls_log-fecha_desde      = ms_entrada-fecha_desde.
+    ls_log-fecha_hasta      = ms_entrada-fecha_hasta.
+    ls_log-consumo_p1       = ms_entrada-consumo_p1.
+    ls_log-consumo_p2       = ms_entrada-consumo_p2.
+    ls_log-consumo_p3       = ms_entrada-consumo_p3.
+    ls_log-consumo_p4       = ms_entrada-consumo_p4.
+    ls_log-consumo_p5       = ms_entrada-consumo_p5.
+    ls_log-consumo_p6       = ms_entrada-consumo_p6.
+    ls_log-consumo_total    = ms_entrada-consumo_total.
+    ls_log-num_factura_atr  = ms_entrada-num_factura_atr.
+    ls_log-tipo_factura_atr = ms_entrada-tipo_factura_atr.
+    ls_log-forzado          = ms_entrada-forzado.
+    ls_log-solo_calculo     = ms_entrada-solo_calculo.
+
+    " Salida
+    ls_log-resultado        = is_resultado-resultado.
+    ls_log-codigo           = is_resultado-codigo.
+    ls_log-descripcion      = is_resultado-descripcion.
+    ls_log-modo             = is_resultado-modo.
+    ls_log-proc_ref         = mv_proc_ref.
 
     READ TABLE is_resultado-facturas INTO DATA(ls_factura) INDEX 1.
     IF sy-subrc = 0.
-      ls_log-belnr = ls_factura-calculo.
-      ls_log-opbel = ls_factura-factura.
+      ls_log-belnr       = ls_factura-calculo.
+      ls_log-opbel       = ls_factura-factura.
+      ls_log-doc_oficial = ls_factura-doc_oficial.
+      ls_log-importe     = ls_factura-importe.
+      ls_log-waers       = ls_factura-waers.
     ENDIF.
 
+    LOOP AT is_resultado-lineas INTO DATA(ls_salida).
+      CLEAR ls_linea.
+      MOVE-CORRESPONDING ls_salida TO ls_linea.
+      ls_linea-id_expediente = ls_log-id_expediente.
+      ls_linea-tstamp        = ls_log-tstamp.
+      ls_linea-posicion      = sy-tabix.
+      APPEND ls_linea TO lt_lineas.
+    ENDLOOP.
+
     INSERT zfa_fraud_log FROM ls_log.
+    IF lt_lineas IS NOT INITIAL.
+      INSERT zfa_fraud_log_l FROM TABLE lt_lineas.
+    ENDIF.
     COMMIT WORK AND WAIT.
 
   ENDMETHOD.

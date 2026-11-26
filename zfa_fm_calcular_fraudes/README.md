@@ -339,6 +339,31 @@ concepto del cálculo.
 | `BELNR` | | mismo que `ERCH-BELNR` |
 | `OPBEL` | | mismo que `ERDK-OPBEL` |
 | `UNAME` | | `SYUNAME` |
+| `FECHA_DESDE` | | `DATUM` |
+| `FECHA_HASTA` | | `DATUM` |
+| `CONSUMO_P1` … `CONSUMO_P6` | | `DEC 15,3` (tipo predefinido) |
+| `CONSUMO_TOTAL` | | `DEC 15,3` (tipo predefinido) |
+| `NUM_FACTURA_ATR` | | `ZLE_DE_FACTUR` |
+| `TIPO_FACTURA_ATR` | | `CHAR2` |
+| `FORZADO` | | `XFELD` |
+| `SOLO_CALCULO` | | `XFELD` |
+| `PROC_REF` | | mismo que `/IDXGC/PRST_INHD-PROC_REF` (PDoc) |
+| `DOC_OFICIAL` | | mismo que `ZFA_S_FRAUDES_FACTURA-DOC_OFICIAL` |
+| `IMPORTE` | | `BETRW_KK`, referencia a `WAERS` |
+| `WAERS` | | `WAERS` |
+
+Desde el 26/11 guarda todas las entradas y salidas de cada ejecución
+(Aleix). Las líneas de `ET_LINEAS` van en:
+
+**Tabla `ZFA_FRAUD_LOG_L`** (líneas del log):
+
+| Campo | Clave | Tipo |
+|---|---|---|
+| `MANDT` | X | `MANDT` |
+| `ID_EXPEDIENTE` | X | `ZLE_DE_NUMEROEXPEDIENTE` |
+| `TSTAMP` | X | `TIMESTAMPL` |
+| `POSICION` | X | `NUMC 4` |
+| `.INCLUDE` | | `ZFA_S_FRAUDES_LINEA` |
 
 ### `ZFA_T_CADUCIDAD` (tabla, con generador de actualización SM30)
 

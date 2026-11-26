@@ -18,7 +18,8 @@ Lista para revisar que la orden lleva todo. Marcar al incluir.
 | `ZFA_T_CADUCIDAD` | Tabla + generador SM30 | Plazos de caducidad por provincia | |
 | `ZFA_FRAUD_CONC` | Tabla de customizing | | |
 | `ZFA_FG_FRAUD_CONC` | Grupo de funciones | Generador de actualización (SM30) | |
-| `ZFA_FRAUD_LOG` | Tabla | Log por expediente | |
+| `ZFA_FRAUD_LOG` | Tabla | Log por ejecución: entradas y salidas | |
+| `ZFA_FRAUD_LOG_L` | Tabla | Líneas del log (`ET_LINEAS`) | |
 | `ZFA_R_CARGA_FRAUD_CONC` | Report | Carga inicial de `ZFA_FRAUD_CONC` | |
 | `ZXBI1U01` | Include de la exit | **Compartido**: va solo el bloque 1B. Coordinar con quien lo tenga en otras órdenes | |
 
