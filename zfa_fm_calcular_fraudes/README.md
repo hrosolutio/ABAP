@@ -323,65 +323,50 @@ concepto del cálculo.
 | `PERIODO` | | `CHAR2` | `P1`..`P6` para energía por periodos; vacío si es agrupada |
 | `BELZART_REL` | | mismo que `DBERCHZ1-BELZART` | En los `IE`: su concepto de mínimo comunitario (misma región) |
 
-**Tabla `ZFA_FRAUD_LOG`** (log de llamadas y control de duplicados):
+**Tabla `ZFA_FRAUD_LOG`** (log por ejecución y control de duplicados).
+Los campos se llaman como los parámetros de la RFC; los tres que pasan de
+16 caracteres van acortados (`IV_NUM_FACT_ATR`, `IV_TIPO_FACT_ATR`,
+`EV_MODO_FACT`) y los de `ET_FACTURAS` llevan el prefijo `ET_`.
 
 | Campo | Clave | Tipo |
 |---|---|---|
 | `MANDT` | X | `MANDT` |
-| `ID_EXPEDIENTE` | X | `ZLE_DE_NUMEROEXPEDIENTE` |
+| `IV_ID_EXPEDIENTE` | X | `ZLE_DE_NUMEROEXPEDIENTE` |
 | `TSTAMP` | X | `TIMESTAMPL` |
-| `CUPS` | | `EXT_UI` |
-| `VERTRAG` | | `VERTRAG` |
-| `RESULTADO` | | `CHAR2` |
-| `CODIGO` | | `CHAR4` |
-| `DESCRIPCION` | | `SSTRING` 1333 (tipo predefinido) |
-| `MODO` | | `CHAR30` |
-| `BELNR` | | mismo que `ERCH-BELNR` |
-| `OPBEL` | | mismo que `ERDK-OPBEL` |
-| `UNAME` | | `SYUNAME` |
-| `FECHA_DESDE` | | `DATUM` |
-| `FECHA_HASTA` | | `DATUM` |
-| `CONSUMO_P1` … `CONSUMO_P6` | | `DEC 15,3` (tipo predefinido) |
-| `CONSUMO_TOTAL` | | `DEC 15,3` (tipo predefinido) |
-| `NUM_FACTURA_ATR` | | `ZLE_DE_FACTUR` |
-| `TIPO_FACTURA_ATR` | | `CHAR2` |
-| `FORZADO` | | `XFELD` |
-| `SOLO_CALCULO` | | `XFELD` |
+| `IV_CUPS` | | `EXT_UI` |
+| `IV_FECHA_DESDE` | | `DATUM` |
+| `IV_FECHA_HASTA` | | `DATUM` |
+| `IV_CONSUMO_P1` … `IV_CONSUMO_P6` | | `DEC 15,3` |
+| `IV_CONSUMO_TOTAL` | | `DEC 15,3` |
+| `IV_NUM_FACT_ATR` | | `ZLE_DE_FACTUR` |
+| `IV_TIPO_FACT_ATR` | | `CHAR2` |
+| `IV_CONTRATO_SAP` | | `VERTRAG` |
+| `IV_FORZADO` | | `XFELD` |
+| `IV_SOLO_CALCULO` | | `XFELD` |
+| `EV_RESULTADO` | | `CHAR2` |
+| `EV_CODIGO` | | `CHAR4` |
+| `EV_DESCRIPCION` | | `SSTRING` 1333 |
+| `EV_MODO_FACT` | | `CHAR30` |
+| `ET_FACTURA` | | mismo que `ERDK-OPBEL` |
+| `ET_CALCULO` | | mismo que `ERCH-BELNR` |
+| `ET_DOC_OFICIAL` | | mismo que `ZFA_S_FRAUDES_FACTURA-DOC_OFICIAL` |
+| `ET_CONSUMO` | | `DEC 15,3` |
+| `ET_IMPORTE` | | `BETRW_KK`, referencia a `ET_WAERS` |
+| `ET_WAERS` | | `WAERS` |
+| `ET_FECHA_DESDE` | | `DATUM` |
+| `ET_FECHA_HASTA` | | `DATUM` |
 | `PROC_REF` | | mismo que `/IDXGC/PRST_INHD-PROC_REF` (PDoc) |
-| `DOC_OFICIAL` | | mismo que `ZFA_S_FRAUDES_FACTURA-DOC_OFICIAL` |
-| `IMPORTE` | | `BETRW_KK`, referencia a `WAERS` |
-| `WAERS` | | `WAERS` |
-| `FACT_CONSUMO` | | `DEC 15,3` (tipo predefinido), `ET_FACTURAS-CONSUMO` |
-| `FACT_DESDE` | | `DATUM`, `ET_FACTURAS-FECHA_DESDE` |
-| `FACT_HASTA` | | `DATUM`, `ET_FACTURAS-FECHA_HASTA` |
+| `UNAME` | | `SYUNAME` |
 
-Desde el 26/11 guarda todas las entradas y salidas de cada ejecución
-(Aleix). Las líneas de `ET_LINEAS` van en:
-
-**Tabla `ZFA_FRAUD_LOG_L`** (líneas del log):
+**Tabla `ZFA_FRAUD_LOG_L`** (líneas de `ET_LINEAS`):
 
 | Campo | Clave | Tipo |
 |---|---|---|
 | `MANDT` | X | `MANDT` |
-| `ID_EXPEDIENTE` | X | `ZLE_DE_NUMEROEXPEDIENTE` |
+| `IV_ID_EXPEDIENTE` | X | `ZLE_DE_NUMEROEXPEDIENTE` |
 | `TSTAMP` | X | `TIMESTAMPL` |
 | `POSICION` | X | `NUMC 4` |
 | `.INCLUDE` | | `ZFA_S_FRAUDES_LINEA` |
-
-### `ZFA_T_CADUCIDAD` (tabla, con generador de actualización SM30)
-
-Plazos de caducidad por provincia, en meses (David 16/11). `9999` = sin límite.
-
-| Campo | Tipo | Clave |
-|---|---|---|
-| `MANDT` | `MANDT` | ✓ |
-| `PROVINCIA` | `REGIO` | ✓ |
-| `DESCRIPCION` | `BEZEI20` | |
-| `PER_FR_GAS` / `PER_FR_ELEC` / `PER_AN_GAS` / `PER_AN_ELEC` | `NUMC 4` | |
-| `ANT_FR_GAS` / `ANT_FR_ELEC` / `ANT_AN_GAS` / `ANT_AN_ELEC` | `NUMC 4` | |
-
-Valores actuales: periodicidad 9999 en fraudes y 12 en anomalías;
-antigüedad 60, salvo Barcelona (08) y Gerona (17), que tienen 36.
 
 ## Instalación
 
