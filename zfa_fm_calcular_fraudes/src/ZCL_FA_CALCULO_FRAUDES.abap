@@ -528,8 +528,8 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     " El mismo expediente no se factura dos veces
     SELECT SINGLE ev_codigo
       FROM zfa_fraud_log
-      WHERE iv_expediente = @ms_entrada-id_expediente
-        AND ev_codigo    IN ( '0000', '0001', '0002', '0003', '0004' )
+      WHERE iv_id_expediente = @ms_entrada-id_expediente
+        AND ev_codigo        IN ( '0000', '0001', '0002', '0003', '0004' )
       INTO @lv_codigo.
     IF sy-subrc = 0.
       RAISE EXCEPTION TYPE zcx_fa_fraudes
@@ -2206,7 +2206,7 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     GET TIME STAMP FIELD ls_log-tstamp.
 
     " Entrada
-    ls_log-iv_expediente       = ms_entrada-id_expediente.
+    ls_log-iv_id_expediente    = ms_entrada-id_expediente.
     ls_log-iv_cups             = ms_entrada-cups.
     ls_log-iv_fecha_desde      = ms_entrada-fecha_desde.
     ls_log-iv_fecha_hasta      = ms_entrada-fecha_hasta.
@@ -2250,9 +2250,9 @@ CLASS zcl_fa_calculo_fraudes IMPLEMENTATION.
     LOOP AT is_resultado-lineas INTO DATA(ls_salida).
       CLEAR ls_linea.
       MOVE-CORRESPONDING ls_salida TO ls_linea.
-      ls_linea-iv_expediente = ls_log-iv_expediente.
-      ls_linea-tstamp        = ls_log-tstamp.
-      ls_linea-posicion      = sy-tabix.
+      ls_linea-iv_id_expediente = ls_log-iv_id_expediente.
+      ls_linea-tstamp           = ls_log-tstamp.
+      ls_linea-posicion         = sy-tabix.
       APPEND ls_linea TO lt_lineas.
     ENDLOOP.
 

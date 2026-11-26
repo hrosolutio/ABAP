@@ -330,7 +330,7 @@ van con prefijo `EV_`.
 | Campo | Clave | Tipo |
 |---|---|---|
 | `MANDT` | X | `MANDT` |
-| `IV_EXPEDIENTE` | X | `ZLE_DE_NUMEROEXPEDIENTE` |
+| `IV_ID_EXPEDIENTE` | X | `ZLE_DE_NUMEROEXPEDIENTE` |
 | `TSTAMP` | X | `TIMESTAMPL` |
 | `IV_CUPS` | | `EXT_UI` |
 | `IV_FECHA_DESDE`, `IV_FECHA_HASTA` | | `DATS` |
@@ -359,7 +359,7 @@ van con prefijo `EV_`.
 | Campo | Clave | Tipo |
 |---|---|---|
 | `MANDT` | X | `MANDT` |
-| `IV_EXPEDIENTE` | X | `ZLE_DE_NUMEROEXPEDIENTE` |
+| `IV_ID_EXPEDIENTE` | X | `ZLE_DE_NUMEROEXPEDIENTE` |
 | `TSTAMP` | X | `TIMESTAMPL` |
 | `POSICION` | X | `NUMC4` |
 | `.INCLUDE` | | `ZFA_S_FRAUDES_LINEA` |
