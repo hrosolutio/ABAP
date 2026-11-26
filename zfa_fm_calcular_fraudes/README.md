@@ -341,7 +341,7 @@ van con prefijo `EV_`.
 | `IV_FORZADO`, `IV_SOLO_CALCULO` | | `XFELD` |
 | `EV_RESULTADO` | | `CHAR2` |
 | `EV_CODIGO` | | `CHAR4` |
-| `EV_DESCRIPCION` | | tipo predefinido `SSTRING` 1333 |
+| `EV_DESCRIPCION` | | tipo predefinido `CHAR 255` |
 | `EV_MODO_FACTURACION` | | `CHAR30` |
 | `EV_FACTURA` | | `E_PRINTDOC` |
 | `EV_CALCULO` | | `E_BELNR` |
